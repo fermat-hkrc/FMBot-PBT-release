@@ -91,6 +91,25 @@ pi-pbt --list-models   # 配好模型服务商后列出可用模型
 首次运行时 pi-pbt 会创建自己的配置目录 `~/.pi-pbt/agent/`(存放登录凭据、
 模型配置和历史记录),与 `pi` 自己的 `~/.pi/agent/` 有意分开、互不影响。
 
+### 安装 `pi-pbt-dev` skill（可选）
+
+发行包自带一个 skill,让日常编码 agent(Claude Code / opencode / Codex)能通过
+pi-pbt 对代码跑**全量/增量 PBT 战役**。skill 文件就随发行包内置(内嵌在二进制里),
+安装只需要一条命令:
+
+```bash
+pi-pbt skill-install                 # 自动检测已安装的 agent
+pi-pbt skill-install --host claude   # 或 opencode / codex / codeagent / chrys / project
+pi-pbt skill-install --dir /自定义/路径  # 任意 skill 目录
+pi-pbt skill-uninstall               # 卸载（参数同上）
+```
+
+它把 `pi-pbt-dev` skill(协议文本 + 辅助脚本)拷入宿主 agent 的 skill 目录——
+一个薄壳,运行时从 PATH 解析 `pi-pbt` 二进制,无需其他配置。更新 pi-pbt 后重跑
+`skill-install --force` 即可刷新;`skill-uninstall` 从所有已安装位置移除。
+之后直接对你的 agent 说"测一下我刚才的改动"即可,
+完整教程见 `docs/skill-pi-pbt-dev.zh.md`。
+
 ## 3. 配置模型
 
 ### 先说最重要的:用你手里最强的模型
@@ -204,6 +223,7 @@ pi-pbt -p "/skill:pbt-workflow 对当前仓库做性质测试(PBT),目标是找�
 | 首批性质全过 | 可以收工 | 必须加强并重跑 ≥1 轮 | ≥2 轮 |
 | 蜕变 / 差分性质 | 可选 | 至少一条 | 目标支持就都必须做 |
 | 难编译时换个容易的目标 | 允许 | 允许,但要在报告里写明 | 禁止 |
+| 契约面清扫(coverage 缺口驱动) | 无 | 1 轮 | 扫到覆盖完或预算耗尽 |
 
 默认值按入口区分,因为它们回答的是不同的问题:`hook-run` 和 `watch` 是
 **每个提交**都触发的,默认 `quick`,保证提交门禁足够快;其他入口默认
@@ -223,6 +243,67 @@ PBT_EFFORT=thorough pi-pbt -p "/skill:pbt-workflow ..."
 
 这跟"用多强的模型"是两回事:档位决定它搜索得多充分,模型决定它写出的性质
 有多锋利。弱模型跑 `thorough` 依然只会写出弱性质 —— 见前面选模型那节。
+
+### 跑多宽:并行度
+
+pi-pbt 会把它驱动的每个测试运行器和构建,都按机器**当前空闲的核心数**来定
+并行度(总核心数减去已有负载)。它在执行命令前设置各框架自己的标准环境变量,
+所以无论 agent 怎么调用都生效 —— 包括经由 Makefile 或包装脚本间接调用:
+
+| 自动设置的变量 | 作用 |
+|---|---|
+| `CTEST_PARALLEL_LEVEL` | `ctest` 同时跑多少个测试(它默认是串行的) |
+| `CMAKE_BUILD_PARALLEL_LEVEL`、`MAKEFLAGS` | `cmake --build` / `make` 的并行度 |
+| `RUST_TEST_THREADS` | `cargo test` 的线程数 |
+| `GOFLAGS`(`-p=N`) | `go test` 的包级并行度 |
+| `PYTEST_ADDOPTS`(`-n N`) | `pytest` 的 worker 数 —— 仅在装了 `pytest-xdist` 插件时设置 |
+| `PBT_TEST_JOBS` | 解析出的数值本身,供没有自己环境变量的运行器使用(`ninja -j"$PBT_TEST_JOBS"`、gradle、maven) |
+
+这是有意双向的:`ctest` 和 `pytest` 会**变快**(它们默认一次只跑一个);而
+`cargo test`、`go test` 和构建会被**限流**(它们默认吃满所有核心,否则会和机器
+上其他事情抢资源)。你自己已经设过的值不会被覆盖。
+
+用 `PBT_TEST_JOBS` 覆盖:填数字就固定,`max` 用满所有核心,`auto`(默认)是空闲
+核心数。在容器里会遵守 cgroup 的 CPU 配额,而不是宿主机的核心数。
+
+`PBT_TEST_JOBS=1` 同时是排查工具:并行执行会暴露出属于**测试本身**的不稳定
+(两个用例抢同一个端口、xdist 不安全的 fixture)。campaign 被要求在把任何失败
+判定为 bug 之前先串行重跑一次,并在报告里写明结论来自哪一次运行。
+
+## 代码覆盖率报表
+
+campaign 还会测量**代码到底执行了哪些**,用的是每种语言自带的覆盖率工具,并把
+该工具**原生的 HTML 报表**放在 `pbt-out/code-coverage/` 下,再用一个
+`index.html` 把它们串起来。
+
+| 语言 | 使用的工具 | 需要 |
+|---|---|---|
+| C/C++ | 在 `--coverage` 构建上跑 `gcovr`(或 `lcov` + `genhtml`) | `gcovr` 或 `lcov` |
+| Rust | `cargo llvm-cov` | `cargo-llvm-cov` |
+| Python | 通过 `pytest-cov` 调 `coverage.py` | `pytest-cov` |
+| Go | `go tool cover` | Go 工具链 |
+| JavaScript/TypeScript | 直接采纳你的运行器已经产出的报表(c8、vitest、jest) | 该运行器的覆盖率插件 |
+| Java | 采纳构建产出的 JaCoCo 报表 | 构建里配好 JaCoCo |
+
+插桩是在 campaign 构建任何东西**之前**,把各工具链的编译选项加进环境来打开的
+(覆盖率是构建期决定的,事后补不上)。你自己设过的值一律保留不动。工具缺失、
+构建没插桩,报表里就如实写明这一行没测到:**覆盖率永远不会让 campaign 失败。**
+
+交叉编译后在模拟器里运行的构建(OpenHarmony 的 qemu-arm 路径)**不做**插桩 ——
+profile 数据会落在模拟出来的文件系统里 —— 报表会写明这一点,而不是报成零覆盖。
+
+### 报表给 `REPORT.md` 补上了什么
+
+`COVERAGE.md` 记的是 campaign **自己声称**为哪些函数写了性质测试;覆盖率记的是
+**实际跑了什么**。报表把两者交叉起来:
+
+- *executed* —— 声明有执行证据支撑
+- *claimed but never executed* —— 该性质根本没碰它挂在名下的那个函数,这是真正
+  值得处理的发现
+- *no evidence* —— 这个符号在所有报表里都没出现,通常是目标没被插桩,而不是声明
+  作假
+
+整个功能可以用 `PBT_CODE_COVERAGE=0` 关掉。
 
 ### CI / git hook 集成
 
@@ -405,6 +486,9 @@ pbt-out/
 | `PBT_EFFORT=quick\|standard\|thorough` | 一次 campaign 挖多深(见[effort 档位](#挖多深effort-档位));`hook-run` / `watch` 上的 `--effort` 优先级更高。默认:`hook-run`/`watch` 为 `quick`,其他入口为 `standard`。`kea.config.yml` 没写 `depth:` 时,GUI 探索深度也由它决定(`quick` → 短跑,其余 → 长跑) |
 | `PBT_KEA_DEPTH=fast\|deep` | [`pi-pbt kea`](#真机上的-harmonyos-应用pi-pbt-kea) 的探索深度,覆盖 effort 档位;配置里的 `depth:` 仍然优先 |
 | `PBT_KEA_MODE_A_PACKS="pkg.a pkg.b"` | 配置里没写 `mode_a_packs` 时,`pi-pbt kea` 在 `deep` 下要跑的性质包 |
+| `PBT_TEST_JOBS=8` | 测试和构建跑多宽(见[并行度](#跑多宽并行度));填数字、`max` 或 `auto`(默认:机器空闲核心数)。`PBT_TEST_JOBS=1` 强制串行 —— 把失败判定为 bug 之前的串行复核必须用它 |
+| `PBT_CODE_COVERAGE=0` | 关掉原生代码覆盖率的插桩与报表(见[代码覆盖率报表](#代码覆盖率报表));默认开启,工具链缺失时静默降级 |
+| `PBT_BARE=1` | 以纯 pi 运行:不加载编排扩展、内置技能与 campaign 守卫。用于 A/B 度量 harness 自身贡献(benchmark 场景),非日常使用 |
 | `PI_PBT_RUNS_DIR=/path` | [`pi-pbt mcp`](#让别的-coding-agent-委派测试mcp) 保存 run 状态与产物的目录(默认 `~/.pi-pbt/runs`;必须在被测仓库之外) |
 | `PBT_MCP_MAX_CONCURRENT=2` | MCP 委派的 campaign 同时最多跑几个(默认 1,多余的排队) |
 

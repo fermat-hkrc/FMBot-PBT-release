@@ -10,6 +10,113 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.9 - 2026-08-28
+
+### English
+
+#### Added
+
+- Native per-language code coverage: campaign builds are instrumented with
+  each toolchain's own machinery (gcovr / lcov+genhtml for C/C++, coverage.py,
+  cargo-llvm-cov, go cover), every tool renders its own HTML report under
+  `pbt-out/coverage/`, and the final REPORT.md cross-checks the ledger's
+  coverage claims against what actually executed. On by default, silently
+  degrading when tools are absent; `PBT_CODE_COVERAGE=0` disables.
+  Cross-compiled OpenHarmony/qemu targets are not instrumented in this
+  version (documented limitation).
+- Coverage feedback loop: the campaign-scoped `coverage_gaps` tool reports
+  documented-behavior functions and line ranges the properties never
+  executed, and the Phase 4 contract-surface sweep is driven by it. Sweep
+  length is gated by effort tier (`PBT_EFFORT`): quick 0, standard 1,
+  thorough unlimited — commit gates stay short.
+- `PBT_BARE=1` runs the same binary as plain pi — no orchestration extension,
+  bundled skills, or guards — the control arm for scaffold A/B measurement.
+- pi-pbt-dev skill: function-level scope and effort tiers for incremental
+  PBT; `skill-install` supports the codeagent and chrys hosts.
+
+#### Fixed
+
+- The settle self-checks never engaged in real headless campaigns — three
+  defects deep: test outcomes were parsed ANSI-blind (pi's pty colors
+  pytest/ctest summaries), a self-check steer's own prompt re-entered
+  activation and reset the campaign it was extending, and steers issued at
+  settle were torn down by print mode. Self-checks now fire at `agent_end`,
+  steered rounds keep their campaign, and the entry holds teardown until the
+  extra rounds finish.
+- Campaign rules from the leaderboard failure taxonomy: found bugs are not
+  the finish line (tier-gated continuation), stateful modules mandate
+  `state_machine` properties, and boundary claims are sampled at bound±1.
+- An explicitly given deliverable path outranks repo-convention placement,
+  and deliverables are written early and incrementally — a timeout no longer
+  yields an empty test file.
+- Headless `-p` output redirected to a file is no longer truncated at exit
+  (the process exits only after stdout drains).
+- Congestion-friendly retry defaults for unattended runs: when the user has
+  not configured `retry`, settings.json is seeded with ~8.5 min of
+  exponential backoff and a 2-minute server-hint cap, so a short provider
+  rate-limit window no longer kills a campaign 30–90 s in. Multi-hour
+  cooldowns still fail fast.
+- Oracle precision: crash claims must reproduce under product flags (host
+  `-O0` CMake configures are blocked), `from_chars` leftover tautologies are
+  blocked, non-issue findings are filtered from the report, and the scope
+  guard confines whole-tree scans.
+
+#### Changed
+
+- The benchmark suite was renamed to pbt-arena (submodule `bench/pbt-arena`),
+  gaining PBT-Bench leaderboard adapters, baseline arms, and results.
+
+#### Embedded SDK
+
+- Embedded pi `0.84.3`. `pi-pbt --version` reports
+  `pi-pbt 0.1.9 (pi 0.84.3)`.
+
+### 中文
+
+#### 新增
+
+- 原生分语言代码覆盖率:campaign 构建按各工具链自己的机制插桩(C/C++ 用
+  gcovr / lcov+genhtml,Python 用 coverage.py,Rust 用 cargo-llvm-cov,Go 用
+  go cover),每个工具输出自己的原生 HTML 报表到 `pbt-out/coverage/`,最终
+  REPORT.md 会把台账声称的覆盖与实际执行到的代码交叉核对。默认开启,工具缺失
+  时静默降级;`PBT_CODE_COVERAGE=0` 关闭。交叉编译的 OpenHarmony/qemu 目标
+  本版本不插桩(已在文档注明)。
+- 覆盖率反馈闭环:campaign 内新增 `coverage_gaps` 工具,报告性质从未执行到的
+  有文档行为的函数与行段,Phase 4 契约面清扫由它驱动。清扫轮数按档位门控
+  (`PBT_EFFORT`):quick 0 轮、standard 1 轮、thorough 不限——提交门禁不拉长。
+- `PBT_BARE=1` 让同一个二进制以纯 pi 运行——不加载编排扩展、内置 skills 与
+  守卫,作为脚手架 A/B 对照臂。
+- pi-pbt-dev skill:函数级 scope 与档位,支持增量 PBT;`skill-install` 支持
+  codeagent 与 chrys 宿主。
+
+#### 修复
+
+- settle 自检在真实无头 campaign 中从未生效——三层缺陷:测试结果解析不剥
+  ANSI(pi 的 bash 走 pty,pytest/ctest 输出带色),自检 steer 的 prompt 重新
+  进入激活逻辑并重置了它要延长的 campaign,settle 时发出的 steer 会被 print
+  mode 的收尾撕掉。现在自检在 `agent_end` 触发,steer 轮保持原 campaign,
+  入口会等额外轮次跑完才退出。
+- 来自 leaderboard 失败归因的 campaign 规则:找到 bug 不是终点(按档位
+  继续)、有状态模块必须写 `state_machine` 性质、边界声明按 bound±1 采样。
+- 显式给定的交付路径高于仓库惯例位置,且交付文件必须尽早、增量写——超时不再
+  产生空测试文件。
+- 无头 `-p` 输出重定向到文件时不再在退出时被截断(进程等 stdout 排空后才退出)。
+- 无人值守运行的拥塞友好重试默认值:用户未配置 `retry` 时,向 settings.json
+  种入约 8.5 分钟的指数退避与 2 分钟的服务器指示等待上限,短暂的限流窗口
+  不再让 campaign 在 30–90 秒内暴毙;数小时级冷却仍快速失败。
+- Oracle 精度:崩溃类结论必须在产品编译选项下复现(拦截宿主 `-O0` CMake
+  配置)、拦截 `from_chars` 剩余字符类恒真断言、报告过滤非问题结论、scope
+  守卫约束全树扫描。
+
+#### 变更
+
+- benchmark 套件更名为 pbt-arena(submodule `bench/pbt-arena`),新增
+  PBT-Bench leaderboard 适配器、baseline 臂与结果。
+
+#### 内嵌 SDK
+
+- 内嵌 pi `0.84.3`。`pi-pbt --version` 显示 `pi-pbt 0.1.9 (pi 0.84.3)`。
+
 ## 0.1.8 - 2026-08-18
 
 ### English

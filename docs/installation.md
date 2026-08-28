@@ -100,6 +100,27 @@ On first run pi-pbt creates its own config directory `~/.pi-pbt/agent/` (login
 credentials, model config, history) — deliberately separate from an upstream
 `pi` install's `~/.pi/agent/`, so the two do not interfere.
 
+### Install the `pi-pbt-dev` skill (optional)
+
+The distribution carries a skill that lets your everyday coding agent (Claude
+Code, opencode, Codex) run **full or incremental PBT campaigns through pi-pbt**.
+The skill files ship inside the distribution itself (embedded in the binary), so
+installing it is one command:
+
+```bash
+pi-pbt skill-install                 # auto-detects which agents are installed
+pi-pbt skill-install --host claude   # or opencode / codex / codeagent / chrys / project
+pi-pbt skill-install --dir /custom/path  # a custom skill directory
+pi-pbt skill-uninstall               # remove it again (same flags)
+```
+
+It copies the `pi-pbt-dev` skill (protocol + helper scripts) into the host
+agent's skill directory — a thin shell that locates the `pi-pbt` binary on PATH
+at run time, so nothing else is needed. Re-run `skill-install --force` after
+updating pi-pbt to refresh it; `skill-uninstall` removes it from every location
+it was installed into. Then just tell your agent "test the changes I just made" —
+full tutorial in `docs/skill-pi-pbt-dev.md`.
+
 ## 3. Configure a model
 
 ### First, the part that matters most: use the strongest model you have
@@ -225,6 +246,7 @@ hard-to-build target may be swapped for an easier one.
 | First batch all passes | may stop | strengthen and re-run ≥1 round | ≥2 rounds |
 | Metamorphic / differential property | optional | ≥1 required | both required where applicable |
 | Swap to an easier target when the build is hard | allowed | allowed, declared in the report | forbidden |
+| Contract-surface sweep (coverage-gap driven) | none | 1 round | until covered / budget spent |
 
 Defaults differ by entry point, because they answer different questions:
 `hook-run` and `watch` fire on **every commit** and default to `quick`, so a
@@ -247,6 +269,74 @@ compile.
 This is separate from how strong a model you use. The tier controls how much
 searching the agent does; the model controls how good its properties are. A weak
 model at `thorough` still writes weak properties — see the model section above.
+
+### How wide it runs: parallelism
+
+pi-pbt sizes every test runner and build it drives to the machine's **currently
+idle cores** — total cores minus the load already on the box. It sets each
+framework's own standard variable before running a command, so this reaches
+whatever the agent invokes, including through a Makefile or a wrapper script:
+
+| Variable set for you | Effect |
+|---|---|
+| `CTEST_PARALLEL_LEVEL` | `ctest` runs that many tests at once (it is serial by default) |
+| `CMAKE_BUILD_PARALLEL_LEVEL`, `MAKEFLAGS` | `cmake --build` / `make` job count |
+| `RUST_TEST_THREADS` | `cargo test` thread count |
+| `GOFLAGS` (`-p=N`) | `go test` package parallelism |
+| `PYTEST_ADDOPTS` (`-n N`) | `pytest` workers — only when the `pytest-xdist` plugin is installed |
+| `PBT_TEST_JOBS` | the resolved number, for runners with no variable of their own (`ninja -j"$PBT_TEST_JOBS"`, gradle, maven) |
+
+This cuts both ways on purpose. `ctest` and `pytest` get *faster* (they default
+to one test at a time); `cargo test`, `go test` and builds get *throttled* (they
+default to every core and would otherwise fight whatever else the machine is
+doing). Any value you set yourself is left alone.
+
+Override with `PBT_TEST_JOBS`: a number pins it, `max` uses every core, `auto`
+(the default) is the idle count. Inside a container the cgroup CPU quota is
+respected, not the host's core count.
+
+`PBT_TEST_JOBS=1` is also the triage tool: parallel runs can surface flakiness
+that belongs to the *tests* (two cases claiming the same port, an xdist-unsafe
+fixture). A campaign is required to re-run any failure serially before calling
+it a bug, and to say in the report which run the verdict came from.
+
+## Code coverage reports
+
+A campaign also measures **which code actually executed**, using each language's
+own coverage tooling, and leaves that toolchain's native HTML report under
+`pbt-out/code-coverage/` with an `index.html` linking them together.
+
+| Language | Tool used | Requires |
+|---|---|---|
+| C/C++ | `gcovr` (or `lcov` + `genhtml`) over a `--coverage` build | `gcovr` or `lcov` |
+| Rust | `cargo llvm-cov` | `cargo-llvm-cov` |
+| Python | `coverage.py` via `pytest-cov` | `pytest-cov` |
+| Go | `go tool cover` | the Go toolchain |
+| JavaScript/TypeScript | the report your runner already writes (c8, vitest, jest) | that runner's coverage provider |
+| Java | JaCoCo's own report, adopted if the build produced one | JaCoCo configured in the build |
+
+Instrumentation is switched on by adding each toolchain's flags to the
+environment *before* the campaign builds anything (coverage is a build-time
+decision — it cannot be added afterwards). Whatever you set yourself is left
+alone. If a tool is missing, or a build is not instrumented, that row simply
+says so in the report: **coverage never fails a campaign.**
+
+Cross-compiled builds run under an emulator (OpenHarmony's qemu-arm path) are
+*not* instrumented — the profile data lands inside the emulated filesystem — and
+the report states that rather than reporting zero coverage.
+
+### What the report adds to `REPORT.md`
+
+`COVERAGE.md` records which functions the campaign **claims** to have written
+properties for. Coverage records what **ran**. The report crosses the two:
+
+- *executed* — the claim is backed by execution
+- *claimed but never executed* — the property does not exercise the function it
+  is filed under; this is the finding worth acting on
+- *no evidence* — the symbol was in no report at all, usually an uninstrumented
+  target rather than an untrue claim
+
+Turn the whole thing off with `PBT_CODE_COVERAGE=0`.
 
 ### CI / git-hook integration
 
@@ -449,6 +539,9 @@ is touched.
 | `PBT_EFFORT=quick\|standard\|thorough` | how deep a campaign digs (see [effort tiers](#how-deep-it-digs-effort-tiers)); also `--effort` on `hook-run` / `watch`, which takes priority. Default: `quick` for `hook-run`/`watch`, `standard` elsewhere. Also sets the `kea` GUI exploration depth when `kea.config.yml` does not pin `depth:` (`quick` → short run, otherwise the long one) |
 | `PBT_KEA_DEPTH=fast\|deep` | [`pi-pbt kea`](#a-harmonyos-app-on-a-phone-pi-pbt-kea) exploration depth, overriding the effort tier; the config's `depth:` still wins |
 | `PBT_KEA_MODE_A_PACKS="pkg.a pkg.b"` | the property packs `pi-pbt kea` runs at `deep`, when the config sets no `mode_a_packs` |
+| `PBT_TEST_JOBS=8` | how wide tests and builds run (see [parallelism](#how-wide-it-runs-parallelism)); a number, `max`, or `auto` (default: the machine's idle cores). `PBT_TEST_JOBS=1` forces serial — required when reconfirming a failure before filing it as a bug |
+| `PBT_CODE_COVERAGE=0` | turn off native code-coverage instrumentation and reporting (see [code coverage](#code-coverage-reports)); on by default, and it degrades silently when a toolchain is missing |
+| `PBT_BARE=1` | run as plain pi: no orchestration extension, no bundled skills, no campaign guards. Exists for A/B-measuring the harness's own contribution (benchmarking); not for normal use |
 | `PI_PBT_RUNS_DIR=/path` | where [`pi-pbt mcp`](#delegation-from-another-coding-agent-mcp) persists run state and artifacts (default `~/.pi-pbt/runs`; must be outside the repo under test) |
 | `PBT_MCP_MAX_CONCURRENT=2` | how many MCP-delegated campaigns may run at once (default 1; extra runs queue) |
 
