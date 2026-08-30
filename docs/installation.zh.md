@@ -305,6 +305,30 @@ profile 数据会落在模拟出来的文件系统里 —— 报表会写明这�
 
 整个功能可以用 `PBT_CODE_COVERAGE=0` 关掉。
 
+### 先构建再测试:`build-run`(自带构建命令)
+
+对于你已经知道怎么构建的项目——OpenHarmony 组件、大型 monorepo、任何有官方构建
+入口的仓库——把构建命令交给 pi-pbt,由它做 campaign 的门禁:
+
+```bash
+# 例如 OpenHarmony 树里的 ArkUI ace_engine:
+pi-pbt build-run \
+  --workdir /path/to/oh \
+  --repo /path/to/oh/foundation/arkui/ace_engine \
+  --build-cmd "./build.sh --export-para PYCACHE_ENABLE:true --product-name rk3568 --build-target ace_engine_test --ccache" \
+  --lang zh
+```
+
+构建命令是**你准备好的输入**,不是让 agent 去摸索的东西。`build-run` 先在
+`--workdir` 里执行它(完整日志在 `<out>/build.log`):失败则 PBT 根本不启动,
+进程以退出码 `3` 结束——修好构建或命令后重跑;成功则 campaign 在 `--repo` 下
+以"构建契约"运行:重建只允许复用这条命令(只可把构建目标换成新增的测试目标),
+重建失败是 STOP 条件、原样记入 `REPORT.md`——agent 不会去探索其他编译方式。
+新增测试按仓库官方单元测试方式接入(组件自带的 GN unittest 模板与既有 test
+group),第三方 PBT 框架走仓库 `third_party/` 惯例。`--scope`、`--out`、
+`--lang`、`--effort`(默认 `standard`)、`--provider`、`--model`、`--tui`
+与 `hook-run` 一致。
+
 ### CI / git hook 集成
 
 针对**单个提交**测一遍,用这个子命令:

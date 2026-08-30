@@ -338,6 +338,34 @@ properties for. Coverage records what **ran**. The report crosses the two:
 
 Turn the whole thing off with `PBT_CODE_COVERAGE=0`.
 
+### Build first, then test: `build-run` (bring your own build command)
+
+For a project whose build you already know how to drive — an OpenHarmony
+component, a big monorepo, anything with an official build entry — hand that
+command to pi-pbt and let it gate the campaign:
+
+```bash
+# ArkUI ace_engine inside an OpenHarmony tree, for example:
+pi-pbt build-run \
+  --workdir /path/to/oh \
+  --repo /path/to/oh/foundation/arkui/ace_engine \
+  --build-cmd "./build.sh --export-para PYCACHE_ENABLE:true --product-name rk3568 --build-target ace_engine_test --ccache" \
+  --lang zh
+```
+
+The build command is **your prepared input**, not something the agent figures
+out. `build-run` executes it in `--workdir` first (full log in
+`<out>/build.log`); if it fails, PBT never starts and the process exits `3` —
+fix the tree or the command and re-run. If it succeeds, the campaign starts in
+`--repo` under a build contract: rebuilds reuse exactly your command (only the
+build target may switch to the new test target), a failing rebuild is a STOP
+condition recorded in `REPORT.md` — the agent will not go exploring for
+alternative ways to compile. New tests are wired the repository's official
+unit-test way (the component's own GN unittest template and test group), with
+third-party PBT frameworks referenced through the tree's `third_party/`
+conventions. `--scope`, `--out`, `--lang`, `--effort` (default `standard`),
+`--provider`, `--model`, and `--tui` work as on `hook-run`.
+
 ### CI / git-hook integration
 
 To test **one specific commit**, use this subcommand:

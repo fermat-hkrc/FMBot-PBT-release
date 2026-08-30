@@ -10,6 +10,75 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.10 - 2026-08-31
+
+### English
+
+#### Added
+
+- New `build-run` subcommand: bring your own build command. The command is
+  USER-PREPARED INPUT — `pi-pbt build-run --workdir <dir> --build-cmd "<cmd>"`
+  executes it first (full log in `<out>/build.log`); if it fails, PBT never
+  starts and the process exits `3`. On success the campaign runs under an
+  immutable build contract: rebuilds reuse exactly that command (only the
+  build target may switch to the new test target), a failing rebuild is a
+  STOP recorded in `REPORT.md`, and the agent never explores alternative
+  ways to compile (no `oh-closure.py`, no standalone build derivation — the
+  in-campaign steers are rewritten accordingly in this mode).
+- Under the build contract, new tests are wired the repository's OFFICIAL
+  unit-test way — the component's own GN unittest template added to its
+  existing test group — with third-party PBT frameworks referenced through
+  the tree's `third_party/` conventions (the same way gtest is integrated),
+  never fetched from the network.
+- Validated end-to-end on OpenHarmony trunk (master) against ArkUI
+  ace_engine: `./build.sh --product-name host_product --build-target
+  base_unittest` gated the campaign, the agent added an
+  `ace_unittest("geometry_pbt_test")` (`host_components`) target depending on
+  `//third_party/rapidcheck:rapidcheck`, and the resulting binary runs
+  locally on the build host (x86_64, no emulator or device) — 14 RapidCheck
+  properties, `max_success=2000`, all passing.
+
+#### Fixed
+
+- The release workflow provisions its own pinned `gh` CLI when the runner
+  host lacks one (a runner migration broke the v0.1.9 build at the notes
+  step with every later step skipped).
+
+#### Embedded SDK
+
+- Embedded pi `0.84.4`. `pi-pbt --version` reports
+  `pi-pbt 0.1.10 (pi 0.84.4)`.
+
+### 中文
+
+#### 新增
+
+- 新增 `build-run` 子命令:自带构建命令。构建命令是**用户准备好的输入**——
+  `pi-pbt build-run --workdir <dir> --build-cmd "<cmd>"` 先执行它(完整日志
+  在 `<out>/build.log`):失败则 PBT 根本不启动,进程以退出码 `3` 结束;成功
+  则 campaign 在不可变更的"构建契约"下运行——重建只允许复用这条命令(仅可把
+  构建目标换成新增的测试目标),重建失败是 STOP 条件、原样记入 `REPORT.md`,
+  agent 绝不探索其他编译方式(不跑 `oh-closure.py`、不推导独立编译;此模式下
+  campaign 内的引导 steer 相应改写)。
+- 构建契约下,新增测试按仓库**官方单元测试方式**接入——用组件自带的 GN
+  unittest 模板挂到既有 test group,第三方 PBT 框架走仓库 `third_party/`
+  惯例引用(与 gtest 的入库方式一致),绝不从网络拉取。
+- 已在 OpenHarmony trunk(master)上对 ArkUI ace_engine 端到端验证:
+  `./build.sh --product-name host_product --build-target base_unittest` 作
+  门禁,agent 新增 `ace_unittest("geometry_pbt_test")`(`host_components`)
+  目标并依赖 `//third_party/rapidcheck:rapidcheck`,产物二进制在构建机本地
+  直接运行(x86_64,无需模拟器/设备)——14 条 RapidCheck 性质,
+  `max_success=2000`,全部通过。
+
+#### 修复
+
+- release workflow 在 runner 缺少 `gh` CLI 时自带一份钉定版本(此前一次
+  runner 迁移让 v0.1.9 的构建死在 notes 步骤、后续步骤全部跳过)。
+
+#### 内嵌 SDK
+
+- 内嵌 pi `0.84.4`。`pi-pbt --version` 显示 `pi-pbt 0.1.10 (pi 0.84.4)`。
+
 ## 0.1.9 - 2026-08-28
 
 ### English
