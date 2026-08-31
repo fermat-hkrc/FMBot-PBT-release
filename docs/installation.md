@@ -366,6 +366,16 @@ third-party PBT frameworks referenced through the tree's `third_party/`
 conventions. `--scope`, `--out`, `--lang`, `--effort` (default `standard`),
 `--provider`, `--model`, and `--tui` work as on `hook-run`.
 
+To watch the same flow live inside an interactive session, say:
+
+```
+/skill:pbt-build-run 构建命令: <your build command>
+构建目录: <workdir>
+```
+
+The gate and the whole campaign then run right there in front of you, under
+the same build contract; the subcommand remains the headless/CI form.
+
 ### CI / git-hook integration
 
 To test **one specific commit**, use this subcommand:

@@ -329,6 +329,15 @@ group),第三方 PBT 框架走仓库 `third_party/` 惯例。`--scope`、`--out`
 `--lang`、`--effort`(默认 `standard`)、`--provider`、`--model`、`--tui`
 与 `hook-run` 一致。
 
+想在交互会话里**实时观测**同一条流程,直接说:
+
+```
+/skill:pbt-build-run 构建命令: <你的构建命令>
+构建目录: <构建执行目录>
+```
+
+门禁与整个 campaign 就在你眼前跑,构建契约完全一致;子命令则是无头/CI 形态。
+
 ### CI / git hook 集成
 
 针对**单个提交**测一遍,用这个子命令:

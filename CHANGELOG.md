@@ -10,6 +10,46 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.12 - 2026-08-31
+
+### English
+
+#### Added
+
+- New user-invocable `/skill:pbt-build-run`: the in-session, watch-it-live
+  equivalent of the `build-run` subcommand. Say
+  `/skill:pbt-build-run 构建命令: <cmd>` in an interactive session and the
+  agent runs your build command as the gate right in front of you — on
+  failure it STOPS and presents the log (never explores how to compile), on
+  success it runs the full `pbt-workflow` campaign in the same session under
+  the build contract. The orchestration extension recognizes the invocation
+  and activates the campaign plus the prebuilt contract in-session
+  (session-scoped: a later unrelated prompt clears it). The subcommand
+  remains the headless/CI form; both entries are documented in the install
+  guides.
+
+#### Embedded SDK
+
+- Embedded pi `0.84.4` (unchanged). `pi-pbt --version` reports
+  `pi-pbt 0.1.12 (pi 0.84.4)`.
+
+### 中文
+
+#### 新增
+
+- 新增用户可调用的 `/skill:pbt-build-run`:`build-run` 子命令的会话内实时
+  观测形态。在交互会话里说 `/skill:pbt-build-run 构建命令: <cmd>`,agent
+  当着你的面先跑构建命令做门禁——失败即 STOP 并呈现日志(绝不探索编译方式),
+  成功则在同一会话里按 `pbt-workflow` SOP 跑完整 campaign,构建契约全程生效。
+  编排扩展识别该调用并就地激活 campaign 与 prebuilt 契约(会话级作用域:
+  后续无关 prompt 自动清除)。子命令仍是无头/CI 形态;两种入口均已写入
+  双语安装文档。
+
+#### 内嵌 SDK
+
+- 内嵌 pi `0.84.4`(未变)。`pi-pbt --version` 显示
+  `pi-pbt 0.1.12 (pi 0.84.4)`。
+
 ## 0.1.11 - 2026-08-31
 
 ### English
