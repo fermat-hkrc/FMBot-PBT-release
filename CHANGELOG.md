@@ -10,6 +10,42 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.11 - 2026-08-31
+
+### English
+
+#### Fixed
+
+- Skill-side coverage for the `build-run` build contract, closing the gaps
+  left after v0.1.10: the two build-exploration cookbooks
+  (`openharmony-build-run`, `project-build`) now open with a "does NOT apply
+  under the build contract" refusal guard — defense in depth for an agent
+  that reads them despite the workflow saying to skip them — and the
+  `pi-pbt-dev` host-agent delegation skill documents when and how to launch
+  `pi-pbt build-run` (user-supplied build command) instead of its default
+  campaign path. All three surfaces are pinned by regression tests.
+
+#### Embedded SDK
+
+- Embedded pi `0.84.4` (unchanged). `pi-pbt --version` reports
+  `pi-pbt 0.1.11 (pi 0.84.4)`.
+
+### 中文
+
+#### 修复
+
+- 补齐 `build-run` 构建契约的 skill 侧覆盖(收掉 v0.1.10 后的缺口):两本
+  编译探索手册(`openharmony-build-run`、`project-build`)开头新增"构建契约
+  下本手册不适用"的拒绝守卫——即使 agent 无视 workflow 的指引误读手册也会被
+  顶回,属纵深防御;`pi-pbt-dev` 宿主 agent 委托 skill 新增"用户自带构建命令
+  (build-run 模式)"小节,说明何时改用 `pi-pbt build-run` 而非默认战役路径。
+  三处均有回归测试钉住。
+
+#### 内嵌 SDK
+
+- 内嵌 pi `0.84.4`(未变)。`pi-pbt --version` 显示
+  `pi-pbt 0.1.11 (pi 0.84.4)`。
+
 ## 0.1.10 - 2026-08-31
 
 ### English
