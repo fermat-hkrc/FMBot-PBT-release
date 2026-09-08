@@ -18,13 +18,13 @@ alongside it.
 
 | Platform | Download | Checksum |
 |---|---|---|
-| Linux x64 | [`pi-pbt-linux-x64.zip`](https://github.com/fermat-hkrc/pbt-agent-release/releases/latest/download/pi-pbt-linux-x64.zip) | [`.sha256`](https://github.com/fermat-hkrc/pbt-agent-release/releases/latest/download/pi-pbt-linux-x64.zip.sha256) |
-| Linux arm64 (aarch64) | [`pi-pbt-linux-arm64.zip`](https://github.com/fermat-hkrc/pbt-agent-release/releases/latest/download/pi-pbt-linux-arm64.zip) | [`.sha256`](https://github.com/fermat-hkrc/pbt-agent-release/releases/latest/download/pi-pbt-linux-arm64.zip.sha256) |
-| macOS Apple Silicon | [`pi-pbt-macos-arm64.zip`](https://github.com/fermat-hkrc/pbt-agent-release/releases/latest/download/pi-pbt-macos-arm64.zip) | [`.sha256`](https://github.com/fermat-hkrc/pbt-agent-release/releases/latest/download/pi-pbt-macos-arm64.zip.sha256) |
+| Linux x64 | [`pi-pbt-linux-x64.zip`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-x64.zip) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-x64.zip.sha256) |
+| Linux arm64 (aarch64) | [`pi-pbt-linux-arm64.zip`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-arm64.zip) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-arm64.zip.sha256) |
+| macOS Apple Silicon | [`pi-pbt-macos-arm64.zip`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-macos-arm64.zip) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-macos-arm64.zip.sha256) |
 
 Not sure which Linux build you need? `uname -m` — `x86_64` takes the x64 file,
 `aarch64` the arm64 one. Older versions are on the
-[releases page](https://github.com/fermat-hkrc/pbt-agent-release/releases).
+[releases page](https://github.com/fermat-hkrc/FMBot-PBT-release/releases).
 
 ```bash
 sha256sum -c pi-pbt-linux-x64.zip.sha256    # optional integrity check
@@ -43,7 +43,7 @@ Then configure a model and start a run — see the
 the language under test needs, CI and git-hook integration, and the live
 dashboard.
 
-Found a problem? Open an [issue](https://github.com/fermat-hkrc/pbt-agent-release/issues).
+Found a problem? Open an [issue](https://github.com/fermat-hkrc/FMBot-PBT-release/issues).
 
 ---
 
@@ -75,4 +75,4 @@ Linux 版本就看 `uname -m`:`x86_64` 用 x64,`aarch64` 用 arm64。
 接下来配置模型、跑第一次测试,见 **[安装指南](docs/installation.zh.md)** —— 里面
 还写了被测语言需要的工具链、CI 与 git hook 接入方式,以及实时看板。
 
-有问题请提 [issue](https://github.com/fermat-hkrc/pbt-agent-release/issues)。
+有问题请提 [issue](https://github.com/fermat-hkrc/FMBot-PBT-release/issues)。

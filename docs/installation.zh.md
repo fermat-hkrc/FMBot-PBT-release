@@ -189,6 +189,9 @@ pi-pbt
 把产物写到 `pbt-out/` 目录:测试计划 `PLAN.md`、性质清单 `PROPERTIES.md`、
 总结 `REPORT.md`,以及每个确认的 bug 一份 `bug_reports/*.md`(附最小复现)。
 
+全部子命令(`build-run`、`hook-run`、`watch`、`replay`、`scan` …)见
+[subcommands.zh.md](subcommands.zh.md)([English](subcommands.md))。
+
 ### 命令行方式(CI、脚本)
 
 ```bash
@@ -319,14 +322,61 @@ pi-pbt build-run \
   --lang zh
 ```
 
+产品图已经 `gn gen` 好、你只想 **ninja 某一个 unittest**(而不是整组件
+`build.sh`)时,把这条 ninja 当作 `--build-cmd`。模块 checkout 若在
+`repo` 清单树**之外**,设置 `PBT_OH_WORKSPACE` 指向 workspace 根,campaign
+才会复用 `out/<product>/`:
+
+```bash
+export PBT_OH_WORKSPACE=/path/to/openharmony
+pi-pbt build-run \
+  --workdir "$PBT_OH_WORKSPACE" \
+  --repo /path/to/ability_ability_runtime \
+  --build-cmd "flock $PBT_OH_WORKSPACE/.pbt-ninja.lock ninja -C $PBT_OH_WORKSPACE/out/rk3568 -w dupbuild=warn js_test_runner_get_path_pbt_test" \
+  --scope frameworks/native/appkit/ability_delegator/runner_runtime/js_test_runner.cpp \
+  --func JsTestRunner::GetTestRunnerPath \
+  --lang zh
+```
+
+另一条一等命令是模块内的 **host CMake**(无共享 `out/`、不用
+`PBT_OH_WORKSPACE`,可并行):
+
+```bash
+pi-pbt build-run \
+  --workdir /path/to/ability_ability_runtime \
+  --repo /path/to/ability_ability_runtime \
+  --build-cmd "cmake -S pbt-native -B pbt-native/build && cmake --build pbt-native/build -j$(nproc)" \
+  --scope frameworks/native/appkit/ability_delegator/runner_runtime/js_test_runner.cpp \
+  --func JsTestRunner::GetTestRunnerPath \
+  --lang zh
+```
+
+二选一:`ninja -C $PBT_OH_WORKSPACE/out/rk3568` **或** `cmake --build`。campaign
+不会自己切换。多个 ninja campaign 共用一份 `out/` 时,`flock` 是**你**加在命令
+里的串行;pi-pbt 不会替 ninja 加锁。`--scope` 把 campaign 限制在该路径;只有全仓
+才省略。
+
 构建命令是**你准备好的输入**,不是让 agent 去摸索的东西。`build-run` 先在
 `--workdir` 里执行它(完整日志在 `<out>/build.log`):失败则 PBT 根本不启动,
 进程以退出码 `3` 结束——修好构建或命令后重跑;成功则 campaign 在 `--repo` 下
 以"构建契约"运行:重建只允许复用这条命令(只可把构建目标换成新增的测试目标),
 重建失败是 STOP 条件、原样记入 `REPORT.md`——agent 不会去探索其他编译方式。
 新增测试按仓库官方单元测试方式接入(组件自带的 GN unittest 模板与既有 test
-group),第三方 PBT 框架走仓库 `third_party/` 惯例。`--scope`、`--out`、
-`--lang`、`--effort`(默认 `standard`)、`--provider`、`--model`、`--tui`
+group),第三方 PBT 框架走仓库 `third_party/` 惯例。
+
+`--scope` 与 `--func` 是写进 prompt 的范围限制(不是沙箱):
+
+```bash
+pi-pbt build-run --build-cmd "…" \
+  --scope path/to/file.cpp \
+  --func Foo::Bar
+```
+
+`--scope <path>` 是文件或目录(只有全仓才省略)。`--func <name>`(可选)
+指该路径里的**一个符号**。必须先有 `--scope`,且命令行里 `--func` 必须写在
+`--scope` **之后**;不加 `--func` 则覆盖 `--scope` 里所有值得测的函数。
+
+`--out`、`--lang`、`--effort`(默认 `standard`)、`--provider`、`--model`、`--tui`
 与 `hook-run` 一致。
 
 想在交互会话里**实时观测**同一条流程,直接说:
@@ -512,7 +562,7 @@ pbt-out/
 
 | 变量 | 作用 |
 |---|---|
-| `PBT_LANG=zh` | 全程用中文思考、并用中文写所有产物;子命令也可用 `--lang zh` |
+| `PBT_LANG=zh` / `en` | 全程用中文或英文思考并写产物;子命令也可用 `--lang`。`en` 在战役提示本身是中文时仍会注入英文指令 |
 | `PBT_SCAN_ROOT=/path` | 要扫描的仓库路径。用于工作目录是一份干净副本的场景(git hook / CI) |
 | `PBT_OH_WORKSPACE=/path` | 预先准备好的完整 OpenHarmony 源码环境(源码 + 编译工具链 + 已编译好的依赖),直接复用而不是从头推导怎么单独构建。仓库位于这样的环境内部时(某个上级目录同时有 `.repo/` 和 `out/`)会**自动识别**,只有要覆盖时才需要显式设置;启动日志会打印实际用的是哪个 |
 | `PBT_HOOK_TUI=1` | 等同 `hook-run --tui` / `watch --tui`:用交互式界面跑(需要终端;结束后等你 `/quit`) |

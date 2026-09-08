@@ -10,6 +10,62 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.13 - 2026-09-08
+
+### English
+
+#### Changed
+
+- **The project's repositories were renamed.** The development repository is
+  now `fermat-hkrc/FMBot-PBT` (was `pbt-agent`), and the public release
+  mirror — where you download pi-pbt — is now
+  **`fermat-hkrc/FMBot-PBT-release`** (was `pbt-agent-release`):
+  https://github.com/fermat-hkrc/FMBot-PBT-release/releases. GitHub keeps
+  permanent redirects on the old names, so existing links, clones, and
+  download scripts continue to work; please update bookmarks and automation
+  to the new URLs at your convenience. The product, binary, and config
+  directory names (`pi-pbt`, `~/.pi-pbt/`) are unchanged.
+
+#### Fixed
+
+- Language-feature discipline in the `build-run` build contract: campaigns
+  must never enable convention-disabled features (`-frtti`, …) on test
+  targets to appease a PBT framework. RapidCheck's no-rtti mode
+  (`RC_DONT_USE_RTTI`, defined publicly in its third_party BUILD.gn) is the
+  documented fix for `typeid` errors under `-fno-rtti` trees, validated on
+  OpenHarmony (rebuild + full property suite green). Exceptions remain a
+  framework-public-config-only, testonly-scoped hard requirement.
+
+#### Embedded SDK
+
+- Embedded pi `0.85.1`. `pi-pbt --version` reports
+  `pi-pbt 0.1.13 (pi 0.85.1)`.
+
+### 中文
+
+#### 变更
+
+- **项目仓库已更名。** 开发仓现为 `fermat-hkrc/FMBot-PBT`(原 `pbt-agent`);
+  下载 pi-pbt 的公开发布镜像现为 **`fermat-hkrc/FMBot-PBT-release`**
+  (原 `pbt-agent-release`):
+  https://github.com/fermat-hkrc/FMBot-PBT-release/releases。GitHub 对旧名
+  保留永久重定向,现有链接、克隆与下载脚本均继续可用;请在方便时把书签与
+  自动化脚本更新到新地址。产品、二进制与配置目录名(`pi-pbt`、`~/.pi-pbt/`)
+  不变。
+
+#### 修复
+
+- `build-run` 构建契约的语言特性纪律:campaign 绝不为迁就 PBT 框架而在测试
+  目标上开启项目约定禁用的特性(`-frtti` 等)。`-fno-rtti` 树上的 `typeid`
+  报错,正解是 RapidCheck 的 no-rtti 模式(在其 third_party BUILD.gn 的
+  public config 定义 `RC_DONT_USE_RTTI`),已在 OpenHarmony 上验证(重建 +
+  全部性质通过)。异常仍仅由框架 public config 携带、限 testonly 作用域的
+  硬需求。
+
+#### 内嵌 SDK
+
+- 内嵌 pi `0.85.1`。`pi-pbt --version` 显示 `pi-pbt 0.1.13 (pi 0.85.1)`。
+
 ## 0.1.12 - 2026-08-31
 
 ### English

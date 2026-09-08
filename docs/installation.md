@@ -208,6 +208,9 @@ write and run the tests, review the results — and writes what it produces to
 summary (`REPORT.md`), and one `bug_reports/*.md` per confirmed bug, each with a
 minimal reproducer.
 
+All subcommands (`build-run`, `hook-run`, `watch`, `replay`, `scan`, …) are listed
+in [subcommands.md](subcommands.md) ([中文](subcommands.zh.md)).
+
 ### From the command line (CI, scripts)
 
 ```bash
@@ -353,6 +356,40 @@ pi-pbt build-run \
   --lang zh
 ```
 
+When the product graph is already generated and you want **ninja of one
+unittest** (not a full `build.sh` of the component), pass that as `--build-cmd`.
+If the module checkout sits **outside** the `repo`-manifest tree, set
+`PBT_OH_WORKSPACE` to the workspace root so the campaign reuses `out/<product>/`:
+
+```bash
+export PBT_OH_WORKSPACE=/path/to/openharmony
+pi-pbt build-run \
+  --workdir "$PBT_OH_WORKSPACE" \
+  --repo /path/to/ability_ability_runtime \
+  --build-cmd "flock $PBT_OH_WORKSPACE/.pbt-ninja.lock ninja -C $PBT_OH_WORKSPACE/out/rk3568 -w dupbuild=warn js_test_runner_get_path_pbt_test" \
+  --scope frameworks/native/appkit/ability_delegator/runner_runtime/js_test_runner.cpp \
+  --func JsTestRunner::GetTestRunnerPath \
+  --lang en
+```
+
+The other first-class command is **host CMake** in the module (no shared `out/`,
+no `PBT_OH_WORKSPACE`, parallel-safe):
+
+```bash
+pi-pbt build-run \
+  --workdir /path/to/ability_ability_runtime \
+  --repo /path/to/ability_ability_runtime \
+  --build-cmd "cmake -S pbt-native -B pbt-native/build && cmake --build pbt-native/build -j$(nproc)" \
+  --scope frameworks/native/appkit/ability_delegator/runner_runtime/js_test_runner.cpp \
+  --func JsTestRunner::GetTestRunnerPath \
+  --lang en
+```
+
+Pick **one**: `ninja -C $PBT_OH_WORKSPACE/out/rk3568` **or** `cmake --build`.
+The campaign will not switch between them. `flock` is **your** serialization if
+several ninja campaigns share one `out/`; pi-pbt does not lock ninja. `--scope`
+limits the campaign to that path; omit it only for a full-repo run.
+
 The build command is **your prepared input**, not something the agent figures
 out. `build-run` executes it in `--workdir` first (full log in
 `<out>/build.log`); if it fails, PBT never starts and the process exits `3` —
@@ -363,8 +400,23 @@ condition recorded in `REPORT.md` — the agent will not go exploring for
 alternative ways to compile. New tests are wired the repository's official
 unit-test way (the component's own GN unittest template and test group), with
 third-party PBT frameworks referenced through the tree's `third_party/`
-conventions. `--scope`, `--out`, `--lang`, `--effort` (default `standard`),
-`--provider`, `--model`, and `--tui` work as on `hook-run`.
+conventions.
+
+`--scope` and `--func` are prompt-only limits (not a sandbox):
+
+```bash
+pi-pbt build-run --build-cmd "…" \
+  --scope path/to/file.cpp \
+  --func Foo::Bar
+```
+
+`--scope <path>` is a file or directory (omit only for a full-repo run).
+`--func <name>` (optional) names **one symbol** in that path. It **requires
+`--scope`** and must appear **after** `--scope` on the command line. Without
+`--func`, every PBT-worthy function in `--scope` is in play.
+
+`--out`, `--lang`, `--effort` (default `standard`), `--provider`,
+`--model`, and `--tui` work as on `hook-run`.
 
 To watch the same flow live inside an interactive session, say:
 
@@ -570,7 +622,7 @@ is touched.
 
 | Variable | Effect |
 |---|---|
-| `PBT_LANG=zh` | work in Chinese and write everything it produces in Chinese; also `--lang zh` on subcommands |
+| `PBT_LANG=zh` / `en` | Chinese or English narration and artifacts; also `--lang` on subcommands. `en` still injects an English directive when the campaign prompt is Chinese |
 | `PBT_SCAN_ROOT=/path` | the repo to scan, for setups where the working directory is a clean copy (git hooks, CI) |
 | `PBT_OH_WORKSPACE=/path` | a pre-built full OpenHarmony source environment (source tree + toolchain + built dependencies) to reuse, instead of working out how to build the component standalone. **Detected automatically** when the repo sits inside such an environment (a parent directory with both `.repo/` and `out/`) — set it explicitly only to override; the startup log prints which one is in use |
 | `PBT_HOOK_TUI=1` | same as `hook-run --tui` / `watch --tui`: run in the interactive interface (needs a terminal; waits for `/quit`) |
