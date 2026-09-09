@@ -10,6 +10,34 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.14 - 2026-09-09
+
+### English
+
+#### Fixed
+
+- Empty or thinking-only assistant turns no longer queue settle steers
+  (contract-surface sweep, depth, build). A completed empty `stop` (seen on
+  GLM-5.1; any model can do the same) used to continue headless `-p` into more
+  empty stops — a silent loop (#380, #381).
+
+#### Embedded SDK
+
+- Embedded pi `0.85.1`. `pi-pbt --version` reports
+  `pi-pbt 0.1.14 (pi 0.85.1)`.
+
+### 中文
+
+#### 修复
+
+- 空回复或仅 thinking 的 assistant 回合不再排队收尾 steer(合同面扫描、加深、
+  构建)。一次正常结束的空 `stop`(GLM-5.1 上出现过;任何模型都可能)会让无头
+  `-p` 继续空转 —— 静默死循环(#380, #381)。
+
+#### 内嵌 SDK
+
+- 内嵌 pi `0.85.1`。`pi-pbt --version` 显示 `pi-pbt 0.1.14 (pi 0.85.1)`。
+
 ## 0.1.13 - 2026-09-08
 
 ### English

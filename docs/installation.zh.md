@@ -51,24 +51,21 @@ sudo pacman -S --needed git cmake ninja clang
 不确定该拿哪个 Linux 版本?跑 `uname -m` —— 显示 `x86_64` 用 x64 那个,显示
 `aarch64` 用 arm64 那个。
 
-每个压缩包解出来都是一个同名目录，其中包含 `pi-pbt`、同级 `tools/fd` 和
-`tools/rg`。安装主程序，并把随包工具复制到当前嵌入式 pi 工具管理器检查的目录：
+每个压缩包解出来都是一个同名目录，其中包含 `pi-pbt`、安装脚本 `install.sh`、同级
+`tools/fd` 和 `tools/rg`。运行随包安装脚本即可安装主程序，并把工具放到嵌入式 pi
+工具管理器检查的目录：
 
 ```bash
 PLATFORM=linux-x64   # 或 linux-arm64 / macos-arm64
 sha256sum -c "pi-pbt-${PLATFORM}.zip.sha256"   # 可选的完整性校验
 unzip "pi-pbt-${PLATFORM}.zip"
 cd "pi-pbt-${PLATFORM}"
-sudo install -Dm755 pi-pbt /usr/local/bin/pi-pbt
-mkdir -p ~/.pi/agent/bin
-cp tools/fd ~/.pi/agent/bin/fd
-cp tools/rg ~/.pi/agent/bin/rg
-chmod +x ~/.pi/agent/bin/fd ~/.pi/agent/bin/rg
+./install.sh
 ```
 
 普通 shell 中直接执行 `fd` 或 `rg` 仍可能提示找不到，这是正常的，无需额外修改
 `PATH`。在 Windows 上解压会丢掉 Unix 权限位；若文件中转过 Windows 机器，先给
-`pi-pbt`、`tools/fd` 和 `tools/rg` 执行 `chmod +x`。
+`pi-pbt`、`install.sh`、`tools/fd` 和 `tools/rg` 执行 `chmod +x`。
 
 arm64 和 macOS 版都是在 x64 Linux 上交叉编译出来的,只做了格式校验(发布流程
 会断言产物确实是 aarch64 ELF / Mach-O arm64),没有在目标机器上实跑。命令行

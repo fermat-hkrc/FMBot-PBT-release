@@ -29,8 +29,8 @@ Not sure which Linux build you need? `uname -m` — `x86_64` takes the x64 file,
 ```bash
 sha256sum -c pi-pbt-linux-x64.zip.sha256    # optional integrity check
 unzip pi-pbt-linux-x64.zip                  # yields pi-pbt-linux-x64/, already executable
-cd pi-pbt-linux-x64                         # holds pi-pbt plus tools/fd and tools/rg
-sudo install -Dm755 pi-pbt /usr/local/bin/pi-pbt
+cd pi-pbt-linux-x64                         # holds pi-pbt, install.sh, and tools/
+./install.sh
 pi-pbt --help
 ```
 
@@ -61,8 +61,8 @@ Python / Rust / Go / Java / C++ 仓库,它会读源码,推断出「这段代码�
 ```bash
 sha256sum -c pi-pbt-linux-x64.zip.sha256    # 可选:校验完整性
 unzip pi-pbt-linux-x64.zip                  # 解出 pi-pbt-linux-x64/,已带可执行权限
-cd pi-pbt-linux-x64                         # 里面是 pi-pbt 和 tools/fd、tools/rg
-sudo install -Dm755 pi-pbt /usr/local/bin/pi-pbt
+cd pi-pbt-linux-x64                         # 里面是 pi-pbt、install.sh 和 tools/
+./install.sh
 pi-pbt --help
 ```
 

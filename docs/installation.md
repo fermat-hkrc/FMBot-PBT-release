@@ -55,27 +55,24 @@ Releases page, an internal mirror, or a direct handoff). Each ships with a
 Not sure which Linux one you need? `uname -m` — `x86_64` takes the x64 file,
 `aarch64` the arm64 one.
 
-Every archive extracts to a same-named directory containing `pi-pbt` and the
-adjacent `tools/fd` and `tools/rg`. Install the main executable and copy the
-bundled tools into the directory currently checked by the embedded pi tool
-manager:
+Every archive extracts to a same-named directory containing `pi-pbt`, an
+`install.sh` installer, and adjacent `tools/fd` and `tools/rg`. Run the bundled
+installer to install the main executable and place its tools where the embedded
+pi tool manager checks them:
 
 ```bash
 PLATFORM=linux-x64   # or linux-arm64 / macos-arm64
 sha256sum -c "pi-pbt-${PLATFORM}.zip.sha256"   # optional integrity check
 unzip "pi-pbt-${PLATFORM}.zip"
 cd "pi-pbt-${PLATFORM}"
-sudo install -Dm755 pi-pbt /usr/local/bin/pi-pbt
-mkdir -p ~/.pi/agent/bin
-cp tools/fd ~/.pi/agent/bin/fd
-cp tools/rg ~/.pi/agent/bin/rg
-chmod +x ~/.pi/agent/bin/fd ~/.pi/agent/bin/rg
+./install.sh
 ```
 
 Running `fd` or `rg` directly from a regular shell may still report command not
 found, which is expected; no additional `PATH` change is required. Extracting
 on Windows drops Unix permissions, so if the files travelled through a Windows
-machine, run `chmod +x` on `pi-pbt`, `tools/fd`, and `tools/rg` first.
+machine, run `chmod +x` on `pi-pbt`, `install.sh`, `tools/fd`, and `tools/rg`
+first.
 
 The arm64 and macOS builds are cross-compiled on an x64 Linux machine; they are
 validated by format (the release job asserts each is really an aarch64 ELF /
