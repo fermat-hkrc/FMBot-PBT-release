@@ -10,6 +10,100 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.15 - 2026-09-11
+
+### English
+
+#### Added
+
+- Property seeds from the project's own tests: Phase 1 now mines every test
+  covering a candidate function and generalizes each example assertion to its
+  input domain — a one-literal round-trip becomes a round-trip over all
+  inputs, three boundary cases become a bound over the range, an asserted call
+  sequence becomes a state-machine trace. The origin is recorded as
+  `Seed: <test file:line>` in the property ledger, and the campaign then
+  widens the domain past what the examples covered. Seeds capture author
+  intent; they never serve as oracle evidence for the function under test.
+
+#### Changed
+
+- **OpenHarmony property tests now land in a sibling `test/pbt/` tree**, not
+  inside the unit-test group. OH organizes test kinds as parallel directories
+  (`test/unittest/`, `test/fuzztest/`, `test/moduletest/`, …), each with its
+  own BUILD.gn group registered in `bundle.json` `component.build.test`;
+  property tests are one more kind, carrying their own framework dependency
+  and compile flags. Campaigns write `test/pbt/<subpath>/` mirroring
+  `test/unittest/<subpath>/`, define targets with the component's own unittest
+  template plus `//third_party/rapidcheck:rapidcheck`, aggregate them as
+  `group("pbt")`, and add one line to `build.test`. A corrective runtime guard
+  redirects the old placement. Validated on ArkUI ace_engine: 19 properties,
+  `max_success=2000`, all passing, built by bare target name `pbt` and run
+  natively on the build host; the pre-existing unit-test group was untouched.
+- **Exploratory OpenHarmony build recipes are retired — builds are
+  command-driven.** The `project-build` skill (dependency-closure derivation,
+  standalone-subset builds, host-compile with framework stubs, and
+  `oh-closure.py`) has been removed, and `openharmony-build-run` was rewritten
+  from a fidelity-ordered cookbook into a deck of official build command cards:
+  `host_product` native host tests first (measured: ace_engine's aggregate test
+  group yields 200 host binaries, no emulator or device needed), the
+  component's own test target under a device product second, qemu-user to run
+  arm artifacts. When no card applies, the campaign STOPs and asks for a build
+  command instead of deriving one.
+
+#### Fixed
+
+- Close-out and property-IR steers now fire once per issue class per campaign
+  instead of re-nagging every turn as ledger names change (110 redundant
+  steers observed across 25 campaigns).
+- The release workflow and mirror script follow the repository renames
+  (development repo `FMBot-PBT`, release mirror `FMBot-PBT-release`).
+
+#### Embedded SDK
+
+- Embedded pi `0.85.1` (unchanged). `pi-pbt --version` reports
+  `pi-pbt 0.1.15 (pi 0.85.1)`.
+
+### 中文
+
+#### 新增
+
+- 用项目自带测试作性质种子:Phase 1 现在会读取覆盖候选函数的每个测试文件,
+  把 example 断言泛化到其输入域——单点 round-trip 变成全域 round-trip,
+  0/1/max 三个边界用例变成整段区间的界性质,带中间断言的调用序列变成状态机
+  轨迹。来源以 `Seed: <测试文件:行号>` 记入性质账本,随后战役再把域拓宽到
+  用例未覆盖的地方。种子表达作者意图,绝不充当被测函数的 oracle 证据。
+
+#### 变更
+
+- **OpenHarmony 的性质测试改为落在与 `test/unittest` 并排的 `test/pbt/`
+  目录**,不再塞进单测 group。OH 本就按测试*种类*并排组织目录
+  (`test/unittest/`、`test/fuzztest/`、`test/moduletest/` …),每种一个
+  BUILD.gn group 并登记在 `bundle.json` 的 `component.build.test`;性质测试
+  是又一个种类,带有自己的框架依赖与编译选项。战役写
+  `test/pbt/<子路径>/` 镜像 `test/unittest/<子路径>/`,用组件自带的 unittest
+  模板 + `//third_party/rapidcheck:rapidcheck` 定义目标,聚合为
+  `group("pbt")`,并在 `build.test` 增加一行。运行时守卫会把旧落位纠正过来。
+  已在 ArkUI ace_engine 上验证:19 条性质、每条 `max_success=2000` 全部通过,
+  用裸组名 `pbt` 构建并在构建机本地直接运行;既有单测 group 零改动。
+- **OpenHarmony 的探索式构建配方退役——构建改为命令驱动。** `project-build`
+  skill(依赖闭包推导、自含子集构建、host 编译加框架 stub,以及
+  `oh-closure.py`)已整体删除;`openharmony-build-run` 从按保真度排序的配方
+  手册重写为官方构建命令卡片:优先 `host_product` 本地测试(实测:ace_engine
+  聚合测试组产出 200 个 host 二进制,无需模拟器或设备),其次设备产品下组件
+  自带的测试目标,再以 qemu-user 运行 arm 产物。无卡片可用时战役直接 STOP
+  并请用户给出构建命令,而不是自行推导。
+
+#### 修复
+
+- 收尾与性质 IR 的引导现在按问题类别每场战役只触发一次,不再因账本名称变化
+  而每轮重复唠叨(25 场战役中观察到 110 次冗余引导)。
+- release workflow 与镜像脚本同步仓库改名(开发仓 `FMBot-PBT`,发布镜像
+  `FMBot-PBT-release`)。
+
+#### 内嵌 SDK
+
+- 内嵌 pi `0.85.1`(未变)。`pi-pbt --version` 显示 `pi-pbt 0.1.15 (pi 0.85.1)`。
+
 ## 0.1.14 - 2026-09-09
 
 ### English
