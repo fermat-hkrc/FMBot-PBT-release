@@ -449,7 +449,7 @@ codex mcp add pi-pbt -- pi-pbt mcp
 
 | 工具 | 作用 |
 |---|---|
-| `pbt_start` | 对**一个不可变的 commit**(默认当前 `HEAD`,解析成完整 sha)发起 campaign;立即返回 `run_id` |
+| `pbt_start` | 对**一个不可变的 commit**(默认当前 `HEAD`,解析成完整 sha)发起 campaign;立即返回 `run_id`。`build_cmd` / `build_workdir` 传入已备好的构建命令,并让 campaign 就地运行(见下) |
 | `pbt_status` | 查询某个 run 或 watch 的状态/阶段/排队位置/产物 URI |
 | `pbt_report` | 结论(`passed` / `bugs_found` / `failed`)、`REPORT.md` 摘要、bug 报告清单、是否有 patch |
 | `pbt_cancel` | 取消排队或进行中的 campaign(幂等) |
@@ -466,6 +466,15 @@ commit 快照进一个独立的 `git worktree` 再开测,所以你可以继续�
 你的 index、`HEAD`、refs、stash 和文件全都不动,期间可以继续写代码。工作树
 干净时就直接测 `HEAD`。该参数与 `revision` 互斥;run 会返回 `snapshot: true`
 和快照所基于的 `base_revision`。
+
+**一个刻意的例外:`build_cmd`。** 大型组件(OpenHarmony、AOSP、monorepo 子树)
+无法在独立 worktree 里构建 —— 它们的构建系统按真实 checkout 解析路径、生成头文件
+和 ccache 状态。因此给 `pbt_start` 传 `build_cmd` 时,campaign **就地在仓库本身
+运行,不创建 worktree**。该命令先跑,非零退出会在任何 agent 工作之前停掉 campaign,
+于是构建坏了只花几秒,而不是一轮探索式编译。构建需要在被测模块之上的目录执行时
+(例如 scope 是单个组件、构建要在 OpenHarmony 源码根跑)用 `build_workdir` 指定。
+你知道自己的构建命令就用它;不传则保持 worktree 隔离。
+
 run 结束后 worktree 被清掉;留下的东西在 `~/.pi-pbt/runs/<run-id>/`
 (用 `PI_PBT_RUNS_DIR` 改位置):`run.json`、`events.jsonl`、两份日志、campaign
 产物,以及一份 `changes.patch`(campaign 在自己 worktree 里写下的全部内容)。

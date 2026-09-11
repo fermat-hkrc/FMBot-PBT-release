@@ -498,7 +498,7 @@ The server exposes six tools:
 
 | Tool | What it does |
 |---|---|
-| `pbt_start` | start a campaign on **one immutable commit** (default: current `HEAD`, resolved to a full sha); returns a `run_id` immediately |
+| `pbt_start` | start a campaign on **one immutable commit** (default: current `HEAD`, resolved to a full sha); returns a `run_id` immediately. `build_cmd` / `build_workdir` supply a prepared build command and run the campaign in place (see below) |
 | `pbt_status` | state / phase / queue position / artifact URIs for a run or watch |
 | `pbt_report` | verdict (`passed` / `bugs_found` / `failed`), `REPORT.md` summary, bug-report index, patch presence |
 | `pbt_cancel` | cancel a queued or running campaign (idempotent) |
@@ -518,7 +518,19 @@ like any other revision. The snapshot is minted with a throwaway git index —
 your index, `HEAD`, refs, stash, and files are untouched, and you can keep
 typing while it runs. A clean tree simply tests `HEAD`. It is mutually
 exclusive with `revision`, and the run reports `snapshot: true` plus the
-`base_revision` it was taken on. When the run finishes, the worktree is removed; what survives lives
+`base_revision` it was taken on.
+
+**One exception, and it is deliberate: `build_cmd`.** Large components
+(OpenHarmony, AOSP, a monorepo subtree) cannot be built from a detached
+worktree — their build systems resolve paths, generated headers, and ccache
+state against the real checkout. Passing `build_cmd` to `pbt_start` therefore
+runs the campaign **in place, in the repository itself**, with no worktree
+created. The command runs first and a non-zero exit stops the campaign before
+any agent work, so a broken build costs you seconds rather than an exploratory
+build hunt. Set `build_workdir` when the build must run from a directory above
+the module under test, e.g. the OpenHarmony source root while the scope is one
+component. Use it when you know your build command; leave it off to keep the
+worktree isolation. When the run finishes, any worktree is removed; what survives lives
 under `~/.pi-pbt/runs/<run-id>/` (override with `PI_PBT_RUNS_DIR`): `run.json`,
 `events.jsonl`, both logs, the campaign artifacts, and a `changes.patch` holding
 everything the campaign wrote in its worktree. All of it is also readable

@@ -10,6 +10,138 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.16 - 2026-09-11
+
+### English
+
+#### Added
+
+- **Delegate a campaign with your own build command.** MCP `pbt_start` gains
+  `build_cmd` and `build_workdir`: the command runs first and a non-zero exit
+  stops the campaign before any agent work, so a broken build costs seconds
+  instead of an exploratory build hunt. Because large components (OpenHarmony,
+  AOSP, a monorepo subtree) resolve paths, generated headers, and ccache state
+  against the real checkout and cannot build from a detached worktree, a run
+  with a build command executes **in place, in the repository itself**, with no
+  worktree created. Validated end to end against a real ArkUI ace_engine on an
+  OpenHarmony trunk checkout: the official `host_product` build command, scope
+  limited to one module, campaign passed, artifacts read back over
+  `pbt://runs/<id>/...`.
+- `pbt_status` accepts `run_id` and `watch_id` as aliases for `id`, so a caller
+  that echoes back the field name `pbt_start` returned no longer errors.
+
+#### Changed
+
+- **`pbt-native/` is demoted to the last resort.** Harness placement now has
+  three rungs: extend the repository's existing test target, then build the
+  test tree the project *should* have in its own conventional location, and
+  only then fall back to a standalone `pbt-native/`. A fresh directory rarely
+  reproduces the original harness's include paths, compile definitions, link
+  closure, and fixtures, so what survives that gap is the shallow surface while
+  the properties that need the real environment silently drop out.
+- Registering the campaign's test target is stated as a targeted `edit` in the
+  workflow SOP and in both languages of the `build-run` prompt, so the runtime
+  guard below is the backstop rather than the teacher.
+
+#### Fixed
+
+- **A campaign no longer rewrites a project-owned manifest wholesale.** Observed
+  on a live ace_engine run: registering one `build.test` entry round-tripped
+  `bundle.json` through a JSON parse and stringify, reindenting 372 lines into
+  419 — a diff no component owner would take, burying the one line that
+  mattered. A full-file `write` to a register-only manifest (`bundle.json`,
+  `BUILD.gn`, `package.json`, `Cargo.toml`, `pyproject.toml`, `CMakeLists.txt`,
+  `meson.build`, `Makefile`) that already exists outside the campaign's own
+  generated tree is now blocked and redirected to `edit`. The verification
+  re-run produced a 2-insertion, 1-deletion diff, with the guard never firing.
+- **In-place runs clean up after their own test binaries.** The same re-run
+  left five untracked gtest result files in the component root, one per
+  invocation. Files matching the generated test naming that appeared or changed
+  after the run started are now swept from the repository root; a same-named
+  file the user already had is never touched, and the generated test sources
+  never match.
+- A campaign that narrates its report in the transcript instead of writing
+  `pbt-out/REPORT.md` gets one last-chance steer at `agent_end` when the other
+  phase artifacts are on disk but the report is not.
+- Incremental scope no longer treats previously generated `*_pbt_test.*` files
+  as production code to test, wherever they live.
+- OpenHarmony close-out guards: a wiki-sourced REPORT can no longer close on
+  header-only leftovers, on a missing CMake configuration, or without the real
+  production source compiled, and the `Path().write_text` bash route around
+  those checks is closed. Close-out on the component's official harness and on
+  `*PbtTest` targets is allowed, scoped to harness placement rung 1.
+
+#### Documentation
+
+- `docs/installation.md` and `docs/installation.zh.md` previously asserted the
+  worktree isolation contract unconditionally; `build_cmd` is documented as the
+  one deliberate exception, next to the contract it qualifies.
+- The bundled `pi-pbt-dev` skill's `INSTALL.md` now points at the MCP path
+  (`claude mcp add --transport stdio pi-pbt -- pi-pbt mcp`), the six tools, the
+  `pbt://` resources, and `build_cmd` for large components.
+
+#### Embedded SDK
+
+- Embedded pi `0.85.1` (unchanged). `pi-pbt --version` reports
+  `pi-pbt 0.1.16 (pi 0.85.1)`.
+
+### 中文
+
+#### 新增
+
+- **用自己的构建命令委派一轮战役。** MCP `pbt_start` 新增 `build_cmd` 与
+  `build_workdir`：构建命令先跑，非零退出会在任何 agent 工作之前停掉战役，于是
+  构建坏了只花几秒，而不是一轮探索式编译。大型组件（OpenHarmony、AOSP、monorepo
+  子树）按真实 checkout 解析路径、生成头文件和 ccache 状态，无法在独立 worktree
+  里构建，因此带构建命令的运行**就地在仓库本身执行，不创建 worktree**。已在
+  OpenHarmony trunk 上的真实 ArkUI ace_engine 完整验证：官方 `host_product`
+  构建命令、scope 限定到单个模块、战役通过，产物经 `pbt://runs/<id>/...` 读回。
+- `pbt_status` 接受 `run_id`、`watch_id` 作为 `id` 的别名，调用方把 `pbt_start`
+  返回的字段名原样回传不再报错。
+
+#### 变更
+
+- **`pbt-native/` 降级为最后手段。** harness 落位现在分三档：先扩展仓库已有的
+  测试目标，再在项目自己的惯例位置建出它*本该有*的测试树，最后才退到独立的
+  `pbt-native/`。新目录很难复现原 harness 的 include 路径、编译定义、链接闭包
+  和 fixture，活下来的只有浅层表面，而需要真实环境的性质会悄悄掉队。
+- 战役登记自己的测试目标时"只用 `edit` 改那一行"已写进 workflow SOP 和
+  `build-run` 双语提示，让下面那条运行时守卫只当兜底，而不是唯一的老师。
+
+#### 修复
+
+- **战役不再整文件重写项目自有的清单文件。** 真实 ace_engine 运行中观察到：
+  为了登记一条 `build.test`，它把 `bundle.json` 走了一遍 JSON 解析再序列化，
+  372 行重排成 419 行——这种 diff 没有组件 owner 会收，真正要改的那一行被淹没。
+  现在对"已存在且不在战役自有生成树内"的 register-only 清单（`bundle.json`、
+  `BUILD.gn`、`package.json`、`Cargo.toml`、`pyproject.toml`、`CMakeLists.txt`、
+  `meson.build`、`Makefile`）做整文件 `write` 会被挡下并指向 `edit`。复测的 diff
+  是 2 insertions / 1 deletion，守卫一次都没触发。
+- **就地运行会清理自己测试二进制的产物。** 同一次复测在组件根留下了五个未跟踪
+  的 gtest 结果文件，每跑一次一个。现在仓库根下"名字符合生成测试命名**且**在
+  运行开始之后出现或改动"的文件会被清掉；用户原本就有的同名文件绝不碰，生成的
+  测试源码也永不匹配。
+- 战役若只在对话里口述报告而没写 `pbt-out/REPORT.md`，在其他阶段产物已落盘而
+  报告缺失时，会在 `agent_end` 收到最后一次纠正。
+- 增量范围不再把上一轮生成的 `*_pbt_test.*` 当成待测生产代码，无论它落在哪。
+- OpenHarmony 收尾守卫：来自 wiki 的 REPORT 不能再靠只剩头文件的残留收尾、
+  不能在缺 CMake 配置时收尾、不能在没编译真实生产源码时收尾，绕过这些检查的
+  `Path().write_text` bash 路径也已封掉。用组件官方 harness 和 `*PbtTest` 目标
+  收尾是允许的，范围限定在 harness 落位第一档。
+
+#### 文档
+
+- `docs/installation.md` 与 `docs/installation.zh.md` 原先无条件宣称 worktree
+  隔离契约；`build_cmd` 作为唯一一处刻意的例外，已写在该契约旁边。
+- 随包分发的 `pi-pbt-dev` skill 的 `INSTALL.md` 现在指向 MCP 路径
+  （`claude mcp add --transport stdio pi-pbt -- pi-pbt mcp`）、六个工具、
+  `pbt://` 资源，以及大型组件用的 `build_cmd`。
+
+#### 内嵌 SDK
+
+- 内嵌 pi `0.85.1`（未变）。`pi-pbt --version` 输出
+  `pi-pbt 0.1.16 (pi 0.85.1)`。
+
 ## 0.1.15 - 2026-09-11
 
 ### English
