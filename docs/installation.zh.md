@@ -579,7 +579,9 @@ pbt-out/
 | `PBT_CODE_COVERAGE=0` | 关掉原生代码覆盖率的插桩与报表(见[代码覆盖率报表](#代码覆盖率报表));默认开启,工具链缺失时静默降级 |
 | `PBT_BARE=1` | 以纯 pi 运行:不加载编排扩展、内置技能与 campaign 守卫。用于 A/B 度量 harness 自身贡献(benchmark 场景),非日常使用 |
 | `PI_PBT_RUNS_DIR=/path` | [`pi-pbt mcp`](#让别的-coding-agent-委派测试mcp) 保存 run 状态与产物的目录(默认 `~/.pi-pbt/runs`;必须在被测仓库之外) |
+| `PBT_OUT_DIR=/path` | campaign 产物(`PLAN.md`、`PROPERTIES.md`、`COVERAGE.md`、`REPORT.md`、`bug_reports/`)所在目录。`build-run` 与 `hook-run` 会用各自的 `--out` **自动设置**,正常情况下你不需要自己设;它的存在是为了让产物驱动的检查读到与 campaign 写入相同的目录。普通 `pi-pbt -p` 不设它,用 `<cwd>/pbt-out`。**不要写进 shell profile**:残留的值会跟着之后每一次 campaign,而继承来的、指向别处的值正是它要防的那种「两份账本」 |
 | `PBT_MCP_MAX_CONCURRENT=2` | MCP 委派的 campaign 同时最多跑几个(默认 1,多余的排队) |
+| `PBT_PHASE_MODELS='{"plan":"anthropic/claude-opus-5"}'` | 按 campaign 相位(`scan`、`plan`、`test`、`review`)路由不同模型,写作 `<provider>/<modelId>`。不设则全程一个模型,这是默认。相位从 `pbt-out/` 下的产物读出,不由 agent 自报;模型不存在或 provider 未配置时静默保持当前模型。刻意不内置路由表:`scan` 与 `review` 是决定契约是什么、以及失败是否成立的地方,给它们降级是拿假绿换 token |
 
 ## 5. 网页面板:实时看它在干什么
 

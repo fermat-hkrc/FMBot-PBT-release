@@ -10,6 +10,151 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.17 - 2026-09-14
+
+### English
+
+#### Added
+
+- **Bulk-rewrite guard.** A full-file `write` to a pre-existing file of 30 lines
+  or more that this campaign did not author is blocked and redirected to `edit`.
+  Generalizes v0.1.16's manifest allow-list: the defect is not *which file* but
+  *how much of someone else's file one tool call destroys*. Four exemptions keep
+  the honest cases working — the campaign's own generated trees, generated-test
+  naming (a re-run legitimately rewrites last campaign's property test), files
+  the campaign created earlier in the session, and files small enough that
+  replacing them hides nothing. Corrective, never terminating.
+- **Per-phase model routing** (`PBT_PHASE_MODELS`), off unless configured. The
+  phase is read off the artifacts, never from an agent-declared transition.
+  There is deliberately no built-in routing table: Scan is where the campaign
+  extracts the spec clauses that override the oracle, so downgrading it makes
+  every downstream property test the wrong law and report a false pass.
+- `scripts/pr-review-comments.sh` — the automated-review merge gate. Exits 0
+  when the current head has been reviewed with no unresolved P0/P1, 1 while one
+  is open, 2 on a usage or API error, and 3 until the current head is reviewed;
+  `--wait` polls through that last state and the clean path prints the gated sha
+  for `gh pr merge --match-head-commit`.
+
+#### Fixed
+
+- **Artifact-driven checks now look where the campaign actually wrote.** They
+  resolved `<cwd>/pbt-out` unconditionally, but both subcommands redirect that
+  directory with `--out` and the MCP path points it at the run directory. The
+  missing-REPORT steer was therefore dead on both subcommand paths since it
+  landed, and the same hardcoding sat in sixteen other places including the
+  whole coverage-ledger machinery. Resolution now probes the configured
+  directory, its nested `pbt-out/`, and the `<cwd>/pbt-out` fallback, and takes
+  the one holding an artifact from **this** campaign — freshness matters because
+  `build-run --out` defaults to `<repo>/pbt-out` and only creates it, so a
+  repeat run finds the previous campaign's files sitting there.
+- The missing-REPORT steer names the resolved absolute path. `hook-run` chdirs
+  to its own clean workdir, so an agent following a relative `pbt-out/REPORT.md`
+  wrote where the gate does not look and the corrective round still exited 2.
+- `hook-run`'s gate accepts a third artifact root, its own cleaned workdir, so a
+  campaign whose `REPORT.md` landed in the `<cwd>/pbt-out` fallback is no longer
+  reported as died-before-Review. Opt-in, and only `hook-run` opts in: `kea`
+  shares the output variable but runs in the persistent SUT root.
+- `build-run --out <custom-dir>` now finalizes coverage in that directory.
+  Report generation and the execution-evidence append silently targeted
+  `<cwd>/pbt-out`. Native profiles are rendered from the instrumentation
+  directory bound at the first campaign command, which is not always the
+  artifact root the agent ended up using.
+- In-place runs sweep their own test binaries' leftovers from the repository
+  root; a clean passing campaign no longer hands back a dirty tree.
+- A campaign that narrates its report instead of writing `pbt-out/REPORT.md`
+  gets one last-chance steer at `agent_end`.
+- Incremental scope no longer treats previously generated `*_pbt_test.*` files
+  as production code to test.
+
+#### Changed
+
+- **`pbt-native/` is the last resort.** Harness placement has three rungs now:
+  extend the repository's existing test target, then build the test tree the
+  project *should* have in its own conventional location, and only then fall
+  back to a standalone `pbt-native/`.
+- Registering the campaign's test target is stated as a targeted `edit` in the
+  workflow SOP and in both languages of the `build-run` prompt.
+
+#### Documentation
+
+- `PBT_OUT_DIR` and `PBT_PHASE_MODELS` documented in both installation guides,
+  including that the subcommands set `PBT_OUT_DIR` automatically and that users
+  must not export it.
+- The worktree isolation contract now names `build_cmd` as its one deliberate
+  exception, next to the contract it qualifies.
+- `AGENTS.md` gains the automated-review merge gate as a cardinal rule, and the
+  requirement to write commit messages to a file (backticks in a quoted `-m`
+  run as command substitution).
+
+#### Embedded SDK
+
+- Embedded pi `0.85.1` (unchanged). `pi-pbt --version` reports
+  `pi-pbt 0.1.17 (pi 0.85.1)`.
+
+### 中文
+
+#### 新增
+
+- **整文件改写守卫。** 对已存在、30 行及以上、且非本轮战役创建的文件做整文件
+  `write` 会被挡下并指向 `edit`。这是对 v0.1.16 那份清单白名单的泛化：缺陷不在
+  *哪个文件*，而在*一次工具调用毁掉别人文件的多少行*。四个豁免保住了整写确实
+  诚实的场合——战役自己的生成树、生成测试命名（重跑时理应整写上一轮的性质
+  测试）、本轮早先自己创建的文件，以及小到整写也藏不住东西的文件。纠正性，
+  绝不终止运行。
+- **按相位路由模型**（`PBT_PHASE_MODELS`），不配置则不启用。相位从产物读出，
+  绝不采信 agent 自报的相位切换。刻意不内置路由表：Scan 是战役提取「会覆盖
+  oracle 的 spec 条款」的地方，给它降级会让下游每一条性质都在测错误的法则，
+  然后报一个假绿。
+- `scripts/pr-review-comments.sh`——自动审查的合并门禁。当前 head 已被审且无
+  未解决 P0/P1 时退出 0，有未解决时 1，用法/API 错误 2，当前 head 尚未被审时
+  3；`--wait` 会轮询到 3 消失，通过时把被审的 sha 打出来供
+  `gh pr merge --match-head-commit` 钉住。
+
+#### 修复
+
+- **产物驱动的检查现在会去战役真正写入的地方找。** 它们一律按 `<cwd>/pbt-out`
+  解析，而两条子命令都用 `--out` 改了这个目录，MCP 路径更是指向 run 目录。于是
+  「口述报告不算交付」那条 steer 自落地起在两条子命令路径上一直是死的，同样的
+  硬编码还散在另外十六处，包括整个覆盖率账本机制。现在会依次探查配置目录、
+  其下的 `pbt-out/`、以及 `<cwd>/pbt-out` 回退，取其中持有**本轮**产物的那个
+  ——要判新鲜度是因为 `build-run --out` 默认就是 `<repo>/pbt-out` 且只创建不
+  清理，重复跑会看到上一轮战役的文件还在那儿。
+- 缺失 REPORT 的 steer 改为给出解析后的绝对路径。`hook-run` 会 chdir 到自己的
+  干净工作目录，agent 照着相对的 `pbt-out/REPORT.md` 写就写到了门禁不看的地方，
+  纠正一轮之后仍然退出 2。
+- `hook-run` 的门禁接受第三个产物根，即它自己的干净工作目录，于是 `REPORT.md`
+  落在 `<cwd>/pbt-out` 回退里的战役不再被判成「Review 前就死了」。该根是选择性
+  启用，且只有 `hook-run` 启用：`kea` 共用同一个输出变量，但它跑在持久的 SUT 根。
+- `build-run --out <自定义目录>` 现在会在该目录收尾覆盖率。此前报告生成与执行
+  证据追加都悄悄指向 `<cwd>/pbt-out`。原生 profile 从首条战役命令绑定的
+  instrumentation 目录渲染，那个目录未必是 agent 最终写产物的地方。
+- 就地运行会清掉自己测试二进制留在仓库根的产物，干净通过的战役不再交还一棵
+  脏树。
+- 只口述报告而没写 `pbt-out/REPORT.md` 的战役，会在 `agent_end` 收到最后一次
+  纠正。
+- 增量范围不再把上一轮生成的 `*_pbt_test.*` 当成待测生产代码。
+
+#### 变更
+
+- **`pbt-native/` 降为最后手段。** harness 落位现在三档：先扩展仓库已有的测试
+  目标，再在项目自己的惯例位置建出它本该有的测试树，最后才退到独立的
+  `pbt-native/`。
+- 战役登记自己的测试目标「只用 `edit` 改那一行」已写进 workflow SOP 和
+  `build-run` 的双语提示。
+
+#### 文档
+
+- `PBT_OUT_DIR` 与 `PBT_PHASE_MODELS` 写入两份安装文档，含「子命令会自动设置
+  `PBT_OUT_DIR`、用户不要自己 export」的说明。
+- worktree 隔离契约旁边点明 `build_cmd` 是它唯一一处刻意的例外。
+- `AGENTS.md` 新增自动审查合并门禁军规，以及「提交信息写文件、不要内联」
+  （引号内 `-m` 里的反引号会被当成命令替换执行）。
+
+#### 内嵌 SDK
+
+- 内嵌 pi `0.85.1`（未变）。`pi-pbt --version` 输出
+  `pi-pbt 0.1.17 (pi 0.85.1)`。
+
 ## 0.1.16 - 2026-09-11
 
 ### English
