@@ -22,7 +22,7 @@ pi-pbt 自己没有依赖。但它会**真实编译并运行它写出来的测�
 | Rust | `cargo`(会加 `proptest` 开发依赖) |
 | Go | `go` 工具链 |
 | Java | JDK + Maven/Gradle(jqwik) |
-| OpenHarmony 组件(交叉编译到 arm) | 可选 `qemu-user`(`qemu-arm`),用于在 x86 机器上运行 arm 程序 |
+| OpenHarmony 组件 | 一份已配置好的 OpenHarmony 源码树及官方构建依赖。优先用原生 `host_product` 测试；只有组件没有 host 目标时才需要已经配置好的 device-product runner。 |
 | 真机上的 HarmonyOS 应用 | `hdc`(HarmonyOS 设备连接工具)以及一份带虚拟环境的 Kea2 —— 见 [`pi-pbt kea`](#真机上的-harmonyos-应用pi-pbt-kea) |
 
 Debian/Ubuntu(C++ 目标)示例:
@@ -167,6 +167,11 @@ pi-pbt --list-models
 
 ## 4. 开始测
 
+**全部运行方式、以及各自适合哪个阶段**(和另一个 coding agent 一起开发,还是 MR
+流水线)汇总在 [subcommands.zh.md](subcommands.zh.md#全部运行方式) 的一张表里;
+被同一个词"skill"指代的三种东西也在那份文档里区分清楚。下面讲的是第一次运行。
+
+
 ### 交互式
 
 `cd` 进被测仓库,直接启动:
@@ -199,9 +204,10 @@ pi-pbt -p "对当前仓库做性质测试(PBT),产物写到 pbt-out/。"
 
 你不需要按项目类型挑选什么模式:入口只有一个,后面的事它自己判断。目标无法
 用简单的 `cmake`/`cargo`/`pytest` 构建时(比如大型操作系统或 monorepo 里的
-一个组件),它会自己把这个组件先立起来;OpenHarmony 的 C++ 组件则走专门的
-编译与运行方式(真实编译产物 + qemu-arm 运行)。判断依据是仓库内容本身
-(例如 `@ohos/` 的 `bundle.json`),全自动。
+一个组件),它会自己把这个组件先立起来。OpenHarmony 的 C++ 组件走官方构建路径,
+并优先检查原生 `host_product` 测试。只有组件没有 host 目标、且 workspace 已经为
+对应产物配置 runner 时才退到 device product;不是所有组件都支持 host 构建。
+判断依据是仓库内容本身(例如 `@ohos/` 的 `bundle.json`)。
 
 若想在脚本里把入口写死,首条消息以 `/skill:pbt-workflow` 开头:
 
@@ -289,8 +295,9 @@ campaign 还会测量**代码到底执行了哪些**,用的是每种语言自带
 (覆盖率是构建期决定的,事后补不上)。你自己设过的值一律保留不动。工具缺失、
 构建没插桩,报表里就如实写明这一行没测到:**覆盖率永远不会让 campaign 失败。**
 
-交叉编译后在模拟器里运行的构建(OpenHarmony 的 qemu-arm 路径)**不做**插桩 ——
-profile 数据会落在模拟出来的文件系统里 —— 报表会写明这一点,而不是报成零覆盖。
+当 OpenHarmony 组件没有 `host_product` 目标、改用已配置好的 device-product
+runner 时,该交叉编译运行**不做**插桩 —— profile 数据会落在 runner 的目标文件
+系统里 —— 报表会写明这一点,而不是报成零覆盖。
 
 ### 报表给 `REPORT.md` 补上了什么
 
@@ -308,58 +315,51 @@ profile 数据会落在模拟出来的文件系统里 —— 报表会写明这�
 ### 先构建再测试:`build-run`(自带构建命令)
 
 对于你已经知道怎么构建的项目——OpenHarmony 组件、大型 monorepo、任何有官方构建
-入口的仓库——把构建命令交给 pi-pbt,由它做 campaign 的门禁:
+入口的仓库——把构建命令交给 pi-pbt,由它做 campaign 的门禁。
 
-```bash
-# 例如 OpenHarmony 树里的 ArkUI ace_engine:
-pi-pbt build-run \
-  --workdir /path/to/oh \
-  --repo /path/to/oh/foundation/arkui/ace_engine \
-  --build-cmd "./build.sh --export-para PYCACHE_ENABLE:true --product-name rk3568 --build-target ace_engine_test --ccache" \
-  --lang zh
-```
-
-产品图已经 `gn gen` 好、你只想 **ninja 某一个 unittest**(而不是整组件
-`build.sh`)时,把这条 ninja 当作 `--build-cmd`。模块 checkout 若在
-`repo` 清单树**之外**,设置 `PBT_OH_WORKSPACE` 指向 workspace 根,campaign
-才会复用 `out/<product>/`:
+OpenHarmony 默认优先走原生 `host_product`。下面这条 ArkUI `ace_engine`
+preflight 已经在真实源码树上验证过;它先构建**现存**的 `base_unittest` group,
+因此能在 campaign 写任何东西之前证明真实 SUT 可编译:
 
 ```bash
 export PBT_OH_WORKSPACE=/path/to/openharmony
 pi-pbt build-run \
   --workdir "$PBT_OH_WORKSPACE" \
-  --repo /path/to/ability_ability_runtime \
-  --build-cmd "flock $PBT_OH_WORKSPACE/.pbt-ninja.lock ninja -C $PBT_OH_WORKSPACE/out/rk3568 -w dupbuild=warn js_test_runner_get_path_pbt_test" \
-  --scope frameworks/native/appkit/ability_delegator/runner_runtime/js_test_runner.cpp \
-  --func JsTestRunner::GetTestRunnerPath \
+  --repo "$PBT_OH_WORKSPACE/foundation/arkui/ace_engine" \
+  --build-cmd "./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product --build-target base_unittest --ccache --no-prebuilt-sdk" \
+  --scope frameworks/base/geometry \
   --lang zh
 ```
 
-另一条一等命令是模块内的 **host CMake**(无共享 `out/`、不用
-`PBT_OH_WORKSPACE`,可并行):
+`host_product` 在 Linux x86_64 上原生运行测试,产物目录是
+`out/host/host_product`(不是 `out/host_product`),受支持的组件不需要模拟器或
+设备。但它并不覆盖所有 OpenHarmony 组件。只有组件没有 host 目标时才退到 device
+product,而且 workspace 必须已经给该 product 的产物配好 runner;不要把 device 构建
+描述成 host 路径的通用替代品。
+
+初次 `--build-cmd` 是 preflight,必须指向 campaign 开始前就存在的目标,例如
+`base_unittest`。不要拿尚未生成的 `pbt`、`<name>_pbt_test` 等目标做初次门禁。
+campaign 生成测试并按组件自己的 GN test family 完成登记后,重建才可以沿用同一条
+`build.sh` 命令、把目标换成新的 `pbt` target。
+
+`build-run` 仍然完全支持 CMake,但它是独立的普通项目示例,不是 OpenHarmony 的
+等价构建路径。例如项目现有 `CMakeLists.txt` 已定义 `calc_test` 时,就用它做门禁:
 
 ```bash
 pi-pbt build-run \
-  --workdir /path/to/ability_ability_runtime \
-  --repo /path/to/ability_ability_runtime \
-  --build-cmd "cmake -S pbt-native -B pbt-native/build && cmake --build pbt-native/build -j$(nproc)" \
-  --scope frameworks/native/appkit/ability_delegator/runner_runtime/js_test_runner.cpp \
-  --func JsTestRunner::GetTestRunnerPath \
+  --workdir /path/to/cmake-project \
+  --repo /path/to/cmake-project \
+  --build-cmd "cmake -S . -B build && cmake --build build --target calc_test -j$(nproc)" \
+  --scope src/calc.cpp \
   --lang zh
 ```
-
-二选一:`ninja -C $PBT_OH_WORKSPACE/out/rk3568` **或** `cmake --build`。campaign
-不会自己切换。多个 ninja campaign 共用一份 `out/` 时,`flock` 是**你**加在命令
-里的串行;pi-pbt 不会替 ninja 加锁。`--scope` 把 campaign 限制在该路径;只有全仓
-才省略。
 
 构建命令是**你准备好的输入**,不是让 agent 去摸索的东西。`build-run` 先在
 `--workdir` 里执行它(完整日志在 `<out>/build.log`):失败则 PBT 根本不启动,
 进程以退出码 `3` 结束——修好构建或命令后重跑;成功则 campaign 在 `--repo` 下
-以"构建契约"运行:重建只允许复用这条命令(只可把构建目标换成新增的测试目标),
-重建失败是 STOP 条件、原样记入 `REPORT.md`——agent 不会去探索其他编译方式。
-新增测试按仓库官方单元测试方式接入(组件自带的 GN unittest 模板与既有 test
-group),第三方 PBT 框架走仓库 `third_party/` 惯例。
+以"构建契约"运行:重建只允许复用这条命令(需要时只能把现存目标换成新生成的测试
+目标),重建失败是 STOP 条件、原样记入 `REPORT.md`。agent 不会切换构建系统或推导
+替代编译方式。`--scope` 把 campaign 限制在该路径;只有全仓才省略。
 
 `--scope` 与 `--func` 是写进 prompt 的范围限制(不是沙箱):
 
@@ -393,8 +393,38 @@ pi-pbt build-run --build-cmd "…" \
 pi-pbt hook-run <sha> --repo /path/to/repo --lang zh
 ```
 
-它用退出码表示结论,可以直接当 CI 的一道检查:发现 bug(`bug_reports/`
-非空)退 `1`;没产出 `REPORT.md`(中途挂了或超时)退 `2`;干净通过退 `0`。
+它用退出码表示结论,可以直接当 CI 的一道检查:
+
+| | 含义 |
+|---|---|
+| `0` | 干净:报告满足 schema,且没有 bug。 |
+| `1` | 发现 bug(`bug_reports/` 非空,或 `totals.bugs > 0`)。 |
+| `2` | 没有 `REPORT.md`、没有 `report.json`,或 `report.json` 不合 schema——挂了、超时,或什么都没证明。 |
+| `3` | 记录在案的构建失败:什么都没被测。 |
+
+**sha 不会检出任何东西。** 它只用来取改动集(`git diff-tree <sha>`)和写进
+prompt;真正被编译、被测的是 `--repo` 工作树里当下的代码。把树切到那个 commit
+是调用方的责任。对着别的版本跑既不报错也不告警:它会测那里的代码,而拿来对照的
+是另一个 commit 的 diff。
+
+由此有两条前提:
+
+- **从 `post-commit` 钩子调用,不需要任何额外操作**——你刚提交的那个 commit 本来
+  就是工作树。**不要**在钩子里加 checkout,那会让开发者每次提交后停在 detached HEAD。
+- **在 CI 里,把 commit 检出到一次性工作区,并确保它的父提交也在。** 默认的浅克隆
+  (`fetch-depth: 1`)没有父提交,`git diff-tree <sha>` 会返回空改动集,`git show
+  <sha>` 会把浅边界当成根提交——战役看到的要么什么都没有,要么整个仓库都是新增:
+
+  ```yaml
+  - uses: actions/checkout@v4
+    with:
+      fetch-depth: 2          # 这个 commit 和它的父;要全历史用 0
+  ```
+
+  ```bash
+  git -C /path/to/worktree checkout --detach <sha>   # 只在一次性检出里这么做
+  pi-pbt hook-run <sha> --repo /path/to/worktree
+  ```
 
 ### 盯着仓库:每来一个新提交就测一遍
 
@@ -631,3 +661,34 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8000/   # 期望 200(�
 - **在 CI 里卡住不动** —— 不该发生:它不会等输入,跑完会强制退出。若确实卡住,
   请带日志提 issue。
 - **macOS 拦住不让运行** —— 执行 §2 里的 `xattr -d com.apple.quarantine`。
+
+### 空响应与战役恢复
+
+战役遇到 `stop` 或输出预算耗尽的 `length`，且内容为空或只有 thinking 的响应时，pi-pbt **只尝试一次**续跑。
+后续模型请求缩短较早的工具结果文本，保留用户指令、工具调用/结果 ID 和最近消息，
+近期单条成功输出超过 16,000 字符时也缩短，保留首尾各 4,000 字符；不改磁盘上的会话。这**不是** pi 的 `/compact`，不会总结或编造丢失的事实。
+重试要求读取已有产物并优先完成报告。上下文估算达到所配置模型窗口的 80% 时，也进入
+这个收尾路径，而不是再催覆盖率扫描或深化。不硬编码任何模型的 token 上限。
+
+`pbt-out/recovery.json` 记录尝试、缩短的字符数与结果。`response-resumed` 仅表示模型恢复
+响应，**不表示战役通过**；最终仍由产物/schema 门禁裁决。再次空响应则停止恢复
+(`empty-after-retry`)。取消和 provider 错误不由这个机制重试。没有执行的 sweep 必须如实
+记为未完成，不能算作执行过。恢复失败时检查会话和模型/provider 配置，反复发送“继续”
+并不能保证恢复。
+
+### 本机 PBT 依赖与企业内网
+
+检测到 C/C++ 源码/构建标记或 OpenHarmony 组件的战役，先检查项目的已知依赖位置，
+再查询 OS 的已安装包数据库
+(dpkg、pacman、RPM 或 Homebrew)，生成 `pbt-out/dependencies.json`，在开始测试前
+把结果交给 agent。当前 C++ 清单覆盖 RapidCheck 与 GoogleTest：包名、版本、包管理器
+报告的文件路径及架构，**不等于已验证可链接**。探测有时间/输出上限，只读且不联网。
+
+获取顺序固定为：**项目依赖 → 已安装系统包 → 配置好的系统仓库/内网镜像 → 经允许的
+公网下载**。例如 `librapidcheck-dev` 已安装时，应先检查并复用它，不应直接重复克隆。
+CLI 的清单探测不会执行 apt/pacman/dnf/brew 安装，也不会执行 sudo；安装仍须由有权限的
+agent/操作者在获准后进行。缺少清单或查询失败，不代表依赖不存在。
+
+OpenHarmony GN 仍须使用项目兼容的源码/target，例如 `third_party/rapidcheck`。不能把
+amd64 的 OS 库链接到 ARM 目标；即使是 host_product，其 ABI/工具链也可能与系统包不同。
+清单明确区分这些情况，不把“已安装”说成“当前目标可用”。

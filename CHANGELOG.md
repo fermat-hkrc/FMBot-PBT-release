@@ -10,6 +10,122 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.18 - 2026-09-16
+
+### English
+
+#### Added
+
+- **Structured campaign reports.** `report.json` records the tested revision,
+  absolute repository/test paths, bidirectional property-to-bug links and exact
+  reproduction commands. Validation runs when the report is written and at the
+  terminal gate; an empty successful campaign cannot pass. An honest failed
+  build may report zero executed properties and yields hook-run exit 3.
+- **Local C++ dependency inventory.** Native campaigns discover existing project
+  RapidCheck/GoogleTest dependencies before querying installed dpkg, pacman, RPM
+  or Homebrew packages. `dependencies.json` records paths, versions, architecture
+  and query diagnostics. Discovery is read-only and offline; configured system
+  repositories/internal mirrors precede permission-gated public downloads.
+  Host packages are not assumed compatible with an OpenHarmony GN/ARM target.
+- **Bounded empty-response recovery.** A normal empty/thinking-only `stop` or
+  output-budget `length` response gets one recovery continuation in the same
+  awaited pi prompt. Older successful tool text, and oversized recent multipart
+  results, are shortened for model requests without modifying the saved session
+  or breaking tool-call/result pairs. Recovery prioritizes honest report
+  completion; repeated empty responses stop, and cancellation/errors do not
+  trigger a new campaign. Configured-window pressure also prioritizes closeout.
+- **Guard diagnostics.** Campaign-only `guards.jsonl` records corrective blocks,
+  redacts credentials and follows the selected artifact directory. Prior-run
+  logs do not leak into a later clean run.
+
+#### Fixed
+
+- Manifest edits preserve existing entries and their containing scopes, reject
+  duplicate-key shadowing, and require shell mutations to use checked edits.
+  Additive sibling registrations and quoted commands are no longer misclassified.
+- Native-build recognition handles `timeout`, environment/locking wrappers,
+  compiler caches and supported shell/interpreter flags, instead of rejecting
+  real builds because their command starts with a wrapper. Help/version probes,
+  arithmetic expressions and invalid shell-builtin chains are not build evidence.
+- Managed runs prefer a complete report pair over a stray nested directory and
+  count bug evidence across both supported artifact layouts. Worktree JSON paths
+  are relocated through parsing/serialization rather than raw substitution.
+- OpenHarmony harness detection reads generated build files rather than relying
+  only on PLAN prose. `COVERAGE_STATUS.md` is accepted consistently, and Chinese
+  empty Design Caveats markers/table skeletons no longer trigger false warnings.
+- Project dependency candidates require the correct framework headers. Installed
+  library/config paths survive inventory truncation, query failures are not
+  silently treated as missing packages, and non-C++ campaigns do not receive
+  irrelevant RapidCheck installation advice.
+
+#### Documentation and validation
+
+- OpenHarmony examples now prefer native `host_product`, with an existing
+  `base_unittest` preflight before generated PBT targets exist. Device products
+  remain a fallback for components without host support and with a configured
+  runner; CMake is not presented as an interchangeable OH default.
+- Consolidated CLI/skill/MCP entry-point guidance, development versus CI usage,
+  generated-test recovery via `changes.patch`, standalone regression and replay
+  commands. Clarified that plain `-p` is not a CI verdict, hook-run does not check
+  out its SHA, CI needs the parent commit, and watch batches may drop older commits.
+- Real ArkUI `standard` campaign verified a wrapped host build, one actual
+  `coverage_gaps` call, five properties and a schema-valid report with one finding.
+  Empty-response recovery is tested through the public pi SDK with a scripted
+  provider; it has not been revalidated against the user's original GLM gateway.
+- Automated-review tooling now distinguishes absent reviews from unresolved
+  findings, preserves the exact merge SHA, and verifies thread ownership before
+  replying/resolving. CI remains a mandatory merge gate.
+- Embedded pi remains `0.85.1`; `pi-pbt --version` reports
+  `pi-pbt 0.1.18 (pi 0.85.1)`.
+
+### 中文
+
+#### 新增
+
+- **结构化战役报告。** `report.json` 记录被测提交、仓库/测试绝对路径、性质与问题的
+  双向关联，以及完整复现命令。写入时和最终门禁都会校验；没有执行任何性质的成功
+  报告不能通过。诚实的构建失败可以记录零条已执行性质，hook-run 返回退出码 3。
+- **本机 C++ 依赖清单。** 原生战役先发现项目已有 RapidCheck/GoogleTest，再查询
+  dpkg、pacman、RPM 或 Homebrew 已安装包。`dependencies.json` 记录路径、版本、
+  架构及查询诊断。探测只读、不联网；依赖获取优先配置好的系统仓库/内网镜像，
+  公网下载放最后且须获准。不会假定 host 系统包兼容 OH GN/ARM 目标。
+- **有界空响应恢复。** 正常空/thinking-only `stop` 或输出预算耗尽的 `length`
+  响应，只在同一个受等待的 pi prompt 内恢复一次。模型请求会缩短旧成功工具输出
+  及过大的近期多文本块结果，不修改持久化会话、不破坏工具调用与结果的配对。
+  恢复优先如实完成报告，再次空响应即停止；取消和错误不会重新拉起战役。接近
+  配置窗口上限时也优先收尾，不硬编码模型的真实 token 上限。
+- **守卫诊断。** 战役专属 `guards.jsonl` 记录纠正性拦截，对凭据脱敏，并跟随产物
+  目录；上一轮的日志不会污染下一轮没有拦截的战役。
+
+#### 修复
+
+- Manifest 编辑保留既有条目及所属容器，拒绝重复键覆盖；shell 改写须改走可校验
+  的 edit。合法的兄弟对象注册与带引号的命令不再误伤。
+- 原生构建识别支持 `timeout`、环境/锁包装器、编译缓存及受支持的 shell/interpreter
+  参数，不再因为命令前有包装层就声称“未构建”。版本/帮助查询、算术表达式及无效
+  shell 内建命令链不能充当构建证据。
+- 托管运行优先选择完整报告对，不被空嵌套目录误导；两种产物布局的 bug 证据均参与
+  裁决。Worktree JSON 路径通过解析后重写迁移，避免特殊字符破坏报告。
+- OH harness 判断读取真实构建文件，不再只依赖 PLAN 文案。统一放行
+  `COVERAGE_STATUS.md`；中文空 Design Caveats 标记与空表骨架不再误报。
+- 项目依赖需具备对应框架头文件；清单截断优先保留库/构建配置路径；查询失败不冒充
+  未安装；非 C++ 战役不再收到无关的 RapidCheck 安装建议。
+
+#### 文档与验证
+
+- OH 默认示例改为 `host_product`；初次 preflight 使用已有 `base_unittest`，不要求
+  尚未生成的 PBT target。设备产品只用于无 host 支持且已有 runner 的组件；不再把
+  CMake 描述为可随意切换的 OH 默认方案。
+- 整理 CLI/skill/MCP 入口、开发期与 CI 用法、通过 `changes.patch` 取回生成测试、
+  固化入库及独立回归/复现命令。明确普通 `-p` 不是 CI 裁决、hook-run 不会检出 SHA、
+  CI 需要父提交，以及 watch 的批次上限。
+- ArkUI 的真实 `standard` 战役完成带包装的 host 构建，实际调用一次 `coverage_gaps`，
+  产生五条性质和含一个问题的合法报告。空响应恢复通过公开 pi SDK 的受控 provider
+  测试验证；尚未在用户原始 GLM 网关上复测，不能声称所有 provider 均已实证恢复。
+- 评审工具区分“评审缺席”与“已有未解决问题”，合并仍钉住精确 SHA；答复/关闭线程
+  前先校验所属 PR。CI 全绿仍是合并硬门禁。
+- 内嵌 pi 保持 `0.85.1`；版本输出为 `pi-pbt 0.1.18 (pi 0.85.1)`。
+
 ## 0.1.17 - 2026-09-14
 
 ### English

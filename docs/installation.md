@@ -25,7 +25,7 @@ present:
 | Rust | `cargo` (`proptest` is added as a dev-dependency) |
 | Go | `go` toolchain |
 | Java | JDK + Maven/Gradle (jqwik) |
-| OpenHarmony components (cross-compiled to arm) | optional `qemu-user` (`qemu-arm`), to run arm binaries on an x86 machine |
+| OpenHarmony components | A provisioned OpenHarmony source tree and its official build prerequisites. Prefer native `host_product` tests; a device-product runner is needed only for components with no host target. |
 | A HarmonyOS app on a real phone | `hdc` (HarmonyOS device connector) and a Kea2 checkout with its virtualenv — see [`pi-pbt kea`](#a-harmonyos-app-on-a-phone-pi-pbt-kea) |
 
 Debian/Ubuntu example for C++ targets:
@@ -183,6 +183,13 @@ Example `~/.pi-pbt/agent/models.json` for a self-hosted OpenAI-compatible proxy:
 
 ## 4. Start testing
 
+**Every way to run it, and which one suits which stage** — development
+alongside another coding agent, or an MR pipeline — is one table in
+[subcommands.md](subcommands.md#every-way-to-run-it). The three different
+things called "skill" are disentangled in the same document. What follows here
+is the first run.
+
+
 ### Interactive
 
 `cd` into the repository under test and start it:
@@ -220,9 +227,11 @@ runners, git hooks, and `nohup`.
 You do not pick a mode per project type: there is one entry point, and it works
 the rest out itself. When the target does not build with a plain
 `cmake`/`cargo`/`pytest` — a component of a large OS or of a monorepo — it stands
-that component up first; OpenHarmony C++ components follow a dedicated build-and-
-run path (real compiled artifacts, run under qemu-arm). It decides from the
-repository's own contents (e.g. an `@ohos/` `bundle.json`), automatically.
+that component up first. OpenHarmony C++ components follow their official build
+path, checking native `host_product` tests first. A device product is only a
+fallback when the component has no host target and the workspace already has a
+runner configured for that artifact; not every component supports host builds.
+Detection uses the repository's own contents (e.g. an `@ohos/` `bundle.json`).
 
 To pin the entry point explicitly in a script, lead the first message with
 `/skill:pbt-workflow`:
@@ -321,8 +330,9 @@ decision — it cannot be added afterwards). Whatever you set yourself is left
 alone. If a tool is missing, or a build is not instrumented, that row simply
 says so in the report: **coverage never fails a campaign.**
 
-Cross-compiled builds run under an emulator (OpenHarmony's qemu-arm path) are
-*not* instrumented — the profile data lands inside the emulated filesystem — and
+When an OpenHarmony component has no `host_product` target and a configured
+device-product runner is used instead, that cross-compiled run is *not*
+instrumented — the profile data lands in the runner's target filesystem — and
 the report states that rather than reporting zero coverage.
 
 ### What the report adds to `REPORT.md`
@@ -342,62 +352,60 @@ Turn the whole thing off with `PBT_CODE_COVERAGE=0`.
 
 For a project whose build you already know how to drive — an OpenHarmony
 component, a big monorepo, anything with an official build entry — hand that
-command to pi-pbt and let it gate the campaign:
+command to pi-pbt and let it gate the campaign.
 
-```bash
-# ArkUI ace_engine inside an OpenHarmony tree, for example:
-pi-pbt build-run \
-  --workdir /path/to/oh \
-  --repo /path/to/oh/foundation/arkui/ace_engine \
-  --build-cmd "./build.sh --export-para PYCACHE_ENABLE:true --product-name rk3568 --build-target ace_engine_test --ccache" \
-  --lang zh
-```
-
-When the product graph is already generated and you want **ninja of one
-unittest** (not a full `build.sh` of the component), pass that as `--build-cmd`.
-If the module checkout sits **outside** the `repo`-manifest tree, set
-`PBT_OH_WORKSPACE` to the workspace root so the campaign reuses `out/<product>/`:
+For OpenHarmony, prefer the native `host_product` path. The following ArkUI
+`ace_engine` preflight has been run successfully against the real tree. It uses
+an **existing** unittest group, so it proves the SUT can compile before the
+campaign writes anything:
 
 ```bash
 export PBT_OH_WORKSPACE=/path/to/openharmony
 pi-pbt build-run \
   --workdir "$PBT_OH_WORKSPACE" \
-  --repo /path/to/ability_ability_runtime \
-  --build-cmd "flock $PBT_OH_WORKSPACE/.pbt-ninja.lock ninja -C $PBT_OH_WORKSPACE/out/rk3568 -w dupbuild=warn js_test_runner_get_path_pbt_test" \
-  --scope frameworks/native/appkit/ability_delegator/runner_runtime/js_test_runner.cpp \
-  --func JsTestRunner::GetTestRunnerPath \
-  --lang en
+  --repo "$PBT_OH_WORKSPACE/foundation/arkui/ace_engine" \
+  --build-cmd "./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product --build-target base_unittest --ccache --no-prebuilt-sdk" \
+  --scope frameworks/base/geometry \
+  --lang zh
 ```
 
-The other first-class command is **host CMake** in the module (no shared `out/`,
-no `PBT_OH_WORKSPACE`, parallel-safe):
+`host_product` builds native Linux x86_64 tests under
+`out/host/host_product` (not `out/host_product`), so no emulator or device is
+needed for supported components. It does **not** cover every OpenHarmony
+component. Only when the component has no host target should you use a device
+product, and only after the workspace has a runner configured for that product's
+artifact. Do not present a device build as a universal replacement for the host
+path.
+
+The initial `--build-cmd` is a preflight and must name a target that exists
+**before** the campaign, such as `base_unittest`. Do not use `pbt`,
+`<name>_pbt_test`, or another target that the campaign has not generated yet.
+After the campaign creates and registers its tests in the component's own GN
+test family, rebuilds may reuse the same `build.sh` command with the new `pbt`
+target.
+
+CMake remains fully supported by `build-run`, but it is a separate ordinary
+project example, not an OpenHarmony-equivalent build path. For example, if that
+project's existing `CMakeLists.txt` defines `calc_test`, gate on it:
 
 ```bash
 pi-pbt build-run \
-  --workdir /path/to/ability_ability_runtime \
-  --repo /path/to/ability_ability_runtime \
-  --build-cmd "cmake -S pbt-native -B pbt-native/build && cmake --build pbt-native/build -j$(nproc)" \
-  --scope frameworks/native/appkit/ability_delegator/runner_runtime/js_test_runner.cpp \
-  --func JsTestRunner::GetTestRunnerPath \
+  --workdir /path/to/cmake-project \
+  --repo /path/to/cmake-project \
+  --build-cmd "cmake -S . -B build && cmake --build build --target calc_test -j$(nproc)" \
+  --scope src/calc.cpp \
   --lang en
 ```
-
-Pick **one**: `ninja -C $PBT_OH_WORKSPACE/out/rk3568` **or** `cmake --build`.
-The campaign will not switch between them. `flock` is **your** serialization if
-several ninja campaigns share one `out/`; pi-pbt does not lock ninja. `--scope`
-limits the campaign to that path; omit it only for a full-repo run.
 
 The build command is **your prepared input**, not something the agent figures
 out. `build-run` executes it in `--workdir` first (full log in
 `<out>/build.log`); if it fails, PBT never starts and the process exits `3` —
 fix the tree or the command and re-run. If it succeeds, the campaign starts in
-`--repo` under a build contract: rebuilds reuse exactly your command (only the
-build target may switch to the new test target), a failing rebuild is a STOP
-condition recorded in `REPORT.md` — the agent will not go exploring for
-alternative ways to compile. New tests are wired the repository's official
-unit-test way (the component's own GN unittest template and test group), with
-third-party PBT frameworks referenced through the tree's `third_party/`
-conventions.
+`--repo` under a build contract: rebuilds reuse exactly your command (only an
+existing target may be replaced by the newly generated test target), and a
+failing rebuild is a STOP condition recorded in `REPORT.md`. The agent will not
+switch build systems or derive an alternative way to compile. `--scope` limits
+the campaign to that path; omit it only for a full-repo run.
 
 `--scope` and `--func` are prompt-only limits (not a sandbox):
 
@@ -427,15 +435,49 @@ the same build contract; the subcommand remains the headless/CI form.
 
 ### CI / git-hook integration
 
-To test **one specific commit**, use this subcommand:
+To test **one specific commit's change set**, use this subcommand:
 
 ```bash
 pi-pbt hook-run <sha> --repo /path/to/repo --lang zh
 ```
 
 It reports its verdict as an exit code, so it drops straight into CI as a check:
-`1` when bugs were found (`bug_reports/` non-empty), `2` when no `REPORT.md` was
-produced (it died or timed out), `0` on a clean pass.
+
+| | Meaning |
+|---|---|
+| `0` | Clean: a report that satisfies the schema, and no bugs. |
+| `1` | Bugs found (`bug_reports/` non-empty, or `totals.bugs > 0`). |
+| `2` | No `REPORT.md`, no `report.json`, or a `report.json` that fails the schema — it died, timed out, or attested to nothing. |
+| `3` | The recorded build failed: nothing was tested. |
+
+**The sha does not check anything out.** It selects the change set
+(`git diff-tree <sha>`) and goes into the prompt; the code that gets compiled
+and tested is whatever is in `--repo`'s working tree. Putting the tree on that
+commit is the caller's job. Running against a different revision neither errors
+nor warns: it tests the code that is there against the diff of a commit that is
+not.
+
+Two prerequisites follow from that:
+
+- **From a `post-commit` hook, nothing extra is needed** — the commit you just
+  made is already the working tree. Do NOT add a checkout there; it would leave
+  the developer on a detached HEAD after every commit.
+- **In CI, check the commit out into the disposable workspace, and make sure
+  its PARENT is present.** The default shallow clone (`fetch-depth: 1`) has no
+  parent, so `git diff-tree <sha>` returns an empty change set and `git show
+  <sha>` treats the shallow boundary as a root commit — the campaign then sees
+  either nothing or the whole repository as new:
+
+  ```yaml
+  - uses: actions/checkout@v4
+    with:
+      fetch-depth: 2          # the commit AND its parent; 0 for full history
+  ```
+
+  ```bash
+  git -C /path/to/worktree checkout --detach <sha>   # only in a disposable checkout
+  pi-pbt hook-run <sha> --repo /path/to/worktree
+  ```
 
 ### Watching a repo: test every new commit
 
@@ -703,3 +745,48 @@ Notes:
   when done. If you see a hang, file an issue with the log.
 - **macOS blocks the binary** — run the `xattr -d com.apple.quarantine` step
   from §2.
+
+### Empty responses and campaign recovery
+
+If a PBT campaign receives an empty/thinking-only response with `stop` or an output-budget `length` stop,
+pi-pbt tries **one** continuation. It shortens older tool-result text only for
+subsequent model requests, retaining user instructions, tool-call/result IDs
+and recent messages. Individual recent successful outputs over 16,000 characters
+are also shortened, retaining 4,000 characters at each end; the saved session remains unchanged. This is
+**not** pi's `/compact` and does not summarize or reconstruct missing facts.
+The retry reads existing artifacts and prioritizes report completion. A
+context estimate at 80% of the configured model window also selects this
+close-out path rather than another coverage/deepening sweep. No model-specific
+token limit is assumed.
+
+`pbt-out/recovery.json` records the attempt, removed character count and outcome.
+`response-resumed` means only that the model responded again, **not** that the
+campaign passed; the normal artifact/schema gates still decide that. A second
+empty response stops recovery (`empty-after-retry`). Cancellation and provider
+errors are not retried by this mechanism. Unperformed sweeps must be recorded
+as incomplete, never counted as executed. If recovery fails, inspect the session
+and model/provider configuration; repeated “continue” prompts do not guarantee
+recovery.
+
+### Local PBT dependencies and enterprise networks
+
+C/C++ campaigns (native source/build markers or an OpenHarmony component) inventory
+known project locations first, then the installed OS package database (dpkg, pacman, RPM, or Homebrew). It writes
+`pbt-out/dependencies.json` and passes the findings to the agent before testing.
+For C++ this currently covers RapidCheck and GoogleTest: installed package
+names, versions, reported file paths and architecture, **not** a guarantee of
+successful linking. Detection is bounded, read-only and makes no network calls.
+
+The acquisition order is: **project dependency → installed system package →
+configured system repositories/internal mirrors → public downloads with
+permission**. For example, an installed `librapidcheck-dev` is evidence to
+inspect and use, not a reason to clone RapidCheck again. The CLI itself does
+not run apt/pacman/dnf/brew installation commands or sudo during inventory.
+Installation remains an explicitly permitted agent/operator action.
+
+OpenHarmony GN builds must still use their project-compatible source/target,
+e.g. `third_party/rapidcheck`. An amd64 system library must not be linked into
+an ARM target, and even host_product may use a different ABI/toolchain from the
+OS package. The inventory marks this distinction instead of claiming “installed”
+means “usable by this target.” Missing inventory or a query failure does not
+prove that the dependency is absent.
