@@ -14,6 +14,21 @@ history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中�
 
 ### English
 
+#### Replacement build — 2026-09-16
+
+The v0.1.18 archives were replaced under the same version at the maintainer's
+request. Download the ZIP and its checksum again; an older cached archive and
+a new checksum are not a matching pair. The version string is unchanged.
+
+- Fix installer discovery of bundled `fd`/`rg`: retain executable-adjacent tools
+  by default and honor an explicit agent directory.
+- Archive each dev-skill run's `report.json` with its matching `REPORT.md`;
+  preserve previous completed results separately and reject nonempty round
+  destinations instead of mixing runs. Refresh an installed skill with
+  `pi-pbt skill-install --force` after replacing the binary.
+- Publish the complete linked user-guide set; introduce structured results before
+  CI/MCP references and validate relative document and heading links.
+
 #### Added
 
 - **Structured campaign reports.** `report.json` records the tested revision,
@@ -79,6 +94,17 @@ history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中�
   `pi-pbt 0.1.18 (pi 0.85.1)`.
 
 ### 中文
+
+#### 同版本替换构建 — 2026-09-16
+
+按维护者要求替换 v0.1.18 的发行包，版本号不变。请重新下载 ZIP 和对应校验文件；
+旧缓存包不能搭配新校验值。仅看 `--version` 无法区分本次重发前后的包。
+
+- 修复安装后内置 `fd`/`rg` 的发现目录：默认保留主程序相邻的 tools，并遵循显式配置目录。
+- dev-skill 的 `report.json` 与本轮 `REPORT.md` 一起归档，旧完成结果单独保留；
+  非空轮次目录直接拒绝，不串轮。替换二进制后执行 `pi-pbt skill-install --force`
+  刷新已安装 skill。
+- 补齐公开仓所引用的用户文档；在 CI/MCP 之前介绍结构化结果，并校验文件和章节链接。
 
 #### 新增
 

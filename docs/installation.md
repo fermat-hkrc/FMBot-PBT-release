@@ -86,15 +86,11 @@ cd "pi-pbt-${PLATFORM}"
 ```
 
 
-**v0.1.18 archive note:** that published installer predates the tool-directory
-fix above. If you use that archive on a machine without system `fd`/`rg`, keep
-the extracted layout and run `./pi-pbt` from it, or after installation run the
-following inside the extracted directory to preserve the adjacent tools:
-
-```bash
-sudo install -Dm755 tools/fd /usr/local/bin/tools/fd
-sudo install -Dm755 tools/rg /usr/local/bin/tools/rg
-```
+**v0.1.18 replacement build (2026-09-16):** the current archives include the
+installer correction above. If you downloaded v0.1.18 earlier, download the ZIP
+and its `.sha256` again and rerun `./install.sh`. The version number is unchanged;
+use the current archive checksum to distinguish the replacement. Refresh any
+installed host-agent skill with `pi-pbt skill-install --force`.
 
 Running `fd` or `rg` directly from a regular shell may still report command not
 found, which is expected; no additional `PATH` change is required. Extracting

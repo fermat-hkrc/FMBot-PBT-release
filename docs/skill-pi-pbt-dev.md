@@ -309,12 +309,10 @@ invalid or missing JSON makes the run incomplete. The full MCP document is
 [report contract](report-schema.md) for fields and validation rules.
 
 
-**Version note:** the archival fix above is in current source, not the already
-published v0.1.18 embedded skill. With that older helper, use a fresh checkout/output
-for each campaign and copy the current `report.json` beside its matching
-`REPORT.md` immediately after the run; never pair a past round with a later
-root-level JSON. Updating the binary alone does not refresh an installed skill:
-run `pi-pbt skill-install --force` after installing a release containing the fix.
+**Version note:** the replacement v0.1.18 archives published on 2026-09-16
+include this archival fix. Earlier v0.1.18 downloads do not: download the archive
+and checksum again, replace the binary, then run `pi-pbt skill-install --force`.
+The version string alone cannot distinguish these same-version builds.
 
 The summary your agent presents looks like:
 

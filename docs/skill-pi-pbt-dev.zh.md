@@ -264,10 +264,9 @@ JSON 顶替。`summarize.mjs` 仍读 Markdown，不负责 JSON schema 校验。
 字段及校验规则见[报告契约](report-schema.md)。
 
 
-**版本注意：**上述归档修复属于当前源码，已发布 v0.1.18 内嵌 skill 尚不包含。旧辅助
-脚本应每轮使用干净 checkout/产物目录，并在结束后立即把本轮 `report.json` 与对应
-`REPORT.md` 保存到一起；不能用后来根目录的 JSON 搭配过去轮次。安装包含修复的新版
-二进制后，还须执行 `pi-pbt skill-install --force` 刷新已安装 skill。
+**版本注意：**2026-09-16 替换发布的 v0.1.18 包已含上述归档修复，此前下载的
+同版本旧包不含。请重新下载包和校验文件，替换二进制后执行
+`pi-pbt skill-install --force`；只看版本字符串无法区分这两次构建。
 
 agent 呈现给你的摘要形如：
 

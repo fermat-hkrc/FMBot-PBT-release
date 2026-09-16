@@ -77,13 +77,10 @@ cd "pi-pbt-${PLATFORM}"
 ```
 
 
-**v0.1.18 发行包注意：**该已发布安装脚本尚不含上述工具目录修复。机器未装系统
-`fd`/`rg` 时，可保留解压目录直接运行其中的 `./pi-pbt`；或安装后在解压目录执行：
-
-```bash
-sudo install -Dm755 tools/fd /usr/local/bin/tools/fd
-sudo install -Dm755 tools/rg /usr/local/bin/tools/rg
-```
+**v0.1.18 替换构建（2026-09-16）：**当前发行包已包含上述安装修复。此前下载过
+v0.1.18 的用户，请重新下载 ZIP 和 `.sha256` 并运行 `./install.sh`。版本号未变，
+请用当前发行包校验值区分新旧包。已安装宿主 agent skill 的，还须执行
+`pi-pbt skill-install --force` 刷新。
 
 普通 shell 中直接执行 `fd` 或 `rg` 仍可能提示找不到，这是正常的，无需额外修改
 `PATH`。在 Windows 上解压会丢掉 Unix 权限位；若文件中转过 Windows 机器，先给
