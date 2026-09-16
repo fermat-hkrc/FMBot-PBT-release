@@ -246,6 +246,40 @@ pi-pbt -p "/skill:pbt-workflow 对当前仓库做性质测试,产物写到 pbt-o
 
 ---
 
+## Machine-readable SDK event stream
+
+`build-run` and `hook-run` accept `--mode text|json`; `text` is the default.
+JSON mode passes the SDK event stream through stdout for automation. It does not
+change campaign behavior or exit codes: `hook-run` still returns its report gate
+verdict, and `build-run` still returns `3` for a failed preflight and otherwise
+uses the ordinary pi exit behavior.
+
+In JSON mode, preflight output, scan diagnostics, and other operational messages
+go to stderr so stdout remains machine-readable. `build-run` also preserves the
+complete preflight output in `<out>/build.log`. Capture the channels separately:
+
+```bash
+set -o pipefail
+pi-pbt hook-run <sha> --repo /path/to/repo --mode json \
+  2>stderr.log | tee events.jsonl
+
+pi-pbt build-run --repo /path/to/repo --workdir /path/to/repo \
+  --build-cmd "cmake --build build" --mode json \
+  2>build-stderr.log | tee build-events.jsonl
+```
+
+Do not use `2>&1`; it corrupts the stdout JSON stream with diagnostics. The SDK
+events may include prompts, model output, and tool inputs/results, including
+sensitive repository content. Treat the capture as sensitive. This live stream
+is separate from the validated campaign result `report.json` and from pi's
+on-disk session files under `~/.pi-pbt/agent/sessions/`.
+
+Explicit `--tui` and `--mode json` are rejected together. An explicit
+`--mode json` takes priority over inherited `PBT_HOOK_TUI=1`; unset the variable
+or use text mode when an interactive interface is intended.
+
+---
+
 ## `build-run` — preflight with your build command
 
 ```text
@@ -254,7 +288,8 @@ pi-pbt build-run --build-cmd "<command>"
   [--scope <path>] [--func <name>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
-  [--provider <p>] [--model <m>] [--tui]
+  [--provider <p>] [--model <m>]
+  [--mode text|json] [--tui]
 ```
 
 1. Runs `--build-cmd` in `--workdir`. The log is `<out>/build.log`;
@@ -324,7 +359,8 @@ pi-pbt hook-run <sha>
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
   [--provider <p>] [--model <m>]
-  [--scope <path>] [--run-id <id>] [--tui]
+  [--scope <path>] [--run-id <id>]
+  [--mode text|json] [--tui]
 ```
 
 Deletes and recreates `--workdir` and `--out`, then scans and runs PBT on that
@@ -462,7 +498,7 @@ Dashboard: [installation guide](installation.md#5-dashboard-watch-it-work-live).
 | `PBT_OH_WORKSPACE` | Full OH tree (`.repo/` + `out/`) used by official `host_product` or configured device-product builds. Unrelated ordinary CMake projects do not set it. |
 | `PBT_EFFORT` | `quick` / `standard` / `thorough` |
 | `PBT_SCAN_ROOT` | Scan directory; also `--scan-root` |
-| `PBT_HOOK_TUI=1` | TUI for `hook-run` / `watch` |
+| `PBT_HOOK_TUI=1` | TUI for `hook-run` / `watch`; explicit `--mode json` overrides it |
 
 Hook-run: [CI / git-hook integration](installation.md#ci--git-hook-integration). Coverage:
 [coverage-tracking.md](coverage-tracking.md).

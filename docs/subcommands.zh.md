@@ -221,6 +221,36 @@ pi-pbt -p "/skill:pbt-workflow 对当前仓库做性质测试,产物写到 pbt-o
 
 ---
 
+## 机器可读的 SDK 事件流
+
+`build-run` 与 `hook-run` 接受 `--mode text|json`，默认是 `text`。JSON 模式把
+SDK 事件流透传到 stdout，供自动化程序消费；它不改变 campaign 行为或退出码：
+`hook-run` 仍返回报告门禁裁决，`build-run` 仍在 preflight 失败时返回 `3`，成功后
+沿用普通 pi 退出行为。
+
+JSON 模式下，preflight 输出、扫描诊断及其他运行信息写 stderr，保证 stdout 可由程序
+读取；`build-run` 同时仍把完整 preflight 输出保存在 `<out>/build.log`。两条通道应分别
+保存：
+
+```bash
+set -o pipefail
+pi-pbt hook-run <sha> --repo /path/to/repo --mode json \
+  2>stderr.log | tee events.jsonl
+
+pi-pbt build-run --repo /path/to/repo --workdir /path/to/repo \
+  --build-cmd "cmake --build build" --mode json \
+  2>build-stderr.log | tee build-events.jsonl
+```
+
+不要使用 `2>&1`，否则诊断会污染 stdout JSON 流。SDK 事件可能包含 prompt、模型输出、
+工具输入/结果及敏感仓库内容，捕获文件须按敏感数据处理。这个实时流与经校验的 campaign
+结果 `report.json` 不同，也不是 `~/.pi-pbt/agent/sessions/` 下的磁盘会话文件。
+
+显式 `--tui` 与 `--mode json` 同时使用会被拒绝。显式 `--mode json` 优先于继承的
+`PBT_HOOK_TUI=1`；需要交互界面时应取消该模式或使用 text 模式。
+
+---
+
 ## `build-run` — 用你的构建命令做 preflight
 
 ```text
@@ -229,7 +259,8 @@ pi-pbt build-run --build-cmd "<command>"
   [--scope <path>] [--func <name>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
-  [--provider <p>] [--model <m>] [--tui]
+  [--provider <p>] [--model <m>]
+  [--mode text|json] [--tui]
 ```
 
 1. 在 `--workdir` 执行 `--build-cmd`。日志写到 `<out>/build.log`；
@@ -292,7 +323,8 @@ pi-pbt hook-run <sha>
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
   [--provider <p>] [--model <m>]
-  [--scope <path>] [--run-id <id>] [--tui]
+  [--scope <path>] [--run-id <id>]
+  [--mode text|json] [--tui]
 ```
 
 删除并重建 `--workdir` 与 `--out`，然后扫描并对这次提交的改动集做 PBT。默认目录是
@@ -423,7 +455,7 @@ Dashboard：[安装指南](installation.zh.md#5-网页面板实时看它在干�
 | `PBT_OH_WORKSPACE` | 完整 OH 树(`.repo/` + `out/`),供官方 `host_product` 或已配置的 device-product 构建使用。无关的普通 CMake 项目不设置它。 |
 | `PBT_EFFORT` | `quick` / `standard` / `thorough` |
 | `PBT_SCAN_ROOT` | 扫描目录;也可用 `--scan-root` |
-| `PBT_HOOK_TUI=1` | `hook-run` / `watch` 用 TUI |
+| `PBT_HOOK_TUI=1` | `hook-run` / `watch` 用 TUI；显式 `--mode json` 会覆盖它 |
 
 Hook-run：[CI / git hook 集成](installation.zh.md#ci--git-hook-集成)。覆盖率：
 [coverage-tracking.md](coverage-tracking.md)。

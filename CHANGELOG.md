@@ -10,6 +10,78 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.19 - 2026-09-16
+
+### English
+
+#### Added
+
+- **Live JSON event streams for `hook-run` and `build-run`.** Pass
+  `--mode json` to emit pi SDK events as JSONL on stdout, including assistant
+  updates and tool execution events. Capture stdout separately from stderr;
+  build preflight output remains available in `build.log` and goes to stderr
+  in JSON mode. No session-file tailing wrapper is required.
+- `--mode text` keeps the existing output. JSON mode rejects an explicit
+  `--tui` and overrides inherited `PBT_HOOK_TUI=1`. Missing, repeated or invalid
+  mode values fail argument validation. Output mode does not change verdict
+  semantics: hook-run retains its report gate; build-run retains preflight
+  failure exit 3 and ordinary pi behavior after preflight succeeds.
+
+- **Retry unfulfilled tool-call promises.** An explicit immediate promise to use
+  an available tool with no actual tool call receives up to two corrective
+  continuations per campaign. Real tool calls, advice/examples, cancellation and
+  provider errors are excluded; empty responses use the separate bounded recovery.
+
+#### Documentation
+
+- Bilingual streaming examples use `set -o pipefail`, `tee events.jsonl` and
+  separate stderr. Event JSONL is not the final `report.json` or the saved
+  session format, and may contain sensitive tool inputs and output.
+- Upgrade checklists explicitly refresh installed host-agent skills with
+  `pi-pbt skill-install --force`, reusing the original host/project/custom path.
+- GLM/DeepSeek configuration examples are pinned to CLIProxyAPI's Devin-channel
+  registry and distinguish channel context/output limits from the requested
+  output budget; they are linked from installation and skill guides and
+  included in the public documentation mirror.
+
+#### Validation and SDK
+
+- Parser/argv, preflight stdout/stderr separation and exit-code regressions,
+  plus real CLI JSON-event tests with a local scripted provider.
+- Embedded pi remains `0.85.1`; version output is
+  `pi-pbt 0.1.19 (pi 0.85.1)`.
+
+### 中文
+
+#### 新增
+
+- **`hook-run` 与 `build-run` 原生 JSON 实时事件流。** 加 `--mode json` 后，stdout
+  输出 pi SDK 的 JSONL 事件，包括 assistant 更新和工具执行事件，不再需要扫描
+  session 文件的外置脚本。JSON 模式的构建 preflight 输出走 stderr，完整日志仍保存在
+  `build.log`。
+- `--mode text` 保持既有文本输出；JSON 模式拒绝显式 `--tui`，并覆盖继承的
+  `PBT_HOOK_TUI=1`。模式缺值、重复或非法值会报参数错误。输出模式不改变裁决语义：
+  hook-run 保留报告门禁；build-run 仍在 preflight 失败时退出 3，成功后沿用普通 pi 行为。
+
+- **只说不调工具时纠正重试。** 明确承诺立即调用可用工具却未发出真实调用时，每轮
+  战役最多纠正续跑两次；已有真实调用、建议/示例、取消和 provider 错误不触发。
+  空响应仍走独立的有界恢复，不无限循环。
+
+#### 文档
+
+- 中英文给出 `set -o pipefail`、`tee events.jsonl` 和 stderr 分流示例。事件 JSONL
+  不等于最终 `report.json`，也不是磁盘会话文件格式；其中可能含敏感的工具输入和输出。
+- 升级清单明确要求替换二进制后执行 `pi-pbt skill-install --force`，并复用原来的
+  宿主、项目或自定义安装位置。
+- GLM/DeepSeek 配置示例按 CLIProxyAPI Devin 渠道的固定提交核对，区分渠道上下文/
+  输出上限与实际请求预算；安装与 skill 指南已链接该子文档，公开镜像同步提供。
+
+#### 验证与 SDK
+
+- 参数解析/透传、构建 stdout/stderr 分流和退出码回归，以及本地受控 provider 驱动的
+  真实 CLI JSON 事件测试。
+- 内嵌 pi 保持 `0.85.1`；版本输出为 `pi-pbt 0.1.19 (pi 0.85.1)`。
+
 ## 0.1.18 - 2026-09-16
 
 ### English

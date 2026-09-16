@@ -495,7 +495,9 @@ pi-pbt build-run --build-cmd "…" \
 `--func`, every PBT-worthy function in `--scope` is in play.
 
 `--out`, `--lang`, `--effort` (default `standard`), `--provider`,
-`--model`, and `--tui` work as on `hook-run`.
+`--model`, `--mode text|json`, and `--tui` work as on `hook-run`.
+`--mode` defaults to `text`; selecting `json` changes the stdout format, not the
+campaign or its exit behavior.
 
 To watch the same flow live inside an interactive session, say:
 
@@ -523,6 +525,30 @@ It reports its verdict as an exit code, so it drops straight into CI as a check:
 | `1` | Bugs found (`bug_reports/` non-empty, or `totals.bugs > 0`). |
 | `2` | No `REPORT.md`, no `report.json`, or a `report.json` that fails the schema — it died, timed out, or attested to nothing. |
 | `3` | The recorded build failed: nothing was tested. |
+
+For automation that needs the SDK event stream, add `--mode json` (the default
+is `--mode text`). JSON mode reserves stdout for SDK events; preflight output,
+scan diagnostics, and other operational messages go to stderr, while
+`build-run` still keeps the complete preflight in `<out>/build.log`. The stream
+can contain prompts, model output, and tool inputs/results, including sensitive
+repository content, so store and publish it accordingly. It is a live event
+stream, not the campaign `report.json` and not the session files under
+`~/.pi-pbt/agent/sessions/`.
+
+`--mode json` and explicit `--tui` are incompatible. An explicit JSON mode does,
+however, override an inherited `PBT_HOOK_TUI=1`. Neither output mode changes the
+exit codes above, and `build-run` still returns `3` only when its preflight
+fails. To capture both channels without corrupting stdout JSON:
+
+```bash
+set -o pipefail
+pi-pbt hook-run <sha> --repo /path/to/repo --mode json \
+  2>stderr.log | tee events.jsonl
+```
+
+Do not use `2>&1`: that mixes diagnostics into the JSON stream. See the
+[subcommand reference](subcommands.md#machine-readable-sdk-event-stream) for
+`build-run` syntax and details.
 
 **The sha does not check anything out.** It selects the change set
 (`git diff-tree <sha>`) and goes into the prompt; the code that gets compiled
@@ -756,8 +782,12 @@ Notes:
 - **macOS blocks the binary** — run the `xattr -d com.apple.quarantine` step
   from §2.
 
-- **The agent says it will call a tool, then stops** — if the model returned an
-  empty response, pi-pbt attempts recovery **once**. Check whether `REPORT.md`
+- **The agent says it will call a tool, then stops** — an explicit immediate
+  promise to call an available tool, without a real tool call, triggers up to
+  **two corrective retries per campaign**. The retry asks for actual arguments
+  and a tool call, not another promise. User advice, quoted examples, real tool
+  calls, cancellations and provider errors do not trigger this rule. If the
+  model instead returns an empty response, the separate recovery runs **once**. Check whether `REPORT.md`
   and `report.json` are complete; a promise to continue is not a completed run.
   Look in the selected output directory (`pbt-out/` by default) for
   `recovery.json`, and in `~/.pi-pbt/agent/sessions/` for the session log. A

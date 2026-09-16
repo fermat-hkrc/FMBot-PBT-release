@@ -432,8 +432,9 @@ pi-pbt build-run --build-cmd "…" \
 指该路径里的**一个符号**。必须先有 `--scope`,且命令行里 `--func` 必须写在
 `--scope` **之后**;不加 `--func` 则覆盖 `--scope` 里所有值得测的函数。
 
-`--out`、`--lang`、`--effort`(默认 `standard`)、`--provider`、`--model`、`--tui`
-与 `hook-run` 一致。
+`--out`、`--lang`、`--effort`(默认 `standard`)、`--provider`、`--model`、
+`--mode text|json`、`--tui` 与 `hook-run` 一致。`--mode` 默认是 `text`；选择
+`json` 只改变 stdout 格式，不改变 campaign 或退出行为。
 
 想在交互会话里**实时观测**同一条流程,直接说:
 
@@ -460,6 +461,25 @@ pi-pbt hook-run <sha> --repo /path/to/repo --lang zh
 | `1` | 发现 bug(`bug_reports/` 非空,或 `totals.bugs > 0`)。 |
 | `2` | 没有 `REPORT.md`、没有 `report.json`,或 `report.json` 不合 schema——挂了、超时,或什么都没证明。 |
 | `3` | 记录在案的构建失败:什么都没被测。 |
+
+自动化若需要 SDK 事件流，加 `--mode json`（默认是 `--mode text`）。JSON 模式把
+stdout 专用于 SDK 事件；preflight 输出、扫描诊断及其他运行信息写 stderr；
+`build-run` 仍把完整 preflight 写入 `<out>/build.log`。事件流可能包含 prompt、模型
+输出、工具输入/结果及敏感仓库内容，保存和发布时须按敏感数据处理。它是实时事件流，
+不等于 campaign 的 `report.json`，也不等于 `~/.pi-pbt/agent/sessions/` 下的会话文件。
+
+显式 `--tui` 与 `--mode json` 互斥；但显式 JSON 模式会覆盖继承的
+`PBT_HOOK_TUI=1`。输出模式不改变上表退出码，`build-run` 也仍只在 preflight 失败时
+返回 `3`。分别保存两条通道且不污染 stdout JSON：
+
+```bash
+set -o pipefail
+pi-pbt hook-run <sha> --repo /path/to/repo --mode json \
+  2>stderr.log | tee events.jsonl
+```
+
+不要使用 `2>&1`，否则诊断会混入 JSON 流。`build-run` 语法与完整说明见
+[子命令参考](subcommands.zh.md#机器可读的-sdk-事件流)。
 
 **sha 不会检出任何东西。** 它只用来取改动集(`git diff-tree <sha>`)和写进
 prompt;真正被编译、被测的是 `--repo` 工作树里当下的代码。把树切到那个 commit
@@ -659,8 +679,10 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8000/   # 期望 200(�
   请带日志提 issue。
 - **macOS 拦住不让运行** —— 执行 §2 里的 `xattr -d com.apple.quarantine`。
 
-- **agent 说要调用工具，随后却停止了** —— 如果模型返回了空响应，pi-pbt 会尝试
-  恢复**一次**。先检查 `REPORT.md` 和 `report.json` 是否完整；“准备继续”的口头承诺
+- **agent 说要调用工具，随后却停止了** —— 如果明确承诺立即调用某个可用工具，却没有
+  真实 tool call，每轮战役最多触发**两次纠正重试**，要求提交实际参数和调用，不能再
+  只说一遍。给用户的建议、引用示例、已有真实调用、取消或 provider 错误不触发此规则。
+  若返回的是空响应，则由另一条恢复机制尝试**一次**。先检查 `REPORT.md` 和 `report.json` 是否完整；“准备继续”的口头承诺
   不算运行完成。查看所选产物目录（默认 `pbt-out/`）里的 `recovery.json`，以及
   `~/.pi-pbt/agent/sessions/` 下的会话日志。并非每种停止都会触发恢复，取消或 provider
   错误也不由此机制重试。若仍停止，请检查模型配置的上下文上限及 provider 的错误/额度，
