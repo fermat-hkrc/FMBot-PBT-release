@@ -138,9 +138,40 @@ pi-pbt skill-uninstall               # remove it again (same flags)
 It copies the `pi-pbt-dev` skill (protocol + helper scripts) into the host
 agent's skill directory — a thin shell that locates the `pi-pbt` binary on PATH
 at run time, so nothing else is needed. Re-run `skill-install --force` after
-updating pi-pbt to refresh it; `skill-uninstall` removes it from every location
-it was installed into. Then just tell your agent "test the changes I just made" —
+updating pi-pbt to refresh it; `skill-uninstall` targets detected user-level hosts; repeat your original
+`--host` or `--dir` selection for project/custom installations. Then just tell your agent "test the changes I just made" —
 see the [host-agent skill guide](skill-pi-pbt-dev.md).
+
+### Upgrade an existing installation
+
+1. Stop active campaigns. Download the new archive **and its matching checksum**,
+   extract into a fresh directory, verify it, then run that archive's `./install.sh`.
+2. If you installed `pi-pbt-dev` into a host agent, **refresh that copied skill**
+   after replacing the binary. Bundled campaign skills update with the binary;
+   the copy installed into another agent does not.
+
+   ```bash
+   pi-pbt skill-install --force                       # detected user-level hosts
+   pi-pbt skill-install --host claude --force         # one previously selected host
+   pi-pbt skill-install --host project --force        # run in each relevant project
+   pi-pbt skill-install --dir /custom/skills --force   # reuse the original custom path
+   ```
+
+   Choose the command matching your original installation; do not run every
+   example. `--force` replaces the installed skill files, so back up any local
+   edits first. Reload/restart the host agent so it reads the refreshed skill.
+3. Verify the executable on PATH and model configuration:
+
+   ```bash
+   command -v pi-pbt
+   pi-pbt --version
+   pi-pbt --list-models
+   ```
+
+Keep `~/.pi-pbt/agent/` (credentials, models and history); upgrading does not
+require deleting it. Same-version replacement archives such as the reissued
+v0.1.18 must be distinguished by the current download checksum, not the version
+string alone.
 
 ## 3. Configure a model
 
@@ -187,23 +218,10 @@ For everything else, follow pi's documentation directly:
 - [Models & `models.json`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) — adding custom models or providers that speak an OpenAI/Anthropic/Google-compatible API (file goes in `~/.pi-pbt/agent/models.json`)
 - [Custom providers](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/custom-provider.md) — custom APIs or OAuth
 
-Example `~/.pi-pbt/agent/models.json` for a self-hosted OpenAI-compatible proxy:
-
-```json
-{
-  "providers": {
-    "myproxy": {
-      "api": "openai-completions",
-      "baseUrl": "https://my-proxy.example.com/v1",
-      "apiKey": "sk-...",
-      "models": [
-        { "id": "claude-opus-4-8", "name": "Claude Opus 4.8", "reasoning": true,
-          "contextWindow": 1000000, "maxTokens": 32000 }
-      ]
-    }
-  }
-}
-```
+For GLM or DeepSeek through CLIProxyAPI, use the
+[verified channel-specific models.json examples](models-glm-deepseek.md).
+They list the source commit, context windows, output caps and a practical
+request budget. Do not copy a generic 1M context value onto every model or proxy.
 
 ## 4. Start testing
 

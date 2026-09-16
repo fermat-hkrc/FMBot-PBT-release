@@ -103,23 +103,9 @@ pi-pbt --list-models                   # a model list means you are configured
 pi-pbt            # then /login to sign in, /model (Ctrl+L) to pick a model
 ```
 
-Custom models/proxies (OpenAI-compatible) go in `~/.pi-pbt/agent/models.json`:
-
-```json
-{
-  "providers": {
-    "myproxy": {
-      "api": "openai-completions",
-      "baseUrl": "https://my-proxy.example.com/v1",
-      "apiKey": "sk-...",
-      "models": [
-        { "id": "claude-opus-4-8", "name": "Claude Opus 4.8", "reasoning": true,
-          "contextWindow": 1000000, "maxTokens": 32000 }
-      ]
-    }
-  }
-}
-```
+Custom models/proxies use `~/.pi-pbt/agent/models.json`. For GLM/DeepSeek
+through CLIProxyAPI, follow the [channel-specific examples](models-glm-deepseek.md)
+and verify the actual model ID and limits, rather than copying a generic 1M window.
 
 Verify:
 
@@ -354,7 +340,9 @@ incremental campaign over the fixed files to verify.
 
 ## 10. Upgrading
 
-| Component | How to update |
-|---|---|
-| skill (protocol/scripts) | replace the skill directory with the new version |
-| pi-pbt engine | re-download the release binary (or rebuild and install the tarball); after updating, re-run `pi-pbt --list-models` to confirm the configuration still works |
+Replacing the pi-pbt binary does **not** refresh the skill already copied into a
+host agent. After installing the new archive, run `pi-pbt skill-install --force`.
+For project/custom installations, repeat the original `--host project` or
+`--dir` selection with `--force`; back up local edits before replacement, then
+reload the host agent. Verify `pi-pbt --version` and `pi-pbt --list-models`.
+See the [complete upgrade checklist](installation.md#upgrade-an-existing-installation).

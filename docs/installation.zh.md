@@ -121,9 +121,37 @@ pi-pbt skill-uninstall               # 卸载（参数同上）
 
 它把 `pi-pbt-dev` skill(协议文本 + 辅助脚本)拷入宿主 agent 的 skill 目录——
 一个薄壳,运行时从 PATH 解析 `pi-pbt` 二进制,无需其他配置。更新 pi-pbt 后重跑
-`skill-install --force` 即可刷新;`skill-uninstall` 从所有已安装位置移除。
+`skill-install --force` 即可刷新；卸载默认只处理检测到的用户级宿主，项目/自定义安装
+请复用原来的 `--host` 或 `--dir` 选择。
 之后直接对你的 agent 说"测一下我刚才的改动"即可,
 完整教程见 [宿主 agent skill 用法](skill-pi-pbt-dev.zh.md)。
+
+### 升级已有安装
+
+1. 停止正在运行的战役。重新下载新版 ZIP **和对应校验文件**，解压到新目录、校验，
+   然后运行该包的 `./install.sh` 替换主程序。
+2. 如果给宿主 agent 安装过 `pi-pbt-dev`，替换二进制后**必须刷新复制出去的 skill**。
+   内置战役技能随二进制更新，但宿主 agent 目录里的副本不会自动更新。
+
+   ```bash
+   pi-pbt skill-install --force                       # 自动检测的用户级宿主
+   pi-pbt skill-install --host claude --force         # 原来指定的单个宿主
+   pi-pbt skill-install --host project --force        # 在各相关项目目录执行
+   pi-pbt skill-install --dir /custom/skills --force   # 使用原来的自定义路径
+   ```
+
+   按原安装方式选一条，不是全部执行。`--force` 会替换 skill 文件，手工修改过的内容
+   请先备份；刷新后让宿主 agent 重新加载技能或重启会话。
+3. 检查 PATH 上实际使用的版本和模型配置：
+
+   ```bash
+   command -v pi-pbt
+   pi-pbt --version
+   pi-pbt --list-models
+   ```
+
+保留 `~/.pi-pbt/agent/` 中的凭据、模型配置和历史，不需要为升级删除它。同版本替换
+包（如重发的 v0.1.18）请按当前下载校验值区分，不能只看版本字符串。
 
 ## 3. 配置模型
 
@@ -165,23 +193,9 @@ pi-pbt --list-models
 - [模型与 `models.json`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) —— 添加自定义模型或服务商(兼容 OpenAI/Anthropic/Google 接口的都行;文件放 `~/.pi-pbt/agent/models.json`)
 - [自定义服务商](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/custom-provider.md) —— 自定义接口或 OAuth
 
-自建 OpenAI 兼容中转的 `~/.pi-pbt/agent/models.json` 示例:
-
-```json
-{
-  "providers": {
-    "myproxy": {
-      "api": "openai-completions",
-      "baseUrl": "https://my-proxy.example.com/v1",
-      "apiKey": "sk-...",
-      "models": [
-        { "id": "claude-opus-4-8", "name": "Claude Opus 4.8", "reasoning": true,
-          "contextWindow": 1000000, "maxTokens": 32000 }
-      ]
-    }
-  }
-}
-```
+通过 CLIProxyAPI 使用 GLM、DeepSeek，请看[模型配置示例](models-glm-deepseek.zh.md)。
+示例列出来源提交、渠道上下文窗口、最大输出与日常请求预算；不要给所有模型/代理统一
+填 1M 上下文。
 
 ## 4. 开始测
 

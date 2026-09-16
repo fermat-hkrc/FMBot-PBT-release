@@ -88,23 +88,9 @@ pi-pbt --list-models                   # 能看到模型列表即配置成功
 pi-pbt            # 启动后 /login 登录，/model（Ctrl+L）选模型
 ```
 
-自定义模型/代理（OpenAI 兼容接口）用 `~/.pi-pbt/agent/models.json`，示例：
-
-```json
-{
-  "providers": {
-    "myproxy": {
-      "api": "openai-completions",
-      "baseUrl": "https://my-proxy.example.com/v1",
-      "apiKey": "sk-...",
-      "models": [
-        { "id": "claude-opus-4-8", "name": "Claude Opus 4.8", "reasoning": true,
-          "contextWindow": 1000000, "maxTokens": 32000 }
-      ]
-    }
-  }
-}
-```
+自定义模型/代理使用 `~/.pi-pbt/agent/models.json`。CLIProxyAPI 上的 GLM/DeepSeek
+见[模型配置示例](models-glm-deepseek.zh.md)，按实际渠道核对 ID 和限制，不要照抄通用
+1M 上下文配置。
 
 验证：
 
@@ -302,7 +288,8 @@ agent 呈现给你的摘要形如：
 
 ## 10. 升级
 
-| 组件 | 更新方式 |
-|---|---|
-| skill（协议/脚本） | 用新版本替换 skill 目录文本 |
-| pi-pbt 引擎 | 重新下载 release 二进制（或重新构建安装 tarball）；更新后重跑 `pi-pbt --list-models` 确认配置仍有效 |
+替换 pi-pbt 二进制**不会**刷新复制到宿主 agent 的 skill。安装新包后执行
+`pi-pbt skill-install --force`；项目/自定义安装应复用原来的 `--host project` 或
+`--dir`，并加 `--force`。先备份手工改过的 skill，再刷新并重载宿主 agent。
+最后用 `pi-pbt --version`、`pi-pbt --list-models` 检查。
+完整步骤见[升级已有安装](installation.zh.md#升级已有安装)。
