@@ -17,13 +17,13 @@ pi-pbt 自己没有依赖。但它会**真实编译并运行它写出来的测�
 | 被测目标 | 需要预装 |
 |---|---|
 | 任何仓库 | `git`(要读提交历史和改动) |
-| C / C++ | `cmake` ≥ 3.16、C++17 编译器(`clang`/`g++`)、`make` 或 `ninja`。测试库(GoogleTest/RapidCheck)由 CMake 自动下载,首次构建需要网络。 |
+| C / C++ | `cmake` ≥ 3.16、C++17 编译器(`clang`/`g++`)、`make` 或 `ninja`。GoogleTest/RapidCheck 的准备方式见下文。 |
 | Python | `python3` ≥ 3.9 + `pip`(会在探测到的环境里安装 `hypothesis`) |
 | Rust | `cargo`(会加 `proptest` 开发依赖) |
 | Go | `go` 工具链 |
 | Java | JDK + Maven/Gradle(jqwik) |
 | OpenHarmony 组件 | 一份已配置好的 OpenHarmony 源码树及官方构建依赖。优先用原生 `host_product` 测试；只有组件没有 host 目标时才需要已经配置好的 device-product runner。 |
-| 真机上的 HarmonyOS 应用 | `hdc`(HarmonyOS 设备连接工具)以及一份带虚拟环境的 Kea2 —— 见 [`pi-pbt kea`](#真机上的-harmonyos-应用pi-pbt-kea) |
+| 真机上的 HarmonyOS 应用 | `hdc`（HarmonyOS 设备连接工具）以及一份带虚拟环境的 Kea2 —— 见实验性的 [`pi-pbt kea` 指南](kea.zh.md) |
 
 Debian/Ubuntu(C++ 目标)示例:
 
@@ -36,6 +36,18 @@ Arch Linux:
 ```bash
 sudo pacman -S --needed git cmake ninja clang
 ```
+
+### 准备 PBT 依赖
+
+C++ campaign 会把本机可用的 RapidCheck 和 GoogleTest 信息写入
+`pbt-out/dependencies.json`。依赖应按以下顺序准备：**项目自带依赖 → 已安装的
+系统包 → 已配置的系统仓库或企业内网仓库 → 经明确许可的公网下载**。这样可以避免
+不必要的联网和重复副本。
+
+清单会区分包路径、架构与目标是否真正兼容。给宿主机 ABI 安装的库不能链接到 ARM
+目标；OpenHarmony 的 `host_product` 构建也可能仍须使用与自身工具链兼容的源码，
+例如 `third_party/rapidcheck`。因此 `dependencies.json` 只作为依赖准备的依据，
+不表示该依赖已经验证为可成功链接。
 
 ## 2. 下载与安装
 
@@ -527,72 +539,11 @@ claude --dangerously-load-development-channels server:pi-pbt
 
 不加这个 flag,除了推送以外的一切照常工作。
 
-### 真机上的 HarmonyOS 应用(`pi-pbt kea`)
+### 真机上的 HarmonyOS 应用（`pi-pbt kea`，实验性）
 
-上面讲的都是测**源码**。`pi-pbt kea` 测的是另一类目标:**已经装在 USB 手机上的
-HarmonyOS 应用**,把它当黑盒、从 GUI 上测。它通过 `hdc` 驱动 Kea2 引擎 ——
-Kea2 一边自动探索应用界面,一边检查"无论用户怎么操作都应该成立"的性质 ——
-并报告崩溃、ANR 和性质违例。
-
-运行前有三样东西必须就位:
-
-| | |
-|---|---|
-| 手机 | USB 连接,且解锁不需要 PIN;`hdc` 在 `PATH` 上(`hdc list targets` 能看到序列号) |
-| Kea2 | 一份带虚拟环境的 Kea2,即 `<kea_home>/.venv/bin/kea2`(或 `venv/bin/kea2`)存在 |
-| 反编译信号 | `<decompile_home>/mined_all/<package>/signals.json`,需事先从应用挖出。没有就直接中止,不做无目标的盲目探索 |
-
-配置写在你启动它的那个目录里的 `kea.config.yml`(即"SUT 目录")。最小配置:
-
-```yaml
-package: com.example.app
-kea_home: /path/to/Kea2
-decompile_home: /path/to/harmony-decompile
-```
-
-然后:
-
-```bash
-cd /path/to/sut-folder     # 放 kea.config.yml 的目录
-pi-pbt kea                 # 交互式
-pi-pbt kea -p              # headless(CI、nohup)
-pi-pbt kea -c              # 续跑:沿用上一次的产物目录
-pi-pbt kea --config other.yml --lang zh
-```
-
-命令行参数就这四个,其余全在配置文件里:
-
-| 配置项 | 默认值 | 含义 |
-|---|---|---|
-| `package` | **必填** | 被测应用的 bundle 名 |
-| `kea_home` | `~/github/Kea2` | Kea2 所在目录(其虚拟环境提供 `kea2` 命令) |
-| `decompile_home` | **必填** | 存放 `mined_all/<package>/signals.json` 的目录 |
-| `device` | 当前连着的那台 | 设备序列号,接了多台手机时需要 |
-| `out` | `pbt-out` | 产物目录,相对 SUT 目录 |
-| `depth` | 由 effort 档位决定 | `fast`(短跑)或 `deep`(跑完整的性质包) |
-| `events`、`running_minutes`、`throttle` | 15 / 6 / 500(fast),70 / 12 / 200(deep) | 探索预算:最大步数、时长(分钟)、两次事件间隔(毫秒) |
-| `mode_a_packs` | 内置的那几个包 | 仅 `deep`:要跑的性质包所在的 Python 模块 |
-| `stamp_runs` | `true` | 每次运行单独一个带时间戳的目录;`false` 则平铺写进 `out` |
-| `provider`、`model`、`lang` | —— | 与全局选项含义相同 |
-
-depth 和上面的 [effort 档位](#挖多深effort-档位)是同一个"挖多深"的旋钮,不重复设:
-配置里的 `depth:` 优先级最高,其次 `PBT_KEA_DEPTH`,最后是档位
-(`quick` → `fast`,`standard`/`thorough` → `deep`)。
-
-一次运行留下的产物:
-
-```text
-pbt-out/
-  LATEST                                    # 指向最新一次运行的目录
-  runs/<package>_modeB_<depth>_<时间戳>/
-    layout.json      一次界面 dump
-    kea-run/         Kea2 自己的输出(res_*/result_*.json)
-    LAST_RUN.json    解析出来的计数:执行数、失败数、每条性质的统计
-    REPORT.md        结论
-```
-
-配置文件不存在、配置里没写 `package:`、或反编译信号缺失时,它会打印具体原因
-并以退出码 `1` 结束,不会去动手机。
+`pi-pbt kea` 通过 GUI 对已经装在 USB 手机上的 HarmonyOS 应用做黑盒测试。
+该入口仍属实验性；前置条件、配置、命令、产物和 Kea 专属环境变量见
+[双语 Kea 指南](kea.zh.md)。
 
 ### 环境变量
 
@@ -602,9 +553,7 @@ pbt-out/
 | `PBT_SCAN_ROOT=/path` | 要扫描的仓库路径。用于工作目录是一份干净副本的场景(git hook / CI) |
 | `PBT_OH_WORKSPACE=/path` | 预先准备好的完整 OpenHarmony 源码环境(源码 + 编译工具链 + 已编译好的依赖),直接复用而不是从头推导怎么单独构建。仓库位于这样的环境内部时(某个上级目录同时有 `.repo/` 和 `out/`)会**自动识别**,只有要覆盖时才需要显式设置;启动日志会打印实际用的是哪个 |
 | `PBT_HOOK_TUI=1` | 等同 `hook-run --tui` / `watch --tui`:用交互式界面跑(需要终端;结束后等你 `/quit`) |
-| `PBT_EFFORT=quick\|standard\|thorough` | 一次 campaign 挖多深(见[effort 档位](#挖多深effort-档位));`hook-run` / `watch` 上的 `--effort` 优先级更高。默认:`hook-run`/`watch` 为 `quick`,其他入口为 `standard`。`kea.config.yml` 没写 `depth:` 时,GUI 探索深度也由它决定(`quick` → 短跑,其余 → 长跑) |
-| `PBT_KEA_DEPTH=fast\|deep` | [`pi-pbt kea`](#真机上的-harmonyos-应用pi-pbt-kea) 的探索深度,覆盖 effort 档位;配置里的 `depth:` 仍然优先 |
-| `PBT_KEA_MODE_A_PACKS="pkg.a pkg.b"` | 配置里没写 `mode_a_packs` 时,`pi-pbt kea` 在 `deep` 下要跑的性质包 |
+| `PBT_EFFORT=quick\|standard\|thorough` | 一次 campaign 挖多深(见[effort 档位](#挖多深effort-档位));`hook-run` / `watch` 上的 `--effort` 优先级更高。默认:`hook-run`/`watch` 为 `quick`,其他入口为 `standard`。实验性的 Kea 模式在未单独配置深度时也使用该档位，见 [Kea 指南](kea.zh.md)。 |
 | `PBT_TEST_JOBS=8` | 测试和构建跑多宽(见[并行度](#跑多宽并行度));填数字、`max` 或 `auto`(默认:机器空闲核心数)。`PBT_TEST_JOBS=1` 强制串行 —— 把失败判定为 bug 之前的串行复核必须用它 |
 | `PBT_CODE_COVERAGE=0` | 关掉原生代码覆盖率的插桩与报表(见[代码覆盖率报表](#代码覆盖率报表));默认开启,工具链缺失时静默降级 |
 | `PBT_BARE=1` | 以纯 pi 运行:不加载编排扩展、内置技能与 campaign 守卫。用于 A/B 度量 harness 自身贡献(benchmark 场景),非日常使用 |
@@ -662,33 +611,9 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8000/   # 期望 200(�
   请带日志提 issue。
 - **macOS 拦住不让运行** —— 执行 §2 里的 `xattr -d com.apple.quarantine`。
 
-### 空响应与战役恢复
-
-战役遇到 `stop` 或输出预算耗尽的 `length`，且内容为空或只有 thinking 的响应时，pi-pbt **只尝试一次**续跑。
-后续模型请求缩短较早的工具结果文本，保留用户指令、工具调用/结果 ID 和最近消息，
-近期单条成功输出超过 16,000 字符时也缩短，保留首尾各 4,000 字符；不改磁盘上的会话。这**不是** pi 的 `/compact`，不会总结或编造丢失的事实。
-重试要求读取已有产物并优先完成报告。上下文估算达到所配置模型窗口的 80% 时，也进入
-这个收尾路径，而不是再催覆盖率扫描或深化。不硬编码任何模型的 token 上限。
-
-`pbt-out/recovery.json` 记录尝试、缩短的字符数与结果。`response-resumed` 仅表示模型恢复
-响应，**不表示战役通过**；最终仍由产物/schema 门禁裁决。再次空响应则停止恢复
-(`empty-after-retry`)。取消和 provider 错误不由这个机制重试。没有执行的 sweep 必须如实
-记为未完成，不能算作执行过。恢复失败时检查会话和模型/provider 配置，反复发送“继续”
-并不能保证恢复。
-
-### 本机 PBT 依赖与企业内网
-
-检测到 C/C++ 源码/构建标记或 OpenHarmony 组件的战役，先检查项目的已知依赖位置，
-再查询 OS 的已安装包数据库
-(dpkg、pacman、RPM 或 Homebrew)，生成 `pbt-out/dependencies.json`，在开始测试前
-把结果交给 agent。当前 C++ 清单覆盖 RapidCheck 与 GoogleTest：包名、版本、包管理器
-报告的文件路径及架构，**不等于已验证可链接**。探测有时间/输出上限，只读且不联网。
-
-获取顺序固定为：**项目依赖 → 已安装系统包 → 配置好的系统仓库/内网镜像 → 经允许的
-公网下载**。例如 `librapidcheck-dev` 已安装时，应先检查并复用它，不应直接重复克隆。
-CLI 的清单探测不会执行 apt/pacman/dnf/brew 安装，也不会执行 sudo；安装仍须由有权限的
-agent/操作者在获准后进行。缺少清单或查询失败，不代表依赖不存在。
-
-OpenHarmony GN 仍须使用项目兼容的源码/target，例如 `third_party/rapidcheck`。不能把
-amd64 的 OS 库链接到 ARM 目标；即使是 host_product，其 ABI/工具链也可能与系统包不同。
-清单明确区分这些情况，不把“已安装”说成“当前目标可用”。
+- **agent 说要调用工具，随后却停止了** —— 如果模型返回了空响应，pi-pbt 会尝试
+  恢复**一次**。先检查 `REPORT.md` 和 `report.json` 是否完整；“准备继续”的口头承诺
+  不算运行完成。查看所选产物目录（默认 `pbt-out/`）里的 `recovery.json`，以及
+  `~/.pi-pbt/agent/sessions/` 下的会话日志。并非每种停止都会触发恢复，取消或 provider
+  错误也不由此机制重试。若仍停止，请检查模型配置的上下文上限及 provider 的错误/额度，
+  再缩小测试范围或换用合适的模型重新运行。反馈问题时附上日志，不要只反复发送“继续”。

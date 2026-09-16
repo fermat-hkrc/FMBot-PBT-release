@@ -20,13 +20,13 @@ present:
 | You test | Install first |
 |---|---|
 | Any repo | `git` (it reads the commit history and diffs) |
-| C / C++ | `cmake` ≥ 3.16, a C++17 compiler (`clang`/`g++`), `make` or `ninja`. The test libraries (GoogleTest/RapidCheck) are downloaded by CMake, so the first build needs network access. |
+| C / C++ | `cmake` ≥ 3.16, a C++17 compiler (`clang`/`g++`), `make` or `ninja`. See dependency preparation below for GoogleTest/RapidCheck. |
 | Python | `python3` ≥ 3.9 with `pip` (`hypothesis` is installed into the environment it finds) |
 | Rust | `cargo` (`proptest` is added as a dev-dependency) |
 | Go | `go` toolchain |
 | Java | JDK + Maven/Gradle (jqwik) |
 | OpenHarmony components | A provisioned OpenHarmony source tree and its official build prerequisites. Prefer native `host_product` tests; a device-product runner is needed only for components with no host target. |
-| A HarmonyOS app on a real phone | `hdc` (HarmonyOS device connector) and a Kea2 checkout with its virtualenv — see [`pi-pbt kea`](#a-harmonyos-app-on-a-phone-pi-pbt-kea) |
+| A HarmonyOS app on a real phone | `hdc` (HarmonyOS device connector) and a Kea2 checkout with its virtualenv — see the experimental [`pi-pbt kea` guide](kea.md) |
 
 Debian/Ubuntu example for C++ targets:
 
@@ -39,6 +39,21 @@ Arch Linux:
 ```bash
 sudo pacman -S --needed git cmake ninja clang
 ```
+
+### Prepare PBT dependencies
+
+For C++ campaigns, pi-pbt records locally available RapidCheck and GoogleTest
+information in `pbt-out/dependencies.json`. Prepare dependencies in this order:
+**the project's own dependency, an already installed system package, a configured
+system or enterprise-internal repository, then an approved public download**.
+This order avoids unnecessary network access and duplicate copies.
+
+The inventory distinguishes package paths and architecture from actual target
+compatibility. A library installed for the host ABI cannot be linked into an ARM
+target, and an OpenHarmony `host_product` build may still require its own
+toolchain-compatible source, such as `third_party/rapidcheck`. Treat
+`dependencies.json` as preparation evidence, not proof that a dependency will
+link successfully.
 
 ## 2. Download and install
 
@@ -599,75 +614,12 @@ claude --dangerously-load-development-channels server:pi-pbt
 
 Without that flag everything except the push still works.
 
-### A HarmonyOS app on a phone (`pi-pbt kea`)
+### A HarmonyOS app on a phone (`pi-pbt kea`, experimental)
 
-Everything above tests **source code**. `pi-pbt kea` tests something different:
-an **already installed HarmonyOS app on a USB-connected phone**, as a black box
-through its GUI. It drives the Kea2 engine over `hdc` — Kea2 explores the app
-while checking properties that must hold whatever the user does — and reports
-crashes, ANRs and property violations.
-
-Three things must be in place before it runs:
-
-| | |
-|---|---|
-| Phone | connected over USB and unlockable without a PIN; `hdc` on `PATH` (`hdc list targets` shows the serial) |
-| Kea2 | a Kea2 checkout with its virtualenv, i.e. `<kea_home>/.venv/bin/kea2` (or `venv/bin/kea2`) exists |
-| Decompile signals | `<decompile_home>/mined_all/<package>/signals.json`, mined from the app beforehand. Absent → it aborts rather than explore blind |
-
-Configuration is a `kea.config.yml` in the folder you run it from (the "SUT
-folder"). Minimal:
-
-```yaml
-package: com.example.app
-kea_home: /path/to/Kea2
-decompile_home: /path/to/harmony-decompile
-```
-
-Then:
-
-```bash
-cd /path/to/sut-folder     # the folder holding kea.config.yml
-pi-pbt kea                 # interactive
-pi-pbt kea -p              # headless (CI, nohup)
-pi-pbt kea -c              # continue: reuse the previous run's directory
-pi-pbt kea --config other.yml --lang zh
-```
-
-Those four flags are all it takes; everything else is configured in the file:
-
-| Key | Default | Meaning |
-|---|---|---|
-| `package` | **required** | bundle name of the app under test |
-| `kea_home` | `~/github/Kea2` | Kea2 checkout (its virtualenv provides the `kea2` binary) |
-| `decompile_home` | **required** | directory holding `mined_all/<package>/signals.json` |
-| `device` | the connected one | device serial, when more than one phone is attached |
-| `out` | `pbt-out` | artifact directory, relative to the SUT folder |
-| `depth` | from the effort tier | `fast` (short pass) or `deep` (the full property packs) |
-| `events`, `running_minutes`, `throttle` | 15 / 6 / 500 (fast), 70 / 12 / 200 (deep) | exploration budget: max steps, wall-clock minutes, ms between events |
-| `mode_a_packs` | the built-in packs | `deep` only: Python modules holding the property packs to run |
-| `stamp_runs` | `true` | give each run its own timestamped directory; `false` writes flat into `out` |
-| `provider`, `model`, `lang` | — | same meaning as the global options |
-
-Depth is the same "how deep do we dig" knob as the [effort tiers](#how-deep-it-digs-effort-tiers)
-above, so it is not set twice: `depth:` in the config wins, then `PBT_KEA_DEPTH`,
-then the tier (`quick` → `fast`, `standard`/`thorough` → `deep`).
-
-What a run leaves behind:
-
-```text
-pbt-out/
-  LATEST                                    # points at the newest run directory
-  runs/<package>_modeB_<depth>_<stamp>/
-    layout.json      one UI dump of the app
-    kea-run/         Kea2's own output (res_*/result_*.json)
-    LAST_RUN.json    parsed counters: executions, failures, per property
-    REPORT.md        the verdict
-```
-
-A missing config file, a config without `package:`, or missing decompile
-signals stop it with an explanatory message and exit code `1`, before the phone
-is touched.
+`pi-pbt kea` black-box tests an already installed HarmonyOS app on a
+USB-connected phone through its GUI. This mode is experimental; see the
+[bilingual Kea guide](kea.md) for prerequisites, configuration, commands,
+artifacts, and Kea-specific environment variables.
 
 ### Environment variables
 
@@ -677,9 +629,7 @@ is touched.
 | `PBT_SCAN_ROOT=/path` | the repo to scan, for setups where the working directory is a clean copy (git hooks, CI) |
 | `PBT_OH_WORKSPACE=/path` | a pre-built full OpenHarmony source environment (source tree + toolchain + built dependencies) to reuse, instead of working out how to build the component standalone. **Detected automatically** when the repo sits inside such an environment (a parent directory with both `.repo/` and `out/`) — set it explicitly only to override; the startup log prints which one is in use |
 | `PBT_HOOK_TUI=1` | same as `hook-run --tui` / `watch --tui`: run in the interactive interface (needs a terminal; waits for `/quit`) |
-| `PBT_EFFORT=quick\|standard\|thorough` | how deep a campaign digs (see [effort tiers](#how-deep-it-digs-effort-tiers)); also `--effort` on `hook-run` / `watch`, which takes priority. Default: `quick` for `hook-run`/`watch`, `standard` elsewhere. Also sets the `kea` GUI exploration depth when `kea.config.yml` does not pin `depth:` (`quick` → short run, otherwise the long one) |
-| `PBT_KEA_DEPTH=fast\|deep` | [`pi-pbt kea`](#a-harmonyos-app-on-a-phone-pi-pbt-kea) exploration depth, overriding the effort tier; the config's `depth:` still wins |
-| `PBT_KEA_MODE_A_PACKS="pkg.a pkg.b"` | the property packs `pi-pbt kea` runs at `deep`, when the config sets no `mode_a_packs` |
+| `PBT_EFFORT=quick\|standard\|thorough` | how deep a campaign digs (see [effort tiers](#how-deep-it-digs-effort-tiers)); also `--effort` on `hook-run` / `watch`, which takes priority. Default: `quick` for `hook-run`/`watch`, `standard` elsewhere. The experimental Kea mode also uses this tier when its own depth is not configured; see [the Kea guide](kea.md). |
 | `PBT_TEST_JOBS=8` | how wide tests and builds run (see [parallelism](#how-wide-it-runs-parallelism)); a number, `max`, or `auto` (default: the machine's idle cores). `PBT_TEST_JOBS=1` forces serial — required when reconfirming a failure before filing it as a bug |
 | `PBT_CODE_COVERAGE=0` | turn off native code-coverage instrumentation and reporting (see [code coverage](#code-coverage-reports)); on by default, and it degrades silently when a toolchain is missing |
 | `PBT_BARE=1` | run as plain pi: no orchestration extension, no bundled skills, no campaign guards. Exists for A/B-measuring the harness's own contribution (benchmarking); not for normal use |
@@ -746,47 +696,13 @@ Notes:
 - **macOS blocks the binary** — run the `xattr -d com.apple.quarantine` step
   from §2.
 
-### Empty responses and campaign recovery
-
-If a PBT campaign receives an empty/thinking-only response with `stop` or an output-budget `length` stop,
-pi-pbt tries **one** continuation. It shortens older tool-result text only for
-subsequent model requests, retaining user instructions, tool-call/result IDs
-and recent messages. Individual recent successful outputs over 16,000 characters
-are also shortened, retaining 4,000 characters at each end; the saved session remains unchanged. This is
-**not** pi's `/compact` and does not summarize or reconstruct missing facts.
-The retry reads existing artifacts and prioritizes report completion. A
-context estimate at 80% of the configured model window also selects this
-close-out path rather than another coverage/deepening sweep. No model-specific
-token limit is assumed.
-
-`pbt-out/recovery.json` records the attempt, removed character count and outcome.
-`response-resumed` means only that the model responded again, **not** that the
-campaign passed; the normal artifact/schema gates still decide that. A second
-empty response stops recovery (`empty-after-retry`). Cancellation and provider
-errors are not retried by this mechanism. Unperformed sweeps must be recorded
-as incomplete, never counted as executed. If recovery fails, inspect the session
-and model/provider configuration; repeated “continue” prompts do not guarantee
-recovery.
-
-### Local PBT dependencies and enterprise networks
-
-C/C++ campaigns (native source/build markers or an OpenHarmony component) inventory
-known project locations first, then the installed OS package database (dpkg, pacman, RPM, or Homebrew). It writes
-`pbt-out/dependencies.json` and passes the findings to the agent before testing.
-For C++ this currently covers RapidCheck and GoogleTest: installed package
-names, versions, reported file paths and architecture, **not** a guarantee of
-successful linking. Detection is bounded, read-only and makes no network calls.
-
-The acquisition order is: **project dependency → installed system package →
-configured system repositories/internal mirrors → public downloads with
-permission**. For example, an installed `librapidcheck-dev` is evidence to
-inspect and use, not a reason to clone RapidCheck again. The CLI itself does
-not run apt/pacman/dnf/brew installation commands or sudo during inventory.
-Installation remains an explicitly permitted agent/operator action.
-
-OpenHarmony GN builds must still use their project-compatible source/target,
-e.g. `third_party/rapidcheck`. An amd64 system library must not be linked into
-an ARM target, and even host_product may use a different ABI/toolchain from the
-OS package. The inventory marks this distinction instead of claiming “installed”
-means “usable by this target.” Missing inventory or a query failure does not
-prove that the dependency is absent.
+- **The agent says it will call a tool, then stops** — if the model returned an
+  empty response, pi-pbt attempts recovery **once**. Check whether `REPORT.md`
+  and `report.json` are complete; a promise to continue is not a completed run.
+  Look in the selected output directory (`pbt-out/` by default) for
+  `recovery.json`, and in `~/.pi-pbt/agent/sessions/` for the session log. A
+  recovery attempt is not guaranteed, and cancellation or provider errors are
+  not retried by this mechanism. If it still stops, check the configured model's
+  context limit and the provider's error/usage limits, then start a new run with
+  a smaller scope or a suitable model. Keep the logs when reporting the issue;
+  repeatedly sending “continue” is not a fix.
