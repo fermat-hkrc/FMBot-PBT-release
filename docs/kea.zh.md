@@ -26,17 +26,20 @@ kea_home: /path/to/Kea2
 decompile_home: /path/to/harmony-decompile
 ```
 
-然后：
+然后在 SUT 目录运行，或用 `--config` 指向其它位置的配置文件：
 
 ```bash
 cd /path/to/sut-folder     # 放 kea.config.yml 的目录
-pi-pbt kea                 # 交互式
-pi-pbt kea -p              # headless（CI、nohup）
-pi-pbt kea -c              # 续跑：沿用上一次的产物目录
+pi-pbt kea                 # 交互式 TUI
+pi-pbt kea -p              # headless/print 模式（CI、nohup）
+pi-pbt kea -c              # 交互式续跑：沿用最新一次的产物目录
+pi-pbt kea -p -c           # headless 续跑
 pi-pbt kea --config other.yml --lang zh
 ```
 
-命令行参数就这四个，其余全在配置文件里：
+`-p` 选择 headless 模式；`-c` 与它相互独立，会在 `<配置的 out>/LATEST`
+（默认 `pbt-out/LATEST`）指向的目录仍存在时复用该目录。`--config` 选择 YAML 文件，`--lang` 覆盖其中的输出语言。这些是命令行
+参数，其余都在配置文件里：
 
 | 配置项 | 默认值 | 含义 |
 |---|---|---|
@@ -49,7 +52,7 @@ pi-pbt kea --config other.yml --lang zh
 | `events`、`running_minutes`、`throttle` | 15 / 6 / 500（fast），70 / 12 / 200（deep） | 探索预算：最大步数、时长（分钟）、两次事件间隔（毫秒） |
 | `mode_a_packs` | 内置的那几个包 | 仅 `deep`：要跑的性质包所在的 Python 模块 |
 | `stamp_runs` | `true` | 每次运行单独一个带时间戳的目录；`false` 则平铺写进 `out` |
-| `provider`、`model`、`lang` | —— | 与全局选项含义相同 |
+| `provider`、`model`、`lang` | —— | 模型服务商、模型 ID 与产物/过程语言；命令行 `--lang` 覆盖配置里的 `lang` |
 
 depth 和安装指南里的 [effort 档位](installation.zh.md#挖多深effort-档位)是同一个
 “挖多深”的旋钮，不重复设：配置里的 `depth:` 优先级最高，其次
@@ -58,20 +61,30 @@ depth 和安装指南里的 [effort 档位](installation.zh.md#挖多深effort-�
 
 ## 产物与失败
 
-一次运行留下的产物：
+一次带时间戳的运行留下这些产物：
 
 ```text
 pbt-out/
-  LATEST                                    # 指向最新一次运行的目录
+  LATEST                                    # 最新一次运行目录的路径
   runs/<package>_modeB_<depth>_<时间戳>/
     layout.json      一次界面 dump
+    kea/             仅 fast：生成的 prop_*.py
     kea-run/         Kea2 自己的输出（res_*/result_*.json）
-    LAST_RUN.json    解析出来的计数：执行数、失败数、每条性质的统计
-    REPORT.md        结论
+    LAST_RUN.json    解析后的 Kea 计数：执行数、失败/错误数、每条性质统计
+    REPORT.md        给人阅读的 Kea 结论，含 crash/ANR 与 infra-flake/tarpit 说明
 ```
 
-配置文件不存在、配置里没写 `package:`、或反编译信号缺失时，它会打印具体原因
-并以退出码 `1` 结束，不会去动手机。
+`LAST_RUN.json` 是 Kea 模式的机读执行摘要。另一套源码 PBT campaign 会写
+`report.json`：它用受校验的 schema 关联源码性质、bug、构建证据与精确复现命令，
+`hook-run` 还会据此做 CI 门禁。Kea 的工作流**未要求**产出这份源码报告。
+**当前实验性限制：**CLI 收尾却仍共用 hook-run 的报告门禁，所以即使已有 GUI 结果，
+也可能因缺失或无效 `report.json` 返回 `2`。不要只靠这个退出码判断 GUI 结果，
+也不要伪造一份源码报告来满足门禁。Kea 的结果应结合
+`LAST_RUN.json`、`REPORT.md` 与 Kea2 result 文件阅读。若 `stamp_runs: false`，上述
+条目会直接写进配置的 `out` 目录，不创建带时间戳的 `runs/...` 目录。
+
+配置文件不存在、配置里没写 `package:`、或反编译信号缺失时，启动阶段会打印具体
+原因并以退出码 `1` 结束，不会去动手机。启动后应结合 Kea 结果与 stderr 阅读；上述共用源码报告门禁的限制可能影响最终退出码。
 
 ## 环境变量
 

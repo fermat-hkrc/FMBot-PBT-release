@@ -10,8 +10,9 @@ outputs. pi-pbt validates `report.json`; it does **not** currently render
 `REPORT.md` from the JSON. Do not treat one file as an automatically generated
 copy of the other.
 
-`hook-run` requires both files. A missing or invalid `report.json` makes the
-check incomplete (exit `2`), even if `REPORT.md` exists. See the
+`hook-run` requires both files in the same recognized artifact root. A missing
+or invalid `report.json` makes the check incomplete (exit `2`), even if
+`REPORT.md` exists. See the
 [`hook-run` exit-code table](installation.md#ci--git-hook-integration).
 
 Before `report.json`, consumers had to infer a verdict from Markdown files. The
@@ -84,9 +85,9 @@ removed in a real `report.json`.
       "reportPath": "bug_reports/invert-singular.md",   // relative to this file
       "reproduction": {
         "build": "./build.sh --product-name host_product --build-target geometry_pbt_test",
-        "run": "out/host/host_product/tests/geometry_pbt_test --gtest_filter=GeometryPbt.Inverse",
+        "run": "RC_PARAMS='reproduce=BQSThRncAQAA' out/host/host_product/tests/geometry_pbt_test --gtest_filter=GeometryPbt.Inverse",
         "workdir": "/srv/oh",
-        "seed": "8059544712703528762",    // null when the run is deterministic
+        "seed": null,                     // exact RapidCheck replay is in run
         "path": null                      // fast-check replay path; null elsewhere
       }
     }
@@ -108,10 +109,9 @@ Two conventions, enforced in both directions so a consumer never has to guess:
   `bugs[].reproduction.workdir`. A consumer should not need an implicit base
   directory to locate the tested checkout or run the commands.
 - **Artifact files are relative to `report.json` itself** — `bugs[].reportPath`.
-  The artifact directory is relocated as a unit (an in-place run moves
-  `<repo>/pbt-out` into the run directory when it finishes), so an absolute path
-  there would go stale the moment the campaign ended. Resolve it against the
-  directory you read `report.json` from.
+  A managed run may collect or relocate the artifact directory after the
+  campaign, so an absolute bug-report path could go stale. Resolve it against
+  the directory that contains the `report.json` you are reading.
 
 ## Reading it
 
@@ -148,8 +148,8 @@ Under the MCP run manager's default worktree mode, the campaign runs in
 `<runDir>/worktree`, captures its repository changes in `changes.patch`, and
 then deletes that worktree. Before deletion, pi-pbt rewrites worktree paths in
 `report.json`, `REPORT.md`, `PROPERTIES.md`, `COVERAGE.md`, and bug reports to
-the original repository path. Apply `changes.patch` to `run.revision` in that
-repository before using paths to generated tests. See the
+the original repository path. In that repository, check out `run.revision` and
+then apply `changes.patch` before using paths to generated tests. See the
 [MCP run-artifact description](installation.md#delegation-from-another-coding-agent-mcp).
 
 An in-place managed run (selected when `pbt_start` receives `build_cmd`) has no

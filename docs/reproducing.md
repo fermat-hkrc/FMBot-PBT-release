@@ -10,7 +10,7 @@ Every bug in [`pbt-out/report.json`](report-schema.md) carries the commands as
 they were actually run:
 
 ```bash
-jq -r '.bugs[] | "\(.id) \(.summary)\n  build: \(.reproduction.build)\n  run:   \(.reproduction.run)\n  cwd:   \(.reproduction.workdir)\n  seed:  \(.reproduction.seed // "deterministic")"' \
+jq -r '.bugs[] | "\(.id) \(.summary)\n  build: \(.reproduction.build // "no separate build step")\n  run:   \(.reproduction.run)\n  cwd:   \(.reproduction.workdir)\n  seed:  \(.reproduction.seed // "n/a")\n  path:  \(.reproduction.path // "n/a")"' \
   pbt-out/report.json
 ```
 
@@ -23,7 +23,8 @@ machine-readable contract when the files disagree.
 Run the commands from `workdir`. For an MCP run in the default worktree mode,
 pi-pbt has rewritten paths from the deleted worktree to the original repository.
 Check out `run.revision`, apply the managed run's `changes.patch`, and then run
-the recorded commands. See the [MCP run-artifact description](installation.md#delegation-from-another-coding-agent-mcp).
+the recorded commands. See the
+[MCP run-artifact description](installation.md#delegation-from-another-coding-agent-mcp).
 An in-place managed run (one started with `build_cmd`) needs no path rewrite or
 patch relocation. `run` is required to be narrowed to one property or test case,
 not the whole suite.
@@ -74,10 +75,12 @@ so the resulting report records a known command rather than an inferred one.
 
 Two environment variables are worth knowing:
 
-- `PBT_TEST_JOBS=1` pins the run serial. Campaigns run tests in parallel, and a
-  failure that only appears in parallel is a test-isolation defect rather than a
-  bug in the code — the campaign is required to reconfirm serially before
-  filing anything, and you should too.
+- `PBT_TEST_JOBS=1` asks a pi-pbt campaign to use one test/build worker through
+  the runner variables it manages. Use the framework's own serial option when
+  running the recorded command directly. A failure that appears only under
+  parallelism may be test interference or a real concurrency defect; the
+  campaign must reconfirm serially before filing it as a deterministic SUT bug,
+  and you should record which mode reproduces it.
 - Native code-coverage instrumentation is on by default when the required
   toolchain is available, but it never controls whether the test itself can run.
   A plain reproduction does not need coverage. Set `PBT_CODE_COVERAGE=0` if you
@@ -88,15 +91,19 @@ Two environment variables are worth knowing:
 
 ### What to commit
 
-Commit the tests and their build wiring. They are ordinary tests:
+Commit the generated tests plus the project-specific dependency and build wiring
+needed to run them. Use the recorded diff rather than assuming every project
+needs the same files:
 
 - the generated test file(s) named in `properties[].testFile`
-- the build-file change that registers them — one additive block, or one more
-  source on an existing target
-- for OpenHarmony: the `test/pbt/` tree plus the one line added to
-  `bundle.json` `build.test`
-- for proptest: the `proptest-regressions/` files, so a found counterexample
-  stays a permanent regression
+- targeted build-manifest changes that register the recorded test target
+- any property-framework dependency declaration or vendored source the project
+  deliberately adopted
+- for an OpenHarmony component following pi-pbt's supported layout: its new
+  `test/pbt/` files, GN target/aggregation edits, and the targeted `bundle.json`
+  `build.test` registration
+- for proptest: generated `proptest-regressions/` entries that should remain as
+  permanent regressions
 
 ### What not to commit
 
@@ -123,14 +130,15 @@ an external archive or managed-run artifact store is needed across those runs.
 
 ### Regression from here on
 
-Once committed, the tests are the project's, and they run in CI with everything
-else. Nothing about them needs pi-pbt: the property framework is a normal test
-dependency, and the assertions are normal assertions. A later campaign on the
-same module reads `COVERAGE.md`/`FUNCTION_INDEX.md` if they are still around and
-extends the tree rather than duplicating it — but the tests you committed keep
-working whether or not another campaign ever runs.
+Once committed, the tests are the project's. They need the property framework
+and build wiring that the campaign added, but they do not need the pi-pbt
+executable. They run in CI only if the project's normal CI targets include the
+recorded test target; verify that integration rather than assuming every test
+directory is discovered automatically. A later incremental campaign can read
+`COVERAGE.md` and `FUNCTION_INDEX.md` when those artifacts are still available,
+but the committed tests do not depend on a later campaign.
 
-When a property test starts failing months later, that is the point of it. Use
-its `formal` statement from the report to decide whether the code broke or the
-law was wrong; the same triage the campaign applied (`## Bugs Found` vs Design
-Caveats) applies to you.
+When a property test starts failing months later, inspect its assertion and any
+saved report context to decide whether the implementation regressed or the
+property's law was wrong. `properties[].formal` records the law as the campaign
+understood it, but the current source and specification remain authoritative.

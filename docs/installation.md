@@ -8,8 +8,9 @@ large numbers of generated inputs, and reports the bugs it finds with a minimal
 reproducer for each. That style of testing is called **property-based testing**
 (PBT).
 
-Installing it means downloading **one executable file**: no Node.js, no Bun, no
-dependencies to install, and nothing to put next to it.
+Install the archive for your platform. The main executable is self-contained
+(no Node.js or Bun runtime needed); the archive also includes the installer and
+search tools. The project under test still needs its own toolchain (§1).
 
 ## 1. System requirements
 
@@ -20,7 +21,7 @@ present:
 | You test | Install first |
 |---|---|
 | Any repo | `git` (it reads the commit history and diffs) |
-| C / C++ | `cmake` ≥ 3.16, a C++17 compiler (`clang`/`g++`), `make` or `ninja`. See dependency preparation below for GoogleTest/RapidCheck. |
+| C / C++ | `cmake` ≥ 3.16 for CMake projects, a C++17 compiler (`clang`/`g++`), and the project's own build tool (`make`, `ninja`, GN, etc.). See dependency preparation below for GoogleTest/RapidCheck. |
 | Python | `python3` ≥ 3.9 with `pip` (`hypothesis` is installed into the environment it finds) |
 | Rust | `cargo` (`proptest` is added as a dev-dependency) |
 | Go | `go` toolchain |
@@ -63,9 +64,9 @@ Releases page, an internal mirror, or a direct handoff). Each ships with a
 
 | Platform | File | Download |
 |---|---|---|
-| Linux x64 | `pi-pbt-linux-x64.zip` | ~37 MiB |
-| Linux arm64 (aarch64) | `pi-pbt-linux-arm64.zip` | ~37 MiB |
-| macOS Apple Silicon | `pi-pbt-macos-arm64.zip` | ~26 MiB |
+| Linux x64 | `pi-pbt-linux-x64.zip` | ~42 MiB |
+| Linux arm64 (aarch64) | `pi-pbt-linux-arm64.zip` | ~42 MiB |
+| macOS Apple Silicon | `pi-pbt-macos-arm64.zip` | ~31 MiB |
 
 Not sure which Linux one you need? `uname -m` — `x86_64` takes the x64 file,
 `aarch64` the arm64 one.
@@ -73,7 +74,8 @@ Not sure which Linux one you need? `uname -m` — `x86_64` takes the x64 file,
 Every archive extracts to a same-named directory containing `pi-pbt`, an
 `install.sh` installer, and adjacent `tools/fd` and `tools/rg`. Run the bundled
 installer to install the main executable and place its tools where the embedded
-pi tool manager checks them:
+pi-pbt can discover them: beside the installed executable in `/usr/local/bin/tools`
+by default, or `$PI_CODING_AGENT_DIR/bin` when that override is explicitly set.
 
 ```bash
 PLATFORM=linux-x64   # or linux-arm64 / macos-arm64
@@ -81,6 +83,17 @@ sha256sum -c "pi-pbt-${PLATFORM}.zip.sha256"   # optional integrity check
 unzip "pi-pbt-${PLATFORM}.zip"
 cd "pi-pbt-${PLATFORM}"
 ./install.sh
+```
+
+
+**v0.1.18 archive note:** that published installer predates the tool-directory
+fix above. If you use that archive on a machine without system `fd`/`rg`, keep
+the extracted layout and run `./pi-pbt` from it, or after installation run the
+following inside the extracted directory to preserve the adjacent tools:
+
+```bash
+sudo install -Dm755 tools/fd /usr/local/bin/tools/fd
+sudo install -Dm755 tools/rg /usr/local/bin/tools/rg
 ```
 
 Running `fd` or `rg` directly from a regular shell may still report command not
@@ -91,9 +104,9 @@ first.
 
 The arm64 and macOS builds are cross-compiled on an x64 Linux machine; they are
 validated by format (the release job asserts each is really an aarch64 ELF /
-Mach-O arm64), not executed on the target. Command-line use is unaffected; if
-the interactive interface misbehaves, build from source on that machine
-(`npm run build:binary`).
+Mach-O arm64), not executed on the target. This does not prove runtime behavior on those platforms. If a build fails on
+your target, report the OS/architecture, `pi-pbt --version`, and startup log to
+your distribution maintainer.
 
 macOS additionally needs the Gatekeeper quarantine cleared:
 
@@ -131,7 +144,7 @@ agent's skill directory — a thin shell that locates the `pi-pbt` binary on PAT
 at run time, so nothing else is needed. Re-run `skill-install --force` after
 updating pi-pbt to refresh it; `skill-uninstall` removes it from every location
 it was installed into. Then just tell your agent "test the changes I just made" —
-full tutorial in `docs/skill-pi-pbt-dev.md`.
+see the [host-agent skill guide](skill-pi-pbt-dev.md).
 
 ## 3. Configure a model
 
@@ -221,23 +234,51 @@ Run property-based testing on this repository: identify the best targets, write
 properties, run them, and produce bug reports.
 ```
 
-It works through four steps — scan the code for targets, decide what to test,
-write and run the tests, review the results — and writes what it produces to
-`pbt-out/`: the plan (`PLAN.md`), the list of properties (`PROPERTIES.md`), a
-summary (`REPORT.md`), and one `bug_reports/*.md` per confirmed bug, each with a
-minimal reproducer.
+It works through four steps — scan, plan, test, review. One such run is called
+a **campaign**.
+
+### Read the results
+
+A completed **source-code PBT campaign** produces the following artifacts in
+`pbt-out/` by default. With `--out`, use the directory you selected; MCP-managed
+runs expose their artifact locations through `pbt_status` and `pbt_report`.
+
+| Artifact | Who uses it and why |
+|---|---|
+| `REPORT.md` | Start here: human-readable scope, results, findings, limitations and reproduction commands. |
+| `report.json` | **New in v0.1.18:** the machine-readable campaign result for CI, MCP and other integrations. It contains `schemaVersion`, tested revision, build result, properties, bugs and totals. Each bug links to the property that found it and its reproduction commands. |
+| `bug_reports/*.md` | One detailed report per confirmed bug, including the counterexample and replay instructions. |
+| `PROPERTIES.md` / `PLAN.md` | The property ledger and campaign progress; useful for reviewing what was attempted. |
+| `COVERAGE.md` / `COVERAGE_STATUS.md` | Function/testing progress records, not native line-coverage percentages. See [coverage tracking](coverage-tracking.md). |
+
+`report.json` is an output, **not a configuration file to create before running**.
+The agent writes both report views; pi-pbt validates the JSON contract rather
+than automatically generating the whole Markdown report from it. A truncated or
+missing report is an incomplete run, not “zero bugs”. See the
+[report schema](report-schema.md) for fields and the [reproduction guide](reproducing.md)
+for replaying failures and committing generated tests.
+
+Generated tests live in the project's test tree, not in `pbt-out/`. With the
+MCP worktree mode, retrieve `changes.patch` before applying/reviewing the tests;
+in-place runs already leave them in your checkout. Kea GUI runs have a separate
+[artifact format](kea.md#artifacts-and-failures).
+
+Diagnostic files are conditional: `dependencies.json` describes discovered C++
+dependencies, `guards.jsonl` records blocked calls, and `recovery.json` records
+an attempted recovery. Their absence does not by itself make a run incomplete.
 
 All subcommands (`build-run`, `hook-run`, `watch`, `replay`, `scan`, …) are listed
 in [subcommands.md](subcommands.md) ([中文](subcommands.zh.md)).
 
-### From the command line (CI, scripts)
+### From the command line (unattended scripts)
 
 ```bash
 pi-pbt -p "Run property-based testing on this repository; write results to pbt-out/."
 ```
 
-`-p` prints the run and exits; it never waits for input, so it is safe under CI
-runners, git hooks, and `nohup`.
+`-p` prints the run and exits without waiting for terminal input. It is suitable
+for unattended generation, but its exit code is **not a campaign verdict**. For
+a CI check that fails on bugs or incomplete reports, use [hook-run](#ci--git-hook-integration).
 
 You do not pick a mode per project type: there is one entry point, and it works
 the rest out itself. When the target does not build with a plain
@@ -273,8 +314,9 @@ hard-to-build target may be swapped for an easier one.
 | Contract-surface sweep (coverage-gap driven) | none | 1 round | until covered / budget spent |
 
 Defaults differ by entry point, because they answer different questions:
-`hook-run` and `watch` fire on **every commit** and default to `quick`, so a
-commit gate stays fast; everything else defaults to `standard`.
+`hook-run` checks one commit and defaults to `quick`; `watch` also defaults to
+`quick`, but caps each polling batch as described below. Other campaign entries
+default to `standard`.
 
 Set it per run with `--effort`, or for a whole environment with `PBT_EFFORT`:
 
@@ -324,7 +366,7 @@ that belongs to the *tests* (two cases claiming the same port, an xdist-unsafe
 fixture). A campaign is required to re-run any failure serially before calling
 it a bug, and to say in the report which run the verdict came from.
 
-## Code coverage reports
+### Code coverage reports
 
 A campaign also measures **which code actually executed**, using each language's
 own coverage tooling, and leaves that toolchain's native HTML report under
@@ -345,10 +387,10 @@ decision — it cannot be added afterwards). Whatever you set yourself is left
 alone. If a tool is missing, or a build is not instrumented, that row simply
 says so in the report: **coverage never fails a campaign.**
 
-When an OpenHarmony component has no `host_product` target and a configured
-device-product runner is used instead, that cross-compiled run is *not*
-instrumented — the profile data lands in the runner's target filesystem — and
-the report states that rather than reporting zero coverage.
+Coverage requires an instrumented target and profiles readable by the collector.
+For device/emulator runs, arrange profile retrieval to the host; do not infer
+zero coverage from missing files. `host_product` makes local execution simpler,
+but successful tests alone do not prove instrumentation produced usable data.
 
 ### What the report adds to `REPORT.md`
 
@@ -415,7 +457,10 @@ pi-pbt build-run \
 The build command is **your prepared input**, not something the agent figures
 out. `build-run` executes it in `--workdir` first (full log in
 `<out>/build.log`); if it fails, PBT never starts and the process exits `3` —
-fix the tree or the command and re-run. If it succeeds, the campaign starts in
+fix the tree or the command and re-run. This is a **preflight** gate, not a
+post-campaign bug verdict: after preflight succeeds, direct `build-run` uses the
+ordinary pi process exit. Read its reports, or use MCP's `pbt_report` for a
+managed result. If it succeeds, the campaign starts in
 `--repo` under a build contract: rebuilds reuse exactly your command (only an
 existing target may be replaced by the newly generated test target), and a
 failing rebuild is a STOP condition recorded in `REPORT.md`. The agent will not
@@ -494,7 +539,7 @@ Two prerequisites follow from that:
   pi-pbt hook-run <sha> --repo /path/to/worktree
   ```
 
-### Watching a repo: test every new commit
+### Watching a repo: test new commits
 
 Two ways, depending on whether you want to *watch* it work.
 
@@ -517,8 +562,8 @@ automatically. (This also shows up live in the dashboard, below.)
 
 **Unattended — on a machine nobody is watching.** On a CI mirror, a server with
 no pi-pbt open, or where a git hook cannot be installed, run it resident in the
-background instead. It checks for new commits on a timer and tests each one it
-finds, with the results going to its log:
+background instead. It checks for new commits on a timer and tests the selected batch
+with results going to its log:
 
 ```bash
 # watch local commits on the current repo, every 30s (put it in tmux/systemd)
@@ -529,8 +574,10 @@ pi-pbt watch --repo /path/to/repo --fetch --branch master --interval 60 --lang z
 ```
 
 The starting point is the latest commit at startup (commits that already existed
-are not tested retroactively); every new commit is then tested, with the verdict
-(the exit codes above) recorded in the log. All `hook-run` flags (`--out`,
+are not tested retroactively). The CLI watcher tests at most the **newest 10**
+commits per poll, oldest first within that batch; older commits in a burst are
+dropped and logged. It is a monitor, not an every-commit guarantee or a CI gate.
+Each child run's verdict is recorded in the log. All `hook-run` options listed here (`--out`,
 `--workdir`, `--spec`, `--lang`, `--scan-root`, `--effort`, `--provider`,
 `--model`, `--tui`) pass through. `--tui` (or `PBT_HOOK_TUI=1`) runs it in the full
 interactive interface in the same terminal (good for demos, not for CI: it stops
@@ -539,8 +586,8 @@ and waits for `/quit` after each round).
 ### Delegation from another coding agent (MCP)
 
 If your day-to-day agent is Claude Code or Codex, it can delegate PBT to pi-pbt
-over the [Model Context Protocol](https://modelcontextprotocol.io) and **keep
-developing while the campaign runs**. `pi-pbt mcp` serves MCP over stdio from
+over the [Model Context Protocol](https://modelcontextprotocol.io). You can
+**keep editing the same checkout only in worktree mode**, without `build_cmd`. `pi-pbt mcp` serves MCP over stdio from
 the same single binary:
 
 ```bash
@@ -557,16 +604,15 @@ The server exposes six tools:
 |---|---|
 | `pbt_start` | start a campaign on **one immutable commit** (default: current `HEAD`, resolved to a full sha); returns a `run_id` immediately. `build_cmd` / `build_workdir` supply a prepared build command and run the campaign in place (see below) |
 | `pbt_status` | state / phase / queue position / artifact URIs for a run or watch |
-| `pbt_report` | verdict (`passed` / `bugs_found` / `failed`), `REPORT.md` summary, bug-report index, patch presence |
+| `pbt_report` | verdict (`passed` / `bugs_found` / `failed`), report summary, structured result from `report.json`, bug-report index, patch presence |
 | `pbt_cancel` | cancel a queued or running campaign (idempotent) |
 | `pbt_watch_start` | start one campaign per new commit on a branch |
 | `pbt_watch_stop` | stop a watch (by default cancelling its in-flight run) |
 
-The isolation contract is the point: **pi-pbt never tests your changing working
-tree.** Every run snapshots the requested commit into a detached `git worktree`
-and campaigns there, so you can keep editing, committing, and even rewriting the
-same files while it runs — commit a checkpoint, call `pbt_start`, continue
-coding.
+Without `build_cmd`, the run tests an immutable commit in a detached
+`git worktree`, so you can continue editing the original checkout. With
+`build_cmd`, it tests **in place**: do not edit that checkout until the run ends.
+The build-command mode is described below.
 
 Nothing committed yet? Pass `include_uncommitted: true` to `pbt_start` and the
 current uncommitted state (tracked modifications plus untracked non-ignored
@@ -582,7 +628,7 @@ exclusive with `revision`, and the run reports `snapshot: true` plus the
 worktree — their build systems resolve paths, generated headers, and ccache
 state against the real checkout. Passing `build_cmd` to `pbt_start` therefore
 runs the campaign **in place, in the repository itself**, with no worktree
-created. The command runs first and a non-zero exit stops the campaign before
+created. Do not edit the checkout until the run finishes. The command runs first and a non-zero exit stops the campaign before
 any agent work, so a broken build costs you seconds rather than an exploratory
 build hunt. Set `build_workdir` when the build must run from a directory above
 the module under test, e.g. the OpenHarmony source root while the scope is one
@@ -591,7 +637,7 @@ worktree isolation. When the run finishes, any worktree is removed; what survive
 under `~/.pi-pbt/runs/<run-id>/` (override with `PI_PBT_RUNS_DIR`): `run.json`,
 `events.jsonl`, both logs, the campaign artifacts, and a `changes.patch` holding
 everything the campaign wrote in its worktree. All of it is also readable
-through MCP resources at `pbt://runs/<run-id>/...` (`REPORT.md`,
+through MCP resources at `pbt://runs/<run-id>/...` (`REPORT.md`, `report.json`,
 `PROPERTIES.md`, `bug_reports/<slug>.md`, `changes.patch`, …).
 
 Heavy campaigns are serialized: one child at a time by default
@@ -634,7 +680,7 @@ artifacts, and Kea-specific environment variables.
 | `PBT_CODE_COVERAGE=0` | turn off native code-coverage instrumentation and reporting (see [code coverage](#code-coverage-reports)); on by default, and it degrades silently when a toolchain is missing |
 | `PBT_BARE=1` | run as plain pi: no orchestration extension, no bundled skills, no campaign guards. Exists for A/B-measuring the harness's own contribution (benchmarking); not for normal use |
 | `PI_PBT_RUNS_DIR=/path` | where [`pi-pbt mcp`](#delegation-from-another-coding-agent-mcp) persists run state and artifacts (default `~/.pi-pbt/runs`; must be outside the repo under test) |
-| `PBT_OUT_DIR=/path` | where the campaign's artifacts (`PLAN.md`, `PROPERTIES.md`, `COVERAGE.md`, `REPORT.md`, `bug_reports/`) live. **Set automatically** by `build-run` and `hook-run` from their `--out`, so you normally never set it yourself; it exists so the artifact-driven checks read the same directory the campaign writes. Leave it unset for a plain `pi-pbt -p` campaign, which uses `<cwd>/pbt-out`. Do NOT export it in a shell profile: a stale value follows every later campaign, and an inherited one that points somewhere else is exactly the split-brain it was added to prevent |
+| `PBT_OUT_DIR=/path` | where the campaign's artifacts (`PLAN.md`, `PROPERTIES.md`, `COVERAGE.md`, `REPORT.md`, `report.json`, `bug_reports/`) live. **Set automatically** by `build-run` and `hook-run` from their `--out`, so you normally never set it yourself; it exists so the artifact-driven checks read the same directory the campaign writes. Leave it unset for a plain `pi-pbt -p` campaign, which uses `<cwd>/pbt-out`. Do NOT export it in a shell profile: a stale value follows every later campaign, and an inherited one that points somewhere else is exactly the split-brain it was added to prevent |
 | `PBT_MCP_MAX_CONCURRENT=2` | how many MCP-delegated campaigns may run at once (default 1; extra runs queue) |
 | `PBT_PHASE_MODELS='{"plan":"anthropic/claude-opus-5"}'` | route a different model per campaign phase (`scan`, `plan`, `test`, `review`), as `<provider>/<modelId>`. Unset means one model throughout, which is the default. The phase is read off the artifacts under `pbt-out/`, never self-reported by the agent; an unknown model or unconfigured provider silently leaves the campaign on its current model. There is no built-in routing table on purpose: `scan` and `review` are where the campaign decides what the contract is and whether a failure is real, so downgrading them buys tokens at the price of a false pass |
 

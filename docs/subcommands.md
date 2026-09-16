@@ -7,8 +7,9 @@ Every campaign launches through the **`pi-pbt` binary**. A bare
 `hook-run` when the process exit code must decide a job, and use `watch` only as
 a best-effort resident monitor.
 
-`--repo` / `--workdir` default to the current directory. Omit them when you
-already `cd` into the module.
+Where supported, `--repo` defaults to the current directory. `build-run` also
+defaults `--workdir` there; `hook-run` instead uses a clean sibling work
+directory, described below.
 
 | I want to… | Command |
 |---|---|
@@ -34,18 +35,31 @@ and `model` fields. `replay` accepts `--model` only. Kea reads `provider` and
 `kea` is **experimental** GUI testing on a HarmonyOS phone; see the
 [Kea guide](kea.md) for prerequisites, configuration and commands.
 
+Terms used below:
+
+- A **campaign** is one PBT run through Scan → Plan → Test → Review.
+- Its **artifact directory** holds the human result `REPORT.md`, the validated
+  machine result `report.json`, per-bug files under `bug_reports/`, and campaign
+  scratch such as `PLAN.md`, `PROPERTIES.md`, and `COVERAGE.md`.
+- A free-form run, `scan`, `test-all`, and `coverage` use `<cwd>/pbt-out` by
+  default. `build-run` defaults to `<repo>/pbt-out`. `hook-run` deliberately
+  defaults outside the repository at `<parent>/pbt-out-hook`. Commands that
+  accept `--out` use that instead. A campaign may put its files directly in
+  that directory or one `pbt-out/` level below; pi-pbt resolves both layouts
+  when finalizing reports and coverage.
+
 ---
 
 ## Every way to run it
 
-One binary, thirteen entry points. Pick by what you want to happen; the details
+One binary, several entry points. Pick by what you want to happen; the details
 of each are below.
 
 | | Command | What it does |
 |---|---|---|
 | **Run a campaign** | `pi-pbt` | Interactive. Describe the target in chat. |
 | | `pi-pbt -p "<prompt>"` | One campaign, headless. For scripts and unattended generation — **not a CI gate**: the process exit code is pi's, not a verdict, so bugs found do not fail the job. Use `hook-run` for that. |
-| | `pi-pbt build-run --build-cmd "<cmd>"` | Your build command is the gate: it runs first, and a non-zero exit stops the campaign before any agent work. The campaign then runs **in place** — no worktree — because large components cannot build from a detached copy. |
+| | `pi-pbt build-run --build-cmd "<cmd>"` | Your build command is the preflight gate: it runs first, and a non-zero exit stops the campaign before any agent work. After it succeeds, read the artifacts; this command does not apply the `hook-run` verdict exit codes. The campaign runs **in place** — no worktree — because large components cannot build from a detached copy. |
 | | `pi-pbt hook-run <sha>` | One commit's change set. **The exit code is the verdict**: `0` clean, `1` bugs found, `2` no report or a report that fails the schema, `3` the build failed. The sha selects the diff and the prompt — **the caller checks the tree out**. |
 | | `pi-pbt watch` | Polls a branch and runs one campaign per new commit, oldest first — **newest 10 per poll**, older ones dropped (and logged). |
 | | `pi-pbt test-all` | Reads `pbt-out/FUNCTION_INDEX.md` and campaigns over every candidate function in it. |
@@ -60,13 +74,14 @@ of each are below.
 Two that are easy to confuse:
 
 - **`build-run` vs `hook-run`.** `build-run` is for a target whose build you
-  already know — you hand it the command, and it gates the campaign on that
-  command succeeding. `hook-run` is for CI on one commit — it cares about the
-  exit code. They do **not** compose in one invocation: `hook-run` takes no
-  `--build-cmd`, and the campaign decides for itself how to compile. If your
-  repository needs a specific build command, either build it in the CI step
-  before `hook-run` (a warm build tree is what the campaign then reuses) or use
-  `build-run` and read its exit code instead.
+  already know: the command must succeed before the agent starts. Its exit code
+  is **not** the campaign verdict, however; after a successful preflight it is
+  the ordinary pi process exit, so found bugs do not map to `1` and a missing
+  report does not map to `2`. `hook-run` is the CI check whose exit code carries
+  the artifact verdict. The two do **not** compose in one invocation:
+  `hook-run` takes no `--build-cmd`. If a repository needs a specific build,
+  run that build in the CI step before `hook-run`; the campaign can reuse the
+  warm tree.
 - **`-p` vs `mcp`.** `-p` runs the campaign in this process and blocks.
   `mcp` hands the campaign to a separate process and returns a run id
   immediately, so the caller keeps working while it runs.
@@ -141,19 +156,23 @@ Read the result             →  pbt_report  (verdict, REPORT.md snippet, bug UR
 
 #### What to do with the result
 
-`pbt_report` is a summary. The artifacts are MCP **resources**:
+`pbt_report` returns the verdict, a `REPORT.md` snippet, a compact
+`report.json` summary, bug-report URIs, and whether a patch exists. Read the
+full artifacts through these MCP **resources**:
 
 | Resource | For |
 |---|---|
-| `pbt://runs/<id>/REPORT.md` | the human report |
-| `pbt://runs/<id>/report.json` | the machine-readable result |
+| `pbt://runs/<id>/run.json` | run metadata, including `revision` / `baseRevision` |
+| `pbt://runs/<id>/REPORT.md` | the full human report |
+| `pbt://runs/<id>/report.json` | the full machine-readable result |
 | `pbt://runs/<id>/bug_reports/<file>.md` | one file per bug |
-| `pbt://runs/<id>/changes.patch` | **the generated tests** |
+| `pbt://runs/<id>/changes.patch` | **the generated repository changes** (normally tests and build wiring) |
 
-`changes.patch` is the part people miss. In worktree mode the campaign wrote its
-tests inside a worktree that is **deleted when the run ends**, so the generated
-tests are never in your checkout — the patch is how they get there. It is a
-resource, and also a file on disk under the run directory:
+`changes.patch` is the part people miss. In worktree mode the campaign wrote
+repository changes inside a worktree that is **deleted when the run ends**, so
+the generated tests and their build registration are never in your checkout —
+the patch is how they get there. It is a resource, and also a file on disk under
+the run directory:
 
 ```bash
 # ~/.pi-pbt/runs/<run_id>/changes.patch  (PI_PBT_RUNS_DIR overrides the root)
@@ -162,10 +181,14 @@ git apply --stat ~/.pi-pbt/runs/<run_id>/changes.patch   # what it touches
 git apply        ~/.pi-pbt/runs/<run_id>/changes.patch   # then review and commit
 ```
 
-Apply it at the revision the run reports (`report.json`'s `run.revision`): the
-patch is a binary diff against exactly that commit. Ask the agent for it in
-plain language if you prefer — "apply the changes.patch from that run to my
-checkout" — it can read the resource and write the files.
+Apply it to the revision in the MCP run record (`pbt_status` / `pbt_report`
+field `revision`, also stored in `pbt://runs/<id>/run.json`). The patch is a
+binary diff against that exact snapshot commit. For an `include_uncommitted`
+run, `base_revision` is only the HEAD on which the snapshot was created; it is
+**not** the patch base. The campaign's `report.json` should carry the same tested
+revision, but the run record is the source of truth for applying this patch.
+Ask the agent in plain language if you prefer — "apply the changes.patch from
+that run to my checkout" — it can read the resources and write the files.
 
 In-place runs (`build_cmd` set) produce no patch — the tests are already in your
 checkout.
@@ -191,9 +214,9 @@ does not rediscover what you already confirmed.
 | Situation | Use | Why |
 |---|---|---|
 | The gate on a merge request | **`hook-run <sha>`** | Built for exactly this, and **the exit code is the verdict** — `0` clean, `1` bugs found, `2` no report or a report that fails the schema, `3` the build failed. Nothing else to interpret. Check the commit out first: the sha selects the diff and the prompt, not the tree (below). |
-| The repository needs a specific build command | **Build it in the step before** | `hook-run` has no `--build-cmd`; the campaign compiles the SUT itself and reuses a warm build tree. Run your CI's own build first, then `hook-run`. Where the build must *gate* the campaign, use `build-run --build-cmd` and read its exit code instead. |
-| Machine-readable result for a bot or dashboard | **`pbt-out/report.json`** | Schema-validated, with every bug linked to the property that found it and pasteable reproduction commands. See [report-schema.md](report-schema.md). |
-| What to attach to the MR | `REPORT.md` + `report.json` | Not the whole `pbt-out/` — that is campaign scratch, see [reproducing.md](reproducing.md). |
+| The repository needs a specific build command | **Build it in the step before** | `hook-run` has no `--build-cmd`; the campaign compiles the SUT itself and can reuse a warm build tree. Run your CI's own build first, then `hook-run`. Do not substitute `build-run` as the verdict gate: it gates only the preflight build. |
+| Machine-readable result for a bot or dashboard | **`report.json` in the selected artifact directory** | Schema-validated, with every bug linked to the property that found it and pasteable reproduction commands. A plain run normally uses `pbt-out/report.json`; `--out <dir>` redirects it, and managed MCP runs expose it as `pbt://runs/<id>/report.json`. See [report-schema.md](report-schema.md). |
+| What to attach to the MR | `REPORT.md` + `report.json` from that same directory | Not the whole artifact directory — it is campaign scratch. See [reproducing.md](reproducing.md). |
 
 Do **not** put these in a pipeline: `watch` (long-lived by design), `dashboard`
 (a UI), the interactive mode, and `replay` (a developer simulation, not PBT).
@@ -223,7 +246,7 @@ pi-pbt -p "/skill:pbt-workflow 对当前仓库做性质测试,产物写到 pbt-o
 
 ---
 
-## `build-run` — your build command gates PBT
+## `build-run` — preflight with your build command
 
 ```text
 pi-pbt build-run --build-cmd "<command>"
@@ -234,11 +257,18 @@ pi-pbt build-run --build-cmd "<command>"
   [--provider <p>] [--model <m>] [--tui]
 ```
 
-1. Runs `--build-cmd` in `--workdir` (log: `<repo>/pbt-out/build.log`).
+1. Runs `--build-cmd` in `--workdir`. The log is `<out>/build.log`;
+   `--out` defaults to `<repo>/pbt-out`.
 2. Non-zero → **exit 3**, PBT never starts.
 3. Zero → campaign in `--repo`. Rebuilds may **only reuse that command**
    (replacing its existing target with the generated test target when needed).
    No build-system switch and no derived alternative build.
+
+That `3` describes only the preflight failure. Once the campaign starts,
+`build-run` has ordinary pi exit behavior: it does not inspect `REPORT.md` /
+`report.json` and does not translate bugs, missing reports, or a build failure
+recorded later in `report.json` into the `hook-run` `1` / `2` / `3` verdicts.
+Use the artifacts to read the result, or use `hook-run` when CI needs a verdict.
 
 `--scope` is a **path** (file or directory). `--func` is one **symbol**; it
 **requires `--scope` and must appear after `--scope`**. Without `--func`, every
@@ -293,11 +323,15 @@ pi-pbt hook-run <sha>
   [--repo <path>] [--out <dir>] [--workdir <dir>] [--spec <file>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
+  [--provider <p>] [--model <m>]
   [--scope <path>] [--run-id <id>] [--tui]
 ```
 
-Cleans workdir + `pbt-out`, scans, runs PBT on that commit's change set.
-Default effort **quick**.
+Deletes and recreates `--workdir` and `--out`, then scans and runs PBT on that
+commit's change set. Defaults are sibling directories of `--repo`:
+`<parent>/pbt-hook-work` and `<parent>/pbt-out-hook`. With `--scan-root <root>`,
+they instead default to **children** `<root>/pbt-hook-work` and
+`<root>/pbt-out-hook`, not siblings of that root or `<repo>/pbt-out`. Default effort **quick**.
 
 Exit codes — this is the whole interface for a CI job:
 
@@ -340,7 +374,8 @@ pi-pbt watch
   [--repo <path>] [--interval <sec>] [--fetch] [--branch <name>]
   [--out <dir>] [--workdir <dir>] [--spec <file>]
   [--lang zh] [--scan-root <dir>]
-  [--cov-mode incremental|full] [--effort …] [--tui]
+  [--cov-mode incremental|full] [--effort …]
+  [--provider <p>] [--model <m>] [--tui]
 ```
 
 Spawns `hook-run` per new commit, oldest first. Default effort **quick**.
@@ -384,7 +419,8 @@ No LLM for `scan` / `coverage`.
 ```text
 pi-pbt scan [--dir <path>] [--out <dir>] [--lang <id>] [--module <name>]
 pi-pbt test-all [--dir <path>] [--out <dir>] [--provider <p>] [--model <m>]
-pi-pbt coverage
+pi-pbt coverage [--list | --json] [--module <name>]
+  [--diff <sha>] [--project-dir <path>]
 ```
 
 `scan` writes `pbt-out/FUNCTION_INDEX.md`. Language detection only looks two
@@ -397,6 +433,10 @@ pi-pbt scan --dir utils/codec --out ./pbt-out
 ```
 
 `test-all` PBT-campaigns every candidate in that index (scans first if missing).
+`coverage` always reads `<cwd>/pbt-out`; `--project-dir` changes only the
+repository used to compute `--diff`, not the artifact directory. `--list` and
+`--json` are mutually exclusive. Full coverage semantics and artifact formats:
+[coverage-tracking.md](coverage-tracking.md).
 
 ---
 

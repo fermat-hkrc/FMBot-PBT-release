@@ -13,8 +13,8 @@ separate repository; here you get the executables and the installation guide.
 
 ## Download
 
-One self-contained executable — no Node.js, no Bun, nothing to install
-alongside it.
+A self-contained main executable — no Node.js or Bun runtime. The archive also
+includes an installer and search tools; tested projects need their own toolchain.
 
 | Platform | Download | Checksum |
 |---|---|---|
@@ -43,6 +43,12 @@ Then configure a model and start a run — see the
 the language under test needs, CI and git-hook integration, and the live
 dashboard.
 
+A completed source campaign writes `REPORT.md` for people and **`report.json`**
+for CI/integrations, plus detailed bug reports. Start with the
+[results guide](docs/installation.md#read-the-results); use the
+[CLI reference](docs/subcommands.md) to choose a mode and the
+[reproduction guide](docs/reproducing.md) to keep the generated tests.
+
 Found a problem? Open an [issue](https://github.com/fermat-hkrc/FMBot-PBT-release/issues).
 
 ---
@@ -69,10 +75,15 @@ pi-pbt --help
 压缩包里还带了 agent 用到的两个搜索工具(`fd`、`rg`),所以在没装它们的机器上也
 能用;放置位置见安装指南。
 
-只有一个自包含的可执行文件,不需要 Node.js、Bun 或任何依赖。不确定该下哪个
+主程序是自包含二进制，不需要 Node.js/Bun；发行包另带安装脚本和搜索工具，
+被测项目仍需自己的工具链。不确定该下哪个
 Linux 版本就看 `uname -m`:`x86_64` 用 x64,`aarch64` 用 arm64。
 
 接下来配置模型、跑第一次测试,见 **[安装指南](docs/installation.zh.md)** —— 里面
 还写了被测语言需要的工具链、CI 与 git hook 接入方式,以及实时看板。
+
+完成源码测试后，`REPORT.md` 给人看，**`report.json`** 给 CI/程序读取，另有逐个问题的
+详细报告。先看[运行后看什么](docs/installation.zh.md#运行后看什么)，选运行方式看
+[子命令参考](docs/subcommands.zh.md)，固化生成用例看[复现与回归](docs/reproducing.md)。
 
 有问题请提 [issue](https://github.com/fermat-hkrc/FMBot-PBT-release/issues)。

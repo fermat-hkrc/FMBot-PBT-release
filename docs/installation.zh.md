@@ -6,8 +6,8 @@ pi-pbt 是一个 AI agent:你把它指向一个代码仓库,它自己读代码�
 **应该始终成立的规律**,写出测试去大量随机地验证这些规律,把发现的 bug 连同
 最小复现一起写成报告。这种测法叫**性质测试**(property-based testing,PBT)。
 
-安装就是下载**一个可执行文件**:不需要装 Node.js、Bun 或任何依赖,也不需要
-在它旁边放别的文件。
+下载对应平台的发行包即可安装。主程序是自包含二进制，不需要 Node.js/Bun；
+压缩包还包含安装脚本和搜索工具。被测项目仍须准备自己的工具链（见 §1）。
 
 ## 1. 系统要求
 
@@ -17,7 +17,7 @@ pi-pbt 自己没有依赖。但它会**真实编译并运行它写出来的测�
 | 被测目标 | 需要预装 |
 |---|---|
 | 任何仓库 | `git`(要读提交历史和改动) |
-| C / C++ | `cmake` ≥ 3.16、C++17 编译器(`clang`/`g++`)、`make` 或 `ninja`。GoogleTest/RapidCheck 的准备方式见下文。 |
+| C / C++ | C++17 编译器（`clang`/`g++`）和项目本身的构建工具（`make`、`ninja`、GN 等）；CMake 项目需 `cmake` ≥ 3.16。GoogleTest/RapidCheck 的准备方式见下文。 |
 | Python | `python3` ≥ 3.9 + `pip`(会在探测到的环境里安装 `hypothesis`) |
 | Rust | `cargo`(会加 `proptest` 开发依赖) |
 | Go | `go` 工具链 |
@@ -56,16 +56,17 @@ C++ campaign 会把本机可用的 RapidCheck 和 GoogleTest 信息写入
 
 | 平台 | 文件 | 下载体积 |
 |---|---|---|
-| Linux x64 | `pi-pbt-linux-x64.zip` | 约 37 MiB |
-| Linux arm64(aarch64) | `pi-pbt-linux-arm64.zip` | 约 37 MiB |
-| macOS Apple Silicon | `pi-pbt-macos-arm64.zip` | 约 26 MiB |
+| Linux x64 | `pi-pbt-linux-x64.zip` | 约 42 MiB |
+| Linux arm64(aarch64) | `pi-pbt-linux-arm64.zip` | 约 42 MiB |
+| macOS Apple Silicon | `pi-pbt-macos-arm64.zip` | 约 31 MiB |
 
 不确定该拿哪个 Linux 版本?跑 `uname -m` —— 显示 `x86_64` 用 x64 那个,显示
 `aarch64` 用 arm64 那个。
 
 每个压缩包解出来都是一个同名目录，其中包含 `pi-pbt`、安装脚本 `install.sh`、同级
 `tools/fd` 和 `tools/rg`。运行随包安装脚本即可安装主程序，并把工具放到嵌入式 pi
-工具管理器检查的目录：
+可发现的目录：默认与安装后的主程序相邻，位于 `/usr/local/bin/tools`；显式设置
+`PI_CODING_AGENT_DIR` 时使用 `$PI_CODING_AGENT_DIR/bin`。
 
 ```bash
 PLATFORM=linux-x64   # 或 linux-arm64 / macos-arm64
@@ -75,14 +76,22 @@ cd "pi-pbt-${PLATFORM}"
 ./install.sh
 ```
 
+
+**v0.1.18 发行包注意：**该已发布安装脚本尚不含上述工具目录修复。机器未装系统
+`fd`/`rg` 时，可保留解压目录直接运行其中的 `./pi-pbt`；或安装后在解压目录执行：
+
+```bash
+sudo install -Dm755 tools/fd /usr/local/bin/tools/fd
+sudo install -Dm755 tools/rg /usr/local/bin/tools/rg
+```
+
 普通 shell 中直接执行 `fd` 或 `rg` 仍可能提示找不到，这是正常的，无需额外修改
 `PATH`。在 Windows 上解压会丢掉 Unix 权限位；若文件中转过 Windows 机器，先给
 `pi-pbt`、`install.sh`、`tools/fd` 和 `tools/rg` 执行 `chmod +x`。
 
 arm64 和 macOS 版都是在 x64 Linux 上交叉编译出来的,只做了格式校验(发布流程
-会断言产物确实是 aarch64 ELF / Mach-O arm64),没有在目标机器上实跑。命令行
-方式不受影响;若交互式界面表现异常,请在那台机器上从源码构建
-(`npm run build:binary`)。
+会断言产物确实是 aarch64 ELF / Mach-O arm64),没有在目标机器上实跑，不能据此保证目标平台的运行行为。若遇到问题，请向发行方反馈
+OS/架构、`pi-pbt --version` 和启动日志。
 
 macOS 还需清除 Gatekeeper 隔离标记:
 
@@ -117,7 +126,7 @@ pi-pbt skill-uninstall               # 卸载（参数同上）
 一个薄壳,运行时从 PATH 解析 `pi-pbt` 二进制,无需其他配置。更新 pi-pbt 后重跑
 `skill-install --force` 即可刷新;`skill-uninstall` 从所有已安装位置移除。
 之后直接对你的 agent 说"测一下我刚才的改动"即可,
-完整教程见 `docs/skill-pi-pbt-dev.zh.md`。
+完整教程见 [宿主 agent skill 用法](skill-pi-pbt-dev.zh.md)。
 
 ## 3. 配置模型
 
@@ -199,20 +208,44 @@ pi-pbt
 对当前仓库做性质测试(PBT):找出最值得测的目标,写性质并运行,产出 bug 报告。
 ```
 
-它会依次完成四步 —— 扫描代码找目标、定测试计划、写测试并跑、复核结果 ——
-把产物写到 `pbt-out/` 目录:测试计划 `PLAN.md`、性质清单 `PROPERTIES.md`、
-总结 `REPORT.md`,以及每个确认的 bug 一份 `bug_reports/*.md`(附最小复现)。
+它会依次完成扫描、计划、测试、复核四步；这样的一次完整运行称为 **campaign（战役）**。
+
+### 运行后看什么
+
+完成一次**源码性质测试战役**后，默认在 `pbt-out/` 查找下列产物。指定了 `--out` 就去
+所选目录；MCP 托管运行的产物位置由 `pbt_status` / `pbt_report` 返回。
+
+| 产物 | 谁看、有什么用 |
+|---|---|
+| `REPORT.md` | 用户先看这份：被测范围、结果、问题、限制和复现命令。 |
+| `report.json` | **v0.1.18 新增的结构化战役结果**，供 CI、MCP 和其他程序读取；包含 `schemaVersion`、被测提交、构建结果、性质、问题和统计。每个问题都关联发现它的性质与复现命令。 |
+| `bug_reports/*.md` | 每个确认的问题一份详细报告，包含反例与重放步骤。 |
+| `PROPERTIES.md` / `PLAN.md` | 性质清单与战役进度，便于检查测了什么、哪些还没完成。 |
+| `COVERAGE.md` / `COVERAGE_STATUS.md` | 函数/测试进度登记，不是原生行覆盖率百分比；见[覆盖率跟踪](coverage-tracking.md)。 |
+
+`report.json` 是**运行产物，不是用户开跑前要填的配置**。两份报告由 agent 编写，pi-pbt
+校验 JSON 契约；并没有把整个 Markdown 报告从 JSON 自动渲染出来。缺失或截断的报告
+表示未完成，不能当成“零问题”。字段解释见[报告 schema](report-schema.md)；重放失败、
+取回生成用例及固化入库见[复现与回归指南](reproducing.md)。
+
+生成的测试位于项目自己的测试树，不在 `pbt-out/`。MCP worktree 模式要先取回
+`changes.patch` 再应用、审阅测试；就地模式的测试已经留在 checkout 中。Kea GUI
+运行使用另一套[产物格式](kea.zh.md#产物与失败)。
+
+诊断文件按需出现：`dependencies.json` 是 C++ 依赖清单，`guards.jsonl` 记录工具拦截，
+`recovery.json` 记录恢复尝试；缺少这些可选诊断本身不表示战役失败。
 
 全部子命令(`build-run`、`hook-run`、`watch`、`replay`、`scan` …)见
 [subcommands.zh.md](subcommands.zh.md)([English](subcommands.md))。
 
-### 命令行方式(CI、脚本)
+### 命令行方式（无人值守脚本）
 
 ```bash
 pi-pbt -p "对当前仓库做性质测试(PBT),产物写到 pbt-out/。"
 ```
 
-`-p` 跑完即退出,不会卡住等输入 —— 在 CI、git hook、`nohup` 后台下都安全。
+`-p` 跑完退出、不等待终端输入，适合无人值守生成；但其退出码**不是战役裁决**。
+需要在发现 bug 或报告不完整时让 CI 失败，请用 [hook-run](#ci--git-hook-集成)。
 
 你不需要按项目类型挑选什么模式:入口只有一个,后面的事它自己判断。目标无法
 用简单的 `cmake`/`cargo`/`pytest` 构建时(比如大型操作系统或 monorepo 里的
@@ -243,9 +276,8 @@ pi-pbt -p "/skill:pbt-workflow 对当前仓库做性质测试(PBT),目标是找�
 | 难编译时换个容易的目标 | 允许 | 允许,但要在报告里写明 | 禁止 |
 | 契约面清扫(coverage 缺口驱动) | 无 | 1 轮 | 扫到覆盖完或预算耗尽 |
 
-默认值按入口区分,因为它们回答的是不同的问题:`hook-run` 和 `watch` 是
-**每个提交**都触发的,默认 `quick`,保证提交门禁足够快;其他入口默认
-`standard`。
+默认值按入口区分：`hook-run` 检查单次提交，默认 `quick`；`watch` 同样默认
+`quick`，但每次轮询有批次上限，见下文。其他战役入口默认 `standard`。
 
 单次运行用 `--effort`,整个环境用 `PBT_EFFORT`:
 
@@ -288,7 +320,7 @@ pi-pbt 会把它驱动的每个测试运行器和构建,都按机器**当前空�
 (两个用例抢同一个端口、xdist 不安全的 fixture)。campaign 被要求在把任何失败
 判定为 bug 之前先串行重跑一次,并在报告里写明结论来自哪一次运行。
 
-## 代码覆盖率报表
+### 代码覆盖率报表
 
 campaign 还会测量**代码到底执行了哪些**,用的是每种语言自带的覆盖率工具,并把
 该工具**原生的 HTML 报表**放在 `pbt-out/code-coverage/` 下,再用一个
@@ -307,9 +339,9 @@ campaign 还会测量**代码到底执行了哪些**,用的是每种语言自带
 (覆盖率是构建期决定的,事后补不上)。你自己设过的值一律保留不动。工具缺失、
 构建没插桩,报表里就如实写明这一行没测到:**覆盖率永远不会让 campaign 失败。**
 
-当 OpenHarmony 组件没有 `host_product` 目标、改用已配置好的 device-product
-runner 时,该交叉编译运行**不做**插桩 —— profile 数据会落在 runner 的目标文件
-系统里 —— 报表会写明这一点,而不是报成零覆盖。
+覆盖率需要目标确实插桩，且收集器能读取生成的 profile。设备/模拟器运行时，应安排
+把数据取回 host；文件缺失不能解释为零覆盖。`host_product` 更便于本地执行，但测试
+成功本身不证明已经生成可用的覆盖率数据。
 
 ### 报表给 `REPORT.md` 补上了什么
 
@@ -372,6 +404,10 @@ pi-pbt build-run \
 以"构建契约"运行:重建只允许复用这条命令(需要时只能把现存目标换成新生成的测试
 目标),重建失败是 STOP 条件、原样记入 `REPORT.md`。agent 不会切换构建系统或推导
 替代编译方式。`--scope` 把 campaign 限制在该路径;只有全仓才省略。
+
+注意：`build-run` 的退出码 3 只表示启动前构建失败。preflight 成功后，它沿用普通
+pi 进程退出行为，不会把发现 bug / 缺失报告映射成 hook-run 的 1/2；请读报告，或通过
+MCP 的 `pbt_report` 读取托管裁决。
 
 `--scope` 与 `--func` 是写进 prompt 的范围限制(不是沙箱):
 
@@ -438,7 +474,7 @@ prompt;真正被编译、被测的是 `--repo` 工作树里当下的代码。把
   pi-pbt hook-run <sha> --repo /path/to/worktree
   ```
 
-### 盯着仓库:每来一个新提交就测一遍
+### 盯着仓库：测试新提交
 
 两种方式,取决于你要不要**亲眼看到**它测。
 
@@ -457,7 +493,7 @@ prompt;真正被编译、被测的是 `--repo` 工作树里当下的代码。把
 (这个会话也会同步显示在下面的 dashboard 里。)
 
 **无人值守 —— 没人盯着的机器。** CI 镜像、没开 pi-pbt 的服务器、或装不了
-git hook 的场景,改成常驻后台运行:它定时检查新提交,每来一个就测一遍,
+git hook 的场景,改成常驻后台运行:它定时检查新提交，测试选中的批次，
 结果打在日志里:
 
 ```bash
@@ -468,15 +504,16 @@ pi-pbt watch --repo /path/to/repo --lang zh --provider xai-oauth --model grok-4.
 pi-pbt watch --repo /path/to/repo --fetch --branch master --interval 60 --lang zh --provider xai-oauth --model grok-4.5
 ```
 
-起点是启动那一刻的最新提交(此前已有的提交不会补测);之后每来一个新提交
-测一遍,结论(上面那套退出码)打在日志里。`hook-run` 的全部参数
+起点是启动时的最新提交，已有提交不补测。CLI watch 每轮最多取**最新 10 个**提交，
+在这一批内从旧到新测试；超出的旧提交会丢弃并记日志。它是监视器，不保证每个提交都测，
+也不是 CI 门禁。每个子运行的结论记录在日志里。`hook-run` 的全部参数
 (`--out`/`--workdir`/`--spec`/`--lang`/`--scan-root`/`--effort`/`--provider`/`--model`/`--tui`)原样透传。`--tui`(或 `PBT_HOOK_TUI=1`)会在同一个终端里用完整的交互式界面跑(适合演示,别用在 CI:每轮结束后它会停下来等你 `/quit`)。
 
 ### 让别的 coding agent 委派测试(MCP)
 
 如果你日常用的是 Claude Code 或 Codex,可以让它通过
 [Model Context Protocol](https://modelcontextprotocol.io) 把性质测试委派给
-pi-pbt,**测试跑着的同时继续开发**。`pi-pbt mcp` 用同一个单文件二进制以 stdio
+pi-pbt。只有**不传 `build_cmd` 的 worktree 模式**才能边测边改同一个 checkout。`pi-pbt mcp` 用同一个单文件二进制以 stdio
 方式提供 MCP 服务:
 
 ```bash
@@ -493,14 +530,14 @@ codex mcp add pi-pbt -- pi-pbt mcp
 |---|---|
 | `pbt_start` | 对**一个不可变的 commit**(默认当前 `HEAD`,解析成完整 sha)发起 campaign;立即返回 `run_id`。`build_cmd` / `build_workdir` 传入已备好的构建命令,并让 campaign 就地运行(见下) |
 | `pbt_status` | 查询某个 run 或 watch 的状态/阶段/排队位置/产物 URI |
-| `pbt_report` | 结论(`passed` / `bugs_found` / `failed`)、`REPORT.md` 摘要、bug 报告清单、是否有 patch |
+| `pbt_report` | 结论(`passed` / `bugs_found` / `failed`)、报告摘要、来自 `report.json` 的结构化结果、bug 报告清单、是否有 patch |
 | `pbt_cancel` | 取消排队或进行中的 campaign(幂等) |
 | `pbt_watch_start` | 监听分支,每来一个新 commit 发起一次 campaign |
 | `pbt_watch_stop` | 停止监听(默认连带取消进行中的 run) |
 
-隔离契约是关键:**pi-pbt 永远不测你还在改的工作树。** 每个 run 都把指定的
-commit 快照进一个独立的 `git worktree` 再开测,所以你可以继续编辑、提交、
-甚至改同一批文件 —— 提交一个 checkpoint、调 `pbt_start`、接着写代码就行。
+不传 `build_cmd` 时，运行在 detached `git worktree` 里测试不可变提交，可继续编辑
+原 checkout。传入 `build_cmd` 则**就地测试**，运行结束前不要编辑这个 checkout；
+构建命令模式见下文。
 
 代码还没 commit?给 `pbt_start` 传 `include_uncommitted: true`,它会先把当前
 未提交状态(已跟踪文件的修改 + 未跟踪且未被 ignore 的新文件)冻结成一个不可变
@@ -512,7 +549,7 @@ commit 快照进一个独立的 `git worktree` 再开测,所以你可以继续�
 **一个刻意的例外:`build_cmd`。** 大型组件(OpenHarmony、AOSP、monorepo 子树)
 无法在独立 worktree 里构建 —— 它们的构建系统按真实 checkout 解析路径、生成头文件
 和 ccache 状态。因此给 `pbt_start` 传 `build_cmd` 时,campaign **就地在仓库本身
-运行,不创建 worktree**。该命令先跑,非零退出会在任何 agent 工作之前停掉 campaign,
+运行,不创建 worktree**。结束前不要编辑这个 checkout。该命令先跑,非零退出会在任何 agent 工作之前停掉 campaign,
 于是构建坏了只花几秒,而不是一轮探索式编译。构建需要在被测模块之上的目录执行时
 (例如 scope 是单个组件、构建要在 OpenHarmony 源码根跑)用 `build_workdir` 指定。
 你知道自己的构建命令就用它;不传则保持 worktree 隔离。
@@ -520,7 +557,7 @@ commit 快照进一个独立的 `git worktree` 再开测,所以你可以继续�
 run 结束后 worktree 被清掉;留下的东西在 `~/.pi-pbt/runs/<run-id>/`
 (用 `PI_PBT_RUNS_DIR` 改位置):`run.json`、`events.jsonl`、两份日志、campaign
 产物,以及一份 `changes.patch`(campaign 在自己 worktree 里写下的全部内容)。
-这些也都能通过 MCP resources 按 `pbt://runs/<run-id>/...` 读取(`REPORT.md`、
+这些也都能通过 MCP resources 按 `pbt://runs/<run-id>/...` 读取(`REPORT.md`、`report.json`、
 `PROPERTIES.md`、`bug_reports/<slug>.md`、`changes.patch` 等)。
 
 重量级 campaign 串行执行:默认同时只跑一个子进程(`PBT_MCP_MAX_CONCURRENT`
@@ -558,7 +595,7 @@ claude --dangerously-load-development-channels server:pi-pbt
 | `PBT_CODE_COVERAGE=0` | 关掉原生代码覆盖率的插桩与报表(见[代码覆盖率报表](#代码覆盖率报表));默认开启,工具链缺失时静默降级 |
 | `PBT_BARE=1` | 以纯 pi 运行:不加载编排扩展、内置技能与 campaign 守卫。用于 A/B 度量 harness 自身贡献(benchmark 场景),非日常使用 |
 | `PI_PBT_RUNS_DIR=/path` | [`pi-pbt mcp`](#让别的-coding-agent-委派测试mcp) 保存 run 状态与产物的目录(默认 `~/.pi-pbt/runs`;必须在被测仓库之外) |
-| `PBT_OUT_DIR=/path` | campaign 产物(`PLAN.md`、`PROPERTIES.md`、`COVERAGE.md`、`REPORT.md`、`bug_reports/`)所在目录。`build-run` 与 `hook-run` 会用各自的 `--out` **自动设置**,正常情况下你不需要自己设;它的存在是为了让产物驱动的检查读到与 campaign 写入相同的目录。普通 `pi-pbt -p` 不设它,用 `<cwd>/pbt-out`。**不要写进 shell profile**:残留的值会跟着之后每一次 campaign,而继承来的、指向别处的值正是它要防的那种「两份账本」 |
+| `PBT_OUT_DIR=/path` | campaign 产物(`PLAN.md`、`PROPERTIES.md`、`COVERAGE.md`、`REPORT.md`、`report.json`、`bug_reports/`)所在目录。`build-run` 与 `hook-run` 会用各自的 `--out` **自动设置**,正常情况下你不需要自己设;它的存在是为了让产物驱动的检查读到与 campaign 写入相同的目录。普通 `pi-pbt -p` 不设它,用 `<cwd>/pbt-out`。**不要写进 shell profile**:残留的值会跟着之后每一次 campaign,而继承来的、指向别处的值正是它要防的那种「两份账本」 |
 | `PBT_MCP_MAX_CONCURRENT=2` | MCP 委派的 campaign 同时最多跑几个(默认 1,多余的排队) |
 | `PBT_PHASE_MODELS='{"plan":"anthropic/claude-opus-5"}'` | 按 campaign 相位(`scan`、`plan`、`test`、`review`)路由不同模型,写作 `<provider>/<modelId>`。不设则全程一个模型,这是默认。相位从 `pbt-out/` 下的产物读出,不由 agent 自报;模型不存在或 provider 未配置时静默保持当前模型。刻意不内置路由表:`scan` 与 `review` 是决定契约是什么、以及失败是否成立的地方,给它们降级是拿假绿换 token |
 

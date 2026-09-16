@@ -2,43 +2,59 @@
 
 [English](subcommands.md)
 
-所有 campaign 都通过 **`pi-pbt` 二进制**启动。子命令后面的 flag 在这里解析;
-光跑 `pi-pbt -p "…"` 是自由 prompt(agent 自己选 cmake 还是 gn)。
+所有 campaign 都通过 **`pi-pbt` 二进制**启动。光跑
+`pi-pbt -p "…"` 是一次自由 prompt 的无头运行，不是 CI 裁决。需要用进程退出码
+决定作业成败时用 `hook-run`；`watch` 只适合作为尽力而为的常驻监视器。
 
-`--repo` / `--workdir` 默认当前目录。已经 `cd` 进模块时两者都可以省略。
+支持 `--repo` 的命令默认取当前目录。`build-run` 的 `--workdir` 也默认当前目录；
+`hook-run` 则默认使用下文说明的干净同级工作目录。
 
 | 目的 | 命令 |
 |---|---|
 | 交互式 campaign | `pi-pbt` |
-| 无头 (CI / nohup) | `pi-pbt -p "…"` |
-| 已经知道怎么**构建** | `pi-pbt build-run --build-cmd "…"` |
-| 测**一次 git 提交**(hook / CI) | `pi-pbt hook-run <sha>` |
-| 每个新提交都测 | `pi-pbt watch` |
-| 模拟开发者(不做 PBT) | `pi-pbt replay --pr <n>` |
-| 列函数,不调 LLM | `pi-pbt scan` |
+| 无头跑一次（脚本 / nohup，不做门禁） | `pi-pbt -p "…"` |
+| campaign 前先跑已知构建 | `pi-pbt build-run --build-cmd "…"` |
+| 门禁**一次 git 提交**（hook / CI） | `pi-pbt hook-run <sha>` |
+| 监视新提交（尽力而为） | `pi-pbt watch` |
+| 模拟开发者（不做 PBT） | `pi-pbt replay --pr <n>` |
+| 列函数，不调 LLM | `pi-pbt scan` |
 | 对扫描出的候选全部做 PBT | `pi-pbt test-all` |
 | 根据 `pbt-out/` 打覆盖率 | `pi-pbt coverage` |
 | Findings dashboard | `pi-pbt dashboard` |
 | 给 Claude Code / Codex 的 MCP | `pi-pbt mcp` |
 | 版本 | `pi-pbt --version` |
 
-`--provider` / `--model`(如 `--provider xai --model grok-4.6`)可用于
-`build-run` 和自由 `pi-pbt`。其余子命令用 `~/.pi-pbt/agent/` 里的配置。
+provider/model 覆盖不只支持 `build-run`：自由 `pi-pbt`、`build-run`、
+`hook-run`、`watch`、`test-all` 都接受 `--provider` 与 `--model`；MCP 的
+`pbt_start` / `pbt_watch_start` 有对应的 `provider`、`model` 字段。
+`replay` 只接受 `--model`；Kea 从 `kea.config.yml` 读取 `provider` 和
+`model`。不传覆盖值时使用 `~/.pi-pbt/agent/` 的配置。
 
 `kea` 是真机 HarmonyOS GUI 测试的**实验功能**；前置条件、配置和命令见
 [Kea 使用指南](kea.zh.md)。
+
+下文术语：
+
+- **campaign** 是一轮完整的 PBT：Scan → Plan → Test → Review。
+- **产物目录**保存人读结果 `REPORT.md`、经校验的机读结果 `report.json`、
+  `bug_reports/` 下的逐 bug 文件，以及 `PLAN.md`、`PROPERTIES.md`、
+  `COVERAGE.md` 等 campaign 草稿。
+- 自由运行、`scan`、`test-all`、`coverage` 默认使用 `<cwd>/pbt-out`；
+  `build-run` 默认使用 `<repo>/pbt-out`；`hook-run` 刻意默认写到仓库外的
+  `<parent>/pbt-out-hook`。接受 `--out` 的命令以它为准。campaign 可能把文件直接写在
+  该目录，也可能再套一层 `pbt-out/`；pi-pbt 在收尾报告和覆盖率时会解析这两种布局。
 
 ---
 
 ## 全部运行方式
 
-一个二进制，十三个入口。按你想发生什么来选，细节见下文各节。
+一个二进制，多个入口。按你想发生什么来选，细节见下文各节。
 
 | | 命令 | 做什么 |
 |---|---|---|
 | **跑战役** | `pi-pbt` | 交互式，在对话里说明目标。 |
 | | `pi-pbt -p "<prompt>"` | 无人值守跑一次。给脚本和自动产出用——**不是 CI 门禁**：进程退出码是 pi 的，不承载裁决，发现 bug 也不会让流水线变红。门禁用 `hook-run`。 |
-| | `pi-pbt build-run --build-cmd "<命令>"` | 你的构建命令就是闸：先跑它，非零退出就在任何 agent 工作之前停掉战役。之后战役**就地运行**（不建 worktree）——大型组件无法在独立副本里构建。 |
+| | `pi-pbt build-run --build-cmd "<命令>"` | 你的构建命令是 preflight 闸：先跑它，非零退出就在任何 agent 工作之前停掉战役。成功后要读产物；这条命令不套用 `hook-run` 的裁决退出码。之后战役**就地运行**（不建 worktree）——大型组件无法在独立副本里构建。 |
 | | `pi-pbt hook-run <sha>` | 单个 commit 的改动集。**退出码就是裁决**：`0` 干净、`1` 发现 bug、`2` 没有报告或报告不合 schema、`3` 构建失败。sha 只用来取 diff 和写进 prompt，**检出由调用方负责**。 |
 | | `pi-pbt watch` | 轮询分支，每个新 commit 跑一轮，从旧到新——**每次轮询最多 10 个**，更旧的会被丢弃（有日志）。 |
 | | `pi-pbt test-all` | 读 `pbt-out/FUNCTION_INDEX.md`，对其中每个候选函数跑。 |
@@ -52,11 +68,12 @@
 
 两组容易混：
 
-- **`build-run` 与 `hook-run`**。`build-run` 针对你已经知道怎么构建的目标——命令由你给，
-  并且这条命令就是闸门。`hook-run` 是 CI 对单个 commit 的检查——它在意的是退出码。两者
-  **不能在一次调用里组合**：`hook-run` 没有 `--build-cmd`，编译方式由战役自己决定。仓库
-  需要特定构建命令时，要么在 `hook-run` 之前的 CI 步骤里先构建好（战役会复用热的构建
-  树），要么改用 `build-run` 并看它的退出码。
+- **`build-run` 与 `hook-run`**。`build-run` 针对你已经知道怎么构建的目标：agent
+  启动前，这条命令必须成功。但它的退出码**不是** campaign 裁决；preflight 成功后只是
+  普通 pi 进程的退出码，发现 bug 不会映射成 `1`，缺报告也不会映射成 `2`。`hook-run`
+  才是由产物裁决退出码的 CI 检查。两者**不能在一次调用里组合**：`hook-run` 没有
+  `--build-cmd`。仓库需要特定构建命令时，在 `hook-run` 前一个 CI 步骤里先构建好，
+  campaign 可以复用热的构建树。
 - **`-p` 与 `mcp`**。`-p` 在当前进程里跑完战役、阻塞等待。`mcp` 把战役交给另一个进程、
   立刻返回 run id，调用方可以继续干别的。
 
@@ -125,18 +142,20 @@ claude mcp add --transport stdio pi-pbt -- pi-pbt mcp
 
 #### 结果怎么用
 
-`pbt_report` 只是摘要,产物是 MCP **资源**:
+`pbt_report` 返回裁决、`REPORT.md` 片段、精简的 `report.json` 摘要、bug 报告 URI，
+以及 patch 是否存在。完整产物通过这些 MCP **资源**读取：
 
 | 资源 | 用途 |
 |---|---|
-| `pbt://runs/<id>/REPORT.md` | 人读的报告 |
-| `pbt://runs/<id>/report.json` | 机读结果 |
+| `pbt://runs/<id>/run.json` | run 元数据，包括 `revision` / `baseRevision` |
+| `pbt://runs/<id>/REPORT.md` | 完整的人读报告 |
+| `pbt://runs/<id>/report.json` | 完整的机读结果 |
 | `pbt://runs/<id>/bug_reports/<文件>.md` | 每个 bug 一份 |
-| `pbt://runs/<id>/changes.patch` | **生成的测试** |
+| `pbt://runs/<id>/changes.patch` | **生成的仓库改动**（通常是测试与构建接线） |
 
-`changes.patch` 是最容易被忽略的一环。worktree 模式下,战役把测试写在一个**运行结束
-就删掉**的 worktree 里,所以生成的测试从来不在你的 checkout 里——这个 patch 是它们进入
-你的树的唯一途径。它既是 MCP 资源,也是运行目录下的一个实际文件:
+`changes.patch` 是最容易被忽略的一环。worktree 模式下，campaign 把仓库改动写在一个
+**运行结束就删掉**的 worktree 里，所以生成的测试与构建登记从来不在你的 checkout 里——
+这个 patch 是它们进入你的树的途径。它既是 MCP 资源，也是运行目录下的一个实际文件：
 
 ```bash
 # ~/.pi-pbt/runs/<run_id>/changes.patch (根目录可用 PI_PBT_RUNS_DIR 覆盖)
@@ -145,9 +164,12 @@ git apply --stat ~/.pi-pbt/runs/<run_id>/changes.patch   # 先看它动了什么
 git apply        ~/.pi-pbt/runs/<run_id>/changes.patch   # 然后审阅、提交
 ```
 
-在这次运行报告的版本上打(`report.json` 的 `run.revision`):patch 是针对那个 commit 的
-二进制 diff。也可以直接用自然语言让 agent 做——"把那次运行的 changes.patch 打到我的
-checkout 上"——它会读这个资源并写盘。
+应打到 MCP run 记录里的版本上（`pbt_status` / `pbt_report` 返回的 `revision`，也写在
+`pbt://runs/<id>/run.json`）：patch 是针对这个精确快照 commit 的二进制 diff。
+`include_uncommitted` run 返回的 `base_revision` 只表示快照建立在哪个 HEAD 上，**不是**
+patch base。campaign 的 `report.json` 应记录同一个被测版本，但应用 patch 时以 run 记录为准。
+也可以直接用自然语言让 agent 做——“把那次运行的 changes.patch 打到我的 checkout 上”——
+它会读这些资源并写盘。
 
 就地运行(设了 `build_cmd`)不产生 patch——测试已经在你的 checkout 里了。
 
@@ -169,9 +191,9 @@ checkout 上"——它会读这个资源并写盘。
 | 情形 | 用 | 为什么 |
 |---|---|---|
 | 合并请求上的门禁 | **`hook-run <sha>`** | 就是为此而造,**退出码就是裁决**——`0` 干净、`1` 发现 bug、`2` 没有报告或报告不合 schema、`3` 构建失败。不需要再解释别的。先把这个 commit 检出:sha 取的是 diff 和 prompt,不是工作树(见下)。 |
-| 仓库需要特定构建命令 | **在上一步先构建** | `hook-run` 没有 `--build-cmd`;战役自己编译 SUT,并复用热的构建树。先跑 CI 自己的构建,再 `hook-run`。要让构建**闸住**战役,改用 `build-run --build-cmd` 并看它的退出码。 |
-| 给机器人或看板的机读结果 | **`pbt-out/report.json`** | 经 schema 校验,每个 bug 都链到发现它的性质,并带可粘贴的复现命令。见 [report-schema.md](report-schema.md)。 |
-| MR 上该附什么 | `REPORT.md` + `report.json` | 不是整个 `pbt-out/`——那是战役草稿,见 [reproducing.md](reproducing.md)。 |
+| 仓库需要特定构建命令 | **在上一步先构建** | `hook-run` 没有 `--build-cmd`；campaign 自己编译 SUT，并可复用热的构建树。先跑 CI 自己的构建，再跑 `hook-run`。不要拿 `build-run` 代替裁决门禁：它只闸 preflight 构建。 |
+| 给机器人或看板的机读结果 | **所选产物目录里的 `report.json`** | 经 schema 校验，每个 bug 都链到发现它的性质，并带可粘贴的复现命令。普通运行通常在 `pbt-out/report.json`；`--out <dir>` 会改目录；MCP managed run 以 `pbt://runs/<id>/report.json` 暴露。见 [report-schema.md](report-schema.md)。 |
+| MR 上该附什么 | 同一目录里的 `REPORT.md` + `report.json` | 不要附整个产物目录——那是 campaign 草稿。见 [reproducing.md](reproducing.md)。 |
 
 **不要**放进流水线的:`watch`(设计上就是长驻)、`dashboard`(是个 UI)、交互模式,
 以及 `replay`(开发者模拟,不是 PBT)。
@@ -199,7 +221,7 @@ pi-pbt -p "/skill:pbt-workflow 对当前仓库做性质测试,产物写到 pbt-o
 
 ---
 
-## `build-run` — 你的构建命令做门禁
+## `build-run` — 用你的构建命令做 preflight
 
 ```text
 pi-pbt build-run --build-cmd "<command>"
@@ -210,10 +232,16 @@ pi-pbt build-run --build-cmd "<command>"
   [--provider <p>] [--model <m>] [--tui]
 ```
 
-1. 在 `--workdir` 执行 `--build-cmd`(日志:`<repo>/pbt-out/build.log`)。
-2. 非 0 → **退出码 3**,PBT 不启动。
-3. 0 → 在 `--repo` 开 campaign。重建**只许复用这条命令**(需要时把其中的
-   现存目标换成新生成的测试目标)。不许切换构建系统,不许推导替代构建。
+1. 在 `--workdir` 执行 `--build-cmd`。日志写到 `<out>/build.log`；
+   `--out` 默认为 `<repo>/pbt-out`。
+2. 非 0 → **退出码 3**，PBT 不启动。
+3. 0 → 在 `--repo` 开 campaign。重建**只许复用这条命令**（需要时把其中的
+   现存目标换成新生成的测试目标）。不许切换构建系统，不许推导替代构建。
+
+这里的 `3` 只表示 preflight 失败。campaign 一旦启动，`build-run` 就是普通 pi 退出行为：
+它不会检查 `REPORT.md` / `report.json`，也不会把发现 bug、缺报告或后来写进
+`report.json` 的构建失败翻译成 `hook-run` 的 `1` / `2` / `3` 裁决。结果要读产物；
+CI 需要裁决时用 `hook-run`。
 
 `--scope` 是**路径**。`--func` 是一个**符号**;**必须先有 `--scope`,且写在
 `--scope` 后面**。不加 `--func` 就会覆盖 `--scope` 里所有值得测的函数。
@@ -263,10 +291,14 @@ pi-pbt hook-run <sha>
   [--repo <path>] [--out <dir>] [--workdir <dir>] [--spec <file>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
+  [--provider <p>] [--model <m>]
   [--scope <path>] [--run-id <id>] [--tui]
 ```
 
-清空 workdir 和 `pbt-out`,扫描,对这次提交的改动集做 PBT。默认 effort **quick**。
+删除并重建 `--workdir` 与 `--out`，然后扫描并对这次提交的改动集做 PBT。默认目录是
+`--repo` 的同级目录：`<parent>/pbt-hook-work` 与 `<parent>/pbt-out-hook`（设置
+`--scan-root <root>` 时改为它的**子目录** `<root>/pbt-hook-work` 和
+`<root>/pbt-out-hook`），不是该 root 的同级目录或 `<repo>/pbt-out`。默认 effort **quick**。
 
 退出码——这就是 CI 作业需要的全部接口:
 
@@ -306,7 +338,8 @@ pi-pbt watch
   [--repo <path>] [--interval <sec>] [--fetch] [--branch <name>]
   [--out <dir>] [--workdir <dir>] [--spec <file>]
   [--lang zh] [--scan-root <dir>]
-  [--cov-mode incremental|full] [--effort …] [--tui]
+  [--cov-mode incremental|full] [--effort …]
+  [--provider <p>] [--model <m>] [--tui]
 ```
 
 每个新提交拉起一次 `hook-run`,从旧到新。默认 effort **quick**。
@@ -348,7 +381,8 @@ pi-pbt replay --pr 8721 --lang zh --scan-root /path/to/workspace
 ```text
 pi-pbt scan [--dir <path>] [--out <dir>] [--lang <id>] [--module <name>]
 pi-pbt test-all [--dir <path>] [--out <dir>] [--provider <p>] [--model <m>]
-pi-pbt coverage
+pi-pbt coverage [--list | --json] [--module <name>]
+  [--diff <sha>] [--project-dir <path>]
 ```
 
 `scan` 写 `pbt-out/FUNCTION_INDEX.md`。语言探测只往下看两层目录;大型
@@ -360,7 +394,10 @@ cd /path/to/telephony_core_service
 pi-pbt scan --dir utils/codec --out ./pbt-out
 ```
 
-`test-all` 对该索引里每个候选开 campaign(没有索引就先 scan)。
+`test-all` 对该索引里每个候选开 campaign（没有索引就先 scan）。`coverage` 始终读取
+`<cwd>/pbt-out`；`--project-dir` 只改变 `--diff` 计算使用的仓库，不改变产物目录。
+`--list` 与 `--json` 互斥。覆盖率语义与产物格式详见
+[coverage-tracking.md](coverage-tracking.md)。
 
 ---
 

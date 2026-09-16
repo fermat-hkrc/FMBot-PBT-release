@@ -36,7 +36,9 @@ returns a `run_id` immediately and a pi-pbt run manager owns the independent
 campaign process, so the host agent can continue development and later call
 `pbt_status` / `pbt_report`. Normal MCP runs test an immutable commit in a
 detached worktree; `include_uncommitted: true` first freezes the current changes
-into a snapshot, while a supplied `build_cmd` deliberately runs in place. See
+into a snapshot, while a supplied `build_cmd` deliberately runs in place. The
+MCP path is introduced here before later references to `pbt_report` and
+`pbt://...` result resources; see
 [Delegation from another coding agent](installation.md#delegation-from-another-coding-agent-mcp)
 for setup and the isolation rules. Install the skill for the synchronous workflow
 described below; configure MCP when you specifically want asynchronous
@@ -52,7 +54,7 @@ delegation. They can coexist.
 | Toolchain for the language under test | as needed | Python needs `python3`+`pip`, C/C++ needs `cmake`+compiler, Rust needs `cargo`… (pi-pbt actually compiles and runs the tests it writes) |
 | LLM API | configured | campaigns are driven by a large model — see [Step 1](#3-step-1-install-the-pi-pbt-engine) |
 
-## 3. Step 1 — Install the pi-pbt engine
+## 3. Step 1: Install the pi-pbt engine
 
 Official release platforms are **Linux x64 / Linux arm64 / macOS arm64** —
 download the matching zip from your distribution channel (details in the
@@ -274,13 +276,45 @@ agent: (decides incremental; diff-scope reports "not a git repo" → session-mem
 
 ## 7. Reading the results
 
-A campaign's artifacts live in `pbt-out/`:
+The skill chooses a fresh directory for each campaign, such as
+`pbt-out/2026-09-16T10-30-00/`, and passes it as `--out-dir`. The campaign writes
+to the repository's top-level `pbt-out/` while it is running; `run-pbt.mjs` then
+moves the canonical artifacts into that round directory before `summarize.mjs`
+reads them.
 
 | File | Contents |
 |---|---|
-| `REPORT.md` | summary: modules tested, bugs found, and per-bug title / minimal input / root cause |
+| `REPORT.md` | human-readable summary: modules tested, bugs found, and reproduction details |
 | `PROPERTIES.md` | property ledger: formal statement and status (passing / failing / retired) of every property tested |
 | `bug_reports/bug_001_*.md` | one file per bug: Law, minimal input, expected/actual, root cause, regression-test location |
+
+The source-code campaign contract also produces `report.json`, a machine-readable
+view of the same facts: schema version, tested revision and tier, build evidence,
+every property and bug, exact per-bug reproduction commands, and recomputed
+totals. Use it when a script, CI job, dashboard, or MCP client needs stable fields
+rather than Markdown parsing.
+
+`run-pbt.mjs` archives this run's `report.json` beside its `REPORT.md` in
+`--out-dir`; consume that pair, not the mutable repository-root files. Before
+starting, old root `REPORT.md`, `report.json` and `bug_reports/` are preserved
+under `pbt-out/.previous-result-*/`, not attributed to the new run. An existing
+nonempty `--out-dir` is refused: choose a fresh round directory. If a failed run
+did not produce JSON, its round directory has no JSON — there is no fallback to
+a previous campaign. `summarize.mjs` still reads the Markdown artifacts; it is
+not the JSON schema validator.
+
+Managed `hook-run` and MCP campaigns validate `REPORT.md`/`report.json` together;
+invalid or missing JSON makes the run incomplete. The full MCP document is
+`pbt://runs/<id>/report.json`, while `pbt_report` returns a summary. See the
+[report contract](report-schema.md) for fields and validation rules.
+
+
+**Version note:** the archival fix above is in current source, not the already
+published v0.1.18 embedded skill. With that older helper, use a fresh checkout/output
+for each campaign and copy the current `report.json` beside its matching
+`REPORT.md` immediately after the run; never pair a past round with a later
+root-level JSON. Updating the binary alone does not refresh an installed skill:
+run `pi-pbt skill-install --force` after installing a release containing the fix.
 
 The summary your agent presents looks like:
 
@@ -301,10 +335,10 @@ incremental campaign over the fixed files to verify.
 
 | Symptom | Fix |
 |---|---|
-| `pi-pbt: command not found` | reinstall the engine (Step 1), make sure it is on PATH |
-| `pi-pbt --list-models` empty / 401 | check the API key and `models.json` (Step 1) |
-| campaign timeout (`run-pbt` exit code 3) | default cap is 15 min; test a smaller scope, or raise `--timeout-sec` |
-| summary says "incomplete" (no REPORT.md) | the campaign agent produced no report; inspect `<out-dir>.log` and retry |
+| `pi-pbt: command not found` | reinstall the engine from [Step 1](#3-step-1-install-the-pi-pbt-engine), and make sure it is on PATH |
+| `pi-pbt --list-models` empty / 401 | check the API key and `models.json` as described in [Step 1](#3-step-1-install-the-pi-pbt-engine) |
+| campaign timeout (`run-pbt` exit code 3) | use the tier-aligned cap: quick 900 s, standard 1800 s, thorough 3600 s; test a smaller scope or raise `--timeout-sec` deliberately |
+| summary says "incomplete" (no REPORT.md) | the campaign agent produced no human report; inspect `<out-dir>.log` and retry. For `hook-run`/MCP, also check that `report.json` exists and satisfies the schema |
 | agent does not auto-trigger | check the AGENTS.md snippet is present; an explicit "test the changes I just made" always works |
 
 ## 9. Cost and advice
@@ -315,8 +349,10 @@ incremental campaign over the fixed files to verify.
 - Incremental testing focuses on the changed surface and is cheaper than full;
   use incremental day-to-day and a full campaign periodically (e.g. before a
   release).
-- Output directories are isolated per round (`pbt-out/`), so old
-  results are never overwritten.
+- Use a fresh `--out-dir` for every round (for example,
+  `pbt-out/2026-09-16T10-30-00/`). The helper does not invent that name for you;
+  a reused non-empty directory is refused without deleting its contents. Choose
+  a new directory to avoid mixing results.
 
 ## 10. Upgrading
 
