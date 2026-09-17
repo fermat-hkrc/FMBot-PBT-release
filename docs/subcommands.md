@@ -292,6 +292,48 @@ pi-pbt build-run --build-cmd "<command>"
   [--mode text|json] [--tui]
 ```
 
+### build-run live JSON logs
+
+**Requires pi-pbt v0.1.19 or newer**; check `pi-pbt --version` first. Add
+**`--mode json`** to `build-run`; no separate `-p` is needed. After the build
+passes, model updates and tool-call/results stream as JSONL (one JSON event per
+line), without waiting for the final answer or tailing session files. The default
+`--mode text` is not a complete live tool log.
+
+This example reuses this section's OH `host_product` build. Replace the workspace
+path and configure a model first, then run in Bash or zsh. For other projects,
+keep their own `--build-cmd` instead of copying the OH build:
+
+```bash
+set -o pipefail
+export PBT_OH_WORKSPACE=/path/to/openharmony
+LOG_DIR=$(mktemp -d)
+printf 'Logs: %s\n' "$LOG_DIR"
+
+pi-pbt build-run \
+  --workdir "$PBT_OH_WORKSPACE" \
+  --repo "$PBT_OH_WORKSPACE/foundation/arkui/ace_engine" \
+  --build-cmd "./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product --build-target base_unittest --ccache --no-prebuilt-sdk" \
+  --scope frameworks/base/geometry \
+  --lang en \
+  --mode json \
+  2>"$LOG_DIR/stderr.log" | tee "$LOG_DIR/events.jsonl"
+```
+
+- JSON events appear in the terminal and are saved to `$LOG_DIR/events.jsonl`.
+- Preflight build output and operational diagnostics go to `$LOG_DIR/stderr.log`.
+  To watch the build in another terminal, use `tail -f <printed-log-directory>/stderr.log`.
+- The full preflight log also remains in `<out>/build.log`. With no `--out` in
+  this example, it is `$PBT_OH_WORKSPACE/foundation/arkui/ace_engine/pbt-out/build.log`.
+- Do not add `2>&1` to the pipeline: it mixes plain diagnostics into JSON.
+  Events can contain source code and tool arguments/results; review sensitive
+  content before publishing. `events.jsonl` is **not** the final `report.json`.
+- `set -o pipefail` prevents `tee` from hiding failure; JSON mode does not change
+  build-run's exit semantics. Explicit `--tui` conflicts with JSON; inherited
+  `PBT_HOOK_TUI=1` is overridden by JSON mode.
+
+### Preflight and scope
+
 1. Runs `--build-cmd` in `--workdir`. The log is `<out>/build.log`;
    `--out` defaults to `<repo>/pbt-out`.
 2. Non-zero → **exit 3**, PBT never starts.

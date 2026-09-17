@@ -263,6 +263,44 @@ pi-pbt build-run --build-cmd "<command>"
   [--mode text|json] [--tui]
 ```
 
+### build-run 实时 JSON 日志
+
+**需要 pi-pbt v0.1.19 或更新版本**，先用 `pi-pbt --version` 确认。
+给 `build-run` 加 **`--mode json`**，无需另加 `-p`：构建通过后，模型文本更新和
+工具调用/结果以 JSONL（一行一个 JSON 事件）实时输出，不必等待最后总结，也不必扫描
+session 文件。默认 `--mode text` 不是完整实时工具日志。
+
+下面沿用本节的 OH `host_product` 构建。替换 workspace 路径、先配好模型，在 Bash
+或 zsh 中执行；普通项目保留自己的 `--build-cmd`，不要照搬 OH 命令：
+
+```bash
+set -o pipefail
+export PBT_OH_WORKSPACE=/path/to/openharmony
+LOG_DIR=$(mktemp -d)
+printf 'Logs: %s\n' "$LOG_DIR"
+
+pi-pbt build-run \
+  --workdir "$PBT_OH_WORKSPACE" \
+  --repo "$PBT_OH_WORKSPACE/foundation/arkui/ace_engine" \
+  --build-cmd "./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product --build-target base_unittest --ccache --no-prebuilt-sdk" \
+  --scope frameworks/base/geometry \
+  --lang zh \
+  --mode json \
+  2>"$LOG_DIR/stderr.log" | tee "$LOG_DIR/events.jsonl"
+```
+
+- 终端会显示 JSON 事件，同一份事件保存在 `$LOG_DIR/events.jsonl`。
+- 构建 preflight 输出和运行诊断保存在 `$LOG_DIR/stderr.log`。需要实时看构建进度，
+  可在另一终端对上面打印的日志目录执行 `tail -f <日志目录>/stderr.log`。
+- preflight 的完整构建日志仍在 `<out>/build.log`；这里未指定 `--out`，所以是
+  `$PBT_OH_WORKSPACE/foundation/arkui/ace_engine/pbt-out/build.log`。
+- 不要把 `2>&1` 加到流水线上，否则普通日志会混入 JSON。事件可能包含源码、工具参数
+  和结果，公开前须检查敏感内容。`events.jsonl` **不是**最终的 `report.json`。
+- `set -o pipefail` 防止 `tee` 掩盖命令失败；`--mode json` 不改变 `build-run` 的退出码
+  语义。显式 `--tui` 与 JSON 互斥，继承的 `PBT_HOOK_TUI=1` 会被 JSON 模式覆盖。
+
+### 构建门禁与范围
+
 1. 在 `--workdir` 执行 `--build-cmd`。日志写到 `<out>/build.log`；
    `--out` 默认为 `<repo>/pbt-out`。
 2. 非 0 → **退出码 3**，PBT 不启动。
