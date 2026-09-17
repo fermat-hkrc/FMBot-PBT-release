@@ -40,9 +40,20 @@ sudo pacman -S --needed git cmake ninja clang
 ### 准备 PBT 依赖
 
 C++ campaign 会把本机可用的 RapidCheck 和 GoogleTest 信息写入
-`pbt-out/dependencies.json`。依赖应按以下顺序准备：**项目自带依赖 → 已安装的
-系统包 → 已配置的系统仓库或企业内网仓库 → 经明确许可的公网下载**。这样可以避免
-不必要的联网和重复副本。
+`pbt-out/dependencies.json`。campaign 会按以下顺序逐级尝试，取第一个成功的：
+**项目自带依赖 → 已安装的系统包 → 已配置的系统仓库或企业内网仓库 → 把框架源码
+vendor 进测试脚手架**。这个顺序可以避免不必要的联网和重复副本。
+
+缺依赖不会让 campaign 停下。agent 会自行获取，不需要你授权：系统包管理器一律以
+已是 root 时直接执行，需要提权时才加 `sudo -n`，绝不交互，因此密码提示不可能卡住
+无人值守的运行；语言包管理器装在用户态；源码 vendor 完全不需要 root，在受限机器上
+往往正是唯一能走通的一级。vendor 进来的框架会固定到记录在案的 revision 并在编译前
+校验，campaign 不会去构建上游默认分支当下碰巧是什么。它不会往你的系统里添加新的
+软件源。若每一级都确实失败（内网隔离、
+没有 sudo、拿不到源码），campaign 仍会跑完，改用自写驱动。工作流要求该驱动在测试
+文件顶部标注 `PBT-FALLBACK: <原因>` 并在 `REPORT.md` 写明同一原因；运行时会在能识别
+出手写随机数的地方强制这一点（`std::mt19937`、`random.randint`、`Math.random()`
+以及各语言的等价物——这正是"拿自写生成器顶替框架"的实际形态）。
 
 清单会区分包路径、架构与目标是否真正兼容。给宿主机 ABI 安装的库不能链接到 ARM
 目标；OpenHarmony 的 `host_product` 构建也可能仍须使用与自身工具链兼容的源码，
@@ -75,7 +86,6 @@ unzip "pi-pbt-${PLATFORM}.zip"
 cd "pi-pbt-${PLATFORM}"
 ./install.sh
 ```
-
 
 **v0.1.18 替换构建（2026-09-16）：**当前发行包已包含上述安装修复。此前下载过
 v0.1.18 的用户，请重新下载 ZIP 和 `.sha256` 并运行 `./install.sh`。版本号未变，
@@ -202,7 +212,6 @@ pi-pbt --list-models
 **全部运行方式、以及各自适合哪个阶段**(和另一个 coding agent 一起开发,还是 MR
 流水线)汇总在 [subcommands.zh.md](subcommands.zh.md#全部运行方式) 的一张表里;
 被同一个词"skill"指代的三种东西也在那份文档里区分清楚。下面讲的是第一次运行。
-
 
 ### 交互式
 
@@ -393,6 +402,29 @@ pi-pbt build-run \
 product,而且 workspace 必须已经给该 product 的产物配好 runner;不要把 device 构建
 描述成 host 路径的通用替代品。
 
+**加快 OH 重复构建。** `--ccache` 已经是 hb 的默认值，写出来只是显式声明。实测有效的
+是 `--fast-rebuild`：它跳过 prepare/preloader/loader/gn，直接从 ninja 开始，同一次无改动
+的 `base_unittest` 增量构建，不加是 **27 秒**，加上是 **13 秒**。
+
+但不要把它放进上面的 preflight。OH 官方 help 限定它只能用于"gn 相关脚本没有改动"的构建，
+而战役恰好会改这些文件：新增 `test/pbt/<子路径>/BUILD.gn`，并在 `bundle.json` 的
+`build.test` 里注册目标。因此它只适合 gn 输入未变的重复构建；战役生成测试目标后的第一次
+重建必须去掉它：
+
+```bash
+./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product \
+  --build-target base_unittest --ccache --no-prebuilt-sdk --fast-rebuild
+```
+
+有两个参数不要动：`--jobs` 在 hb 里已标记 deprecated；`--load-test-config`（默认开启）
+正是读取 `bundle.json` 中 `test` 字段的开关，关掉它会让生成的 PBT 目标不被加载。
+OH 文档列出的 `--gn-args enable_notice_collection=false` 面向出镜像的全量构建，在这个
+单元测试 preflight 上实测是 26 秒对 27 秒，且改 gn args 会触发一次 gn 重新生成，不划算。
+
+如果你的 HarmonyOS 源码树用的是 `build_system.sh` 而不是 `build.sh`，先对该脚本执行
+`--help` 确认参数是否存在：这里没有验证过它的参数集，不被支持的参数只会让 preflight
+直接失败。
+
 初次 `--build-cmd` 是 preflight,必须指向 campaign 开始前就存在的目标,例如
 `base_unittest`。不要拿尚未生成的 `pbt`、`<name>_pbt_test` 等目标做初次门禁。
 campaign 生成测试并按组件自己的 GN test family 完成登记后,重建才可以沿用同一条
@@ -434,7 +466,7 @@ pi-pbt build-run --build-cmd "…" \
 `--scope` **之后**;不加 `--func` 则覆盖 `--scope` 里所有值得测的函数。
 
 `--out`、`--lang`、`--effort`(默认 `standard`)、`--provider`、`--model`、
-`--mode text|json`、`--tui` 与 `hook-run` 一致。`--mode` 默认是 `text`；选择
+`--mode text|json|json-full`、`--tui` 与 `hook-run` 一致。`--mode` 默认是 `text`；选择
 `json` 只改变 stdout 格式，不改变 campaign 或退出行为。
 
 #### build-run 实时 JSON 日志
@@ -500,6 +532,18 @@ pi-pbt hook-run <sha> --repo /path/to/repo --lang zh
 | `1` | 发现 bug(`bug_reports/` 非空,或 `totals.bugs > 0`)。 |
 | `2` | 没有 `REPORT.md`、没有 `report.json`,或 `report.json` 不合 schema——挂了、超时,或什么都没证明。 |
 | `3` | 记录在案的构建失败:什么都没被测。 |
+
+`--mode json` 是**精简事件日志**：agent 每做一件事输出一行 —— 它说了什么
+（`message_end`，含工具调用、停止原因与 token 用量）、启动了哪个工具及其参数
+（`tool_execution_start`）、返回了什么（`tool_execution_end`），以及围绕这些的重试、
+压缩与 settle 转换。pi 流式输出的 token 级增量（`text_delta`、`thinking_delta`、
+`toolcall_delta`）、工具的中间输出（`tool_execution_update`、`bash_execution_update`）
+以及重复的全量快照（`turn_end`、`agent_end` 会把已经发过的消息再发一遍）都会被丢弃；
+工具参数和结果里的长字符串会被截断，避免一次写文件淹没整个日志。思考块只保留
+`thinkingChars` 长度计数。
+
+`--mode json-full` 是 pi 未经过滤的原始会话事件流：每个增量、每份完整消息快照都在，
+每个流式 token 一行。只有在需要消费完整 SDK 协议（而不是读日志）时才用它。
 
 自动化若需要 SDK 事件流，加 `--mode json`（默认是 `--mode text`）。JSON 模式把
 stdout 专用于 SDK 事件；preflight 输出、扫描诊断及其他运行信息写 stderr；

@@ -44,10 +44,28 @@ sudo pacman -S --needed git cmake ninja clang
 ### Prepare PBT dependencies
 
 For C++ campaigns, pi-pbt records locally available RapidCheck and GoogleTest
-information in `pbt-out/dependencies.json`. Prepare dependencies in this order:
-**the project's own dependency, an already installed system package, a configured
-system or enterprise-internal repository, then an approved public download**.
-This order avoids unnecessary network access and duplicate copies.
+information in `pbt-out/dependencies.json`. The campaign works down this order
+and stops at the first rung that works: **the project's own dependency, an
+already installed system package, a configured system or enterprise-internal
+repository, then vendoring the framework's source into the harness**. The order
+avoids unnecessary network access and duplicate copies.
+
+A missing dependency does not stop a campaign. The agent is expected to acquire
+one without asking: system package managers run directly when the campaign is
+already root and under `sudo -n` when elevation is needed, never interactively,
+so a password prompt can never hang a headless run; language package managers
+run in user scope; and a source vendor needs no root at all — usually the rung
+that works on a locked-down box. A vendored framework is pinned to a recorded
+revision and verified before it is compiled, so a campaign never builds whatever
+an upstream default branch happens to hold. It will not add a new package
+repository to your system. If every rung genuinely fails
+(air-gapped, no sudo, no source), the campaign still runs to completion with a
+self-written driver. The workflow requires that driver to carry
+`PBT-FALLBACK: <why>` at the top of the test file and the same reason in
+`REPORT.md`; the runtime enforces it wherever it can recognise hand-rolled
+randomness (`std::mt19937`, `random.randint`, `Math.random()` and the
+equivalents in each supported language), which is the shape a substituted
+generator actually takes.
 
 The inventory distinguishes package paths and architecture from actual target
 compatibility. A library installed for the host ABI cannot be linked into an ARM
@@ -84,7 +102,6 @@ unzip "pi-pbt-${PLATFORM}.zip"
 cd "pi-pbt-${PLATFORM}"
 ./install.sh
 ```
-
 
 **v0.1.18 replacement build (2026-09-16):** the current archives include the
 installer correction above. If you downloaded v0.1.18 earlier, download the ZIP
@@ -230,7 +247,6 @@ alongside another coding agent, or an MR pipeline — is one table in
 [subcommands.md](subcommands.md#every-way-to-run-it). The three different
 things called "skill" are disentangled in the same document. What follows here
 is the first run.
-
 
 ### Interactive
 
@@ -449,6 +465,35 @@ product, and only after the workspace has a runner configured for that product's
 artifact. Do not present a device build as a universal replacement for the host
 path.
 
+**Speeding up repeated OH builds.** `--ccache` is already hb's default, so it
+only states the intent. The parameter that measurably helps is `--fast-rebuild`,
+which skips the prepare/preloader/loader/gn phases and starts at ninja: the same
+no-op incremental `base_unittest` build measured **27 s** without it and **13 s**
+with it.
+
+Keep it out of the preflight above. OH's own help restricts it to runs with "no
+change for gn related script", and a campaign changes exactly those files when it
+adds `test/pbt/<subpath>/BUILD.gn` and registers the target in `bundle.json`
+`build.test`. Use it only for a rebuild whose gn inputs are unchanged, and drop
+it again for the first rebuild after the campaign generates its test target:
+
+```bash
+./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product \
+  --build-target base_unittest --ccache --no-prebuilt-sdk --fast-rebuild
+```
+
+Two parameters to leave alone: `--jobs` is deprecated in hb, and
+`--load-test-config` (default on) is what reads `bundle.json`'s `test` field,
+so disabling it hides the generated PBT target.
+`--gn-args enable_notice_collection=false`, which OH lists as a speed-up, is
+aimed at full image builds; on this unittest preflight it measured 26 s against
+the 27 s baseline and forces a gn regen, so it is not worth adding.
+
+For a HarmonyOS tree driven by `build_system.sh` rather than `build.sh`, check
+`--help` on that script before reusing these flags: the parameter set is not
+verified here, and an unsupported flag fails the preflight instead of speeding
+it up.
+
 The initial `--build-cmd` is a preflight and must name a target that exists
 **before** the campaign, such as `base_unittest`. Do not use `pbt`,
 `<name>_pbt_test`, or another target that the campaign has not generated yet.
@@ -496,7 +541,7 @@ pi-pbt build-run --build-cmd "…" \
 `--func`, every PBT-worthy function in `--scope` is in play.
 
 `--out`, `--lang`, `--effort` (default `standard`), `--provider`,
-`--model`, `--mode text|json`, and `--tui` work as on `hook-run`.
+`--model`, `--mode text|json|json-full`, and `--tui` work as on `hook-run`.
 `--mode` defaults to `text`; selecting `json` changes the stdout format, not the
 campaign or its exit behavior.
 
@@ -568,6 +613,21 @@ It reports its verdict as an exit code, so it drops straight into CI as a check:
 | `1` | Bugs found (`bug_reports/` non-empty, or `totals.bugs > 0`). |
 | `2` | No `REPORT.md`, no `report.json`, or a `report.json` that fails the schema — it died, timed out, or attested to nothing. |
 | `3` | The recorded build failed: nothing was tested. |
+
+`--mode json` is a **compact event log**: one line per thing the agent did —
+what it said (`message_end`, with its tool calls, stop reason and token usage),
+which tool started with which arguments (`tool_execution_start`), what came back
+(`tool_execution_end`), and the retry, compaction and settle transitions around
+them. The token-level deltas pi streams (`text_delta`, `thinking_delta`,
+`toolcall_delta`), the partial tool output (`tool_execution_update`,
+`bash_execution_update`) and the duplicated full snapshots (`turn_end` and
+`agent_end` re-send messages already emitted) are dropped, and long strings
+inside tool arguments and results are clamped so a single file write cannot bury
+the log. Thinking blocks are replaced by a `thinkingChars` count.
+
+`--mode json-full` is pi's raw session stream with none of that filtering — every
+delta and every full-message snapshot. Use it when you are consuming the complete
+SDK protocol rather than reading a log; expect one line per streamed token.
 
 For automation that needs the SDK event stream, add `--mode json` (the default
 is `--mode text`). JSON mode reserves stdout for SDK events; preflight output,

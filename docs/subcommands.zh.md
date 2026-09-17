@@ -223,8 +223,8 @@ pi-pbt -p "/skill:pbt-workflow 对当前仓库做性质测试,产物写到 pbt-o
 
 ## 机器可读的 SDK 事件流
 
-`build-run` 与 `hook-run` 接受 `--mode text|json`，默认是 `text`。JSON 模式把
-SDK 事件流透传到 stdout，供自动化程序消费；它不改变 campaign 行为或退出码：
+`build-run` 与 `hook-run` 接受 `--mode text|json|json-full`，默认是 `text`。两种
+JSON 模式都把 SDK 事件流送到 stdout 供自动化消费，都不改变 campaign 行为或退出码：
 `hook-run` 仍返回报告门禁裁决，`build-run` 仍在 preflight 失败时返回 `3`，成功后
 沿用普通 pi 退出行为。
 
@@ -246,7 +246,20 @@ pi-pbt build-run --repo /path/to/repo --workdir /path/to/repo \
 工具输入/结果及敏感仓库内容，捕获文件须按敏感数据处理。这个实时流与经校验的 campaign
 结果 `report.json` 不同，也不是 `~/.pi-pbt/agent/sessions/` 下的磁盘会话文件。
 
-显式 `--tui` 与 `--mode json` 同时使用会被拒绝。显式 `--mode json` 优先于继承的
+`--mode json` 是**精简事件日志**：agent 每做一件事输出一行 —— 它说了什么
+（`message_end`，含工具调用、停止原因与 token 用量）、启动了哪个工具及其参数
+（`tool_execution_start`）、返回了什么（`tool_execution_end`），以及围绕这些的重试、
+压缩与 settle 转换。pi 流式输出的 token 级增量（`text_delta`、`thinking_delta`、
+`toolcall_delta`）、工具的中间输出（`tool_execution_update`、`bash_execution_update`）
+以及重复的全量快照（`turn_end`、`agent_end` 会把已经发过的消息再发一遍）都会被丢弃；
+工具参数和结果里的长字符串会被截断，避免一次写文件淹没整个日志。思考块只保留
+`thinkingChars` 长度计数。
+
+`--mode json-full` 是 pi 未经过滤的原始会话事件流：每个增量、每份完整消息快照都在，
+每个流式 token 一行。只有在需要消费完整 SDK 协议（而不是读日志）时才用它。
+
+两种 JSON 模式都独占 stdout，因此与显式 `--tui` 同时使用会被拒绝。显式的 JSON 模式
+也优先于继承的
 `PBT_HOOK_TUI=1`；需要交互界面时应取消该模式或使用 text 模式。
 
 ---
@@ -260,7 +273,7 @@ pi-pbt build-run --build-cmd "<command>"
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
   [--provider <p>] [--model <m>]
-  [--mode text|json] [--tui]
+  [--mode text|json|json-full] [--tui]
 ```
 
 ### build-run 实时 JSON 日志
@@ -335,6 +348,29 @@ host 产物在 `out/host/host_product`,不是 `out/host_product`。初次 prefli
 `pbt` target。`host_product` 并不覆盖所有组件:只有组件没有 host 目标、且 workspace
 已经为对应产物配置 runner 时,才使用 device product。
 
+**加快 OH 重复构建。** `--ccache` 已经是 hb 的默认值，写出来只是显式声明。实测有效的
+是 `--fast-rebuild`：它跳过 prepare/preloader/loader/gn，直接从 ninja 开始，同一次无改动
+的 `base_unittest` 增量构建，不加是 **27 秒**，加上是 **13 秒**。
+
+但不要把它放进上面的 preflight。OH 官方 help 限定它只能用于"gn 相关脚本没有改动"的构建，
+而战役恰好会改这些文件：新增 `test/pbt/<子路径>/BUILD.gn`，并在 `bundle.json` 的
+`build.test` 里注册目标。因此它只适合 gn 输入未变的重复构建；战役生成测试目标后的第一次
+重建必须去掉它：
+
+```bash
+./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product \
+  --build-target base_unittest --ccache --no-prebuilt-sdk --fast-rebuild
+```
+
+有两个参数不要动：`--jobs` 在 hb 里已标记 deprecated；`--load-test-config`（默认开启）
+正是读取 `bundle.json` 中 `test` 字段的开关，关掉它会让生成的 PBT 目标不被加载。
+OH 文档列出的 `--gn-args enable_notice_collection=false` 面向出镜像的全量构建，在这个
+单元测试 preflight 上实测是 26 秒对 27 秒，且改 gn args 会触发一次 gn 重新生成，不划算。
+
+如果你的 HarmonyOS 源码树用的是 `build_system.sh` 而不是 `build.sh`，先对该脚本执行
+`--help` 确认参数是否存在：这里没有验证过它的参数集，不被支持的参数只会让 preflight
+直接失败。
+
 **普通 CMake 项目。** 这是 `build-run` 泛用构建能力的独立示例,不是 OpenHarmony
 等价路径。如果现有 `CMakeLists.txt` 已定义 `calc_test`,就用它做门禁:
 
@@ -362,7 +398,7 @@ pi-pbt hook-run <sha>
   [--effort quick|standard|thorough]
   [--provider <p>] [--model <m>]
   [--scope <path>] [--run-id <id>]
-  [--mode text|json] [--tui]
+  [--mode text|json|json-full] [--tui]
 ```
 
 删除并重建 `--workdir` 与 `--out`，然后扫描并对这次提交的改动集做 PBT。默认目录是
@@ -493,7 +529,7 @@ Dashboard：[安装指南](installation.zh.md#5-网页面板实时看它在干�
 | `PBT_OH_WORKSPACE` | 完整 OH 树(`.repo/` + `out/`),供官方 `host_product` 或已配置的 device-product 构建使用。无关的普通 CMake 项目不设置它。 |
 | `PBT_EFFORT` | `quick` / `standard` / `thorough` |
 | `PBT_SCAN_ROOT` | 扫描目录;也可用 `--scan-root` |
-| `PBT_HOOK_TUI=1` | `hook-run` / `watch` 用 TUI；显式 `--mode json` 会覆盖它 |
+| `PBT_HOOK_TUI=1` | `hook-run` / `watch` 用 TUI；显式 `--mode json` 或 `json-full` 会覆盖它 |
 
 Hook-run：[CI / git hook 集成](installation.zh.md#ci--git-hook-集成)。覆盖率：
 [coverage-tracking.md](coverage-tracking.md)。

@@ -248,13 +248,28 @@ pi-pbt -p "/skill:pbt-workflow 对当前仓库做性质测试,产物写到 pbt-o
 
 ## Machine-readable SDK event stream
 
-`build-run` and `hook-run` accept `--mode text|json`; `text` is the default.
-JSON mode passes the SDK event stream through stdout for automation. It does not
-change campaign behavior or exit codes: `hook-run` still returns its report gate
+`build-run` and `hook-run` accept `--mode text|json|json-full`; `text` is the
+default. Both JSON modes stream SDK events through stdout for automation. Neither
+changes campaign behavior or exit codes: `hook-run` still returns its report gate
 verdict, and `build-run` still returns `3` for a failed preflight and otherwise
 uses the ordinary pi exit behavior.
 
-In JSON mode, preflight output, scan diagnostics, and other operational messages
+`--mode json` is a **compact event log**: one line per thing the agent did —
+what it said (`message_end`, with its tool calls, stop reason and token usage),
+which tool started with which arguments (`tool_execution_start`), what came back
+(`tool_execution_end`), and the retry, compaction and settle transitions around
+them. The token-level deltas pi streams (`text_delta`, `thinking_delta`,
+`toolcall_delta`), the partial tool output (`tool_execution_update`,
+`bash_execution_update`) and the duplicated full snapshots (`turn_end` and
+`agent_end` re-send messages already emitted) are dropped, and long strings
+inside tool arguments and results are clamped so a single file write cannot bury
+the log. Thinking blocks are replaced by a `thinkingChars` count.
+
+`--mode json-full` is pi's raw session stream with none of that filtering — every
+delta and every full-message snapshot. Use it when you are consuming the complete
+SDK protocol rather than reading a log; expect one line per streamed token.
+
+In either JSON mode, preflight output, scan diagnostics, and other operational messages
 go to stderr so stdout remains machine-readable. `build-run` also preserves the
 complete preflight output in `<out>/build.log`. Capture the channels separately:
 
@@ -274,9 +289,10 @@ sensitive repository content. Treat the capture as sensitive. This live stream
 is separate from the validated campaign result `report.json` and from pi's
 on-disk session files under `~/.pi-pbt/agent/sessions/`.
 
-Explicit `--tui` and `--mode json` are rejected together. An explicit
-`--mode json` takes priority over inherited `PBT_HOOK_TUI=1`; unset the variable
-or use text mode when an interactive interface is intended.
+Either JSON mode and an explicit `--tui` are rejected together — both own
+stdout. An explicit JSON mode also takes priority over inherited
+`PBT_HOOK_TUI=1`; unset the variable or use text mode when an interactive
+interface is intended.
 
 ---
 
@@ -289,7 +305,7 @@ pi-pbt build-run --build-cmd "<command>"
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
   [--provider <p>] [--model <m>]
-  [--mode text|json] [--tui]
+  [--mode text|json|json-full] [--tui]
 ```
 
 ### build-run live JSON logs
@@ -373,6 +389,35 @@ target. `host_product` is not universal: use a device product only when the
 component has no host target and the workspace already has a runner configured
 for the resulting artifact.
 
+**Speeding up repeated OH builds.** `--ccache` is already hb's default, so it
+only states the intent. The parameter that measurably helps is `--fast-rebuild`,
+which skips the prepare/preloader/loader/gn phases and starts at ninja: the same
+no-op incremental `base_unittest` build measured **27 s** without it and **13 s**
+with it.
+
+Keep it out of the preflight above. OH's own help restricts it to runs with "no
+change for gn related script", and a campaign changes exactly those files when it
+adds `test/pbt/<subpath>/BUILD.gn` and registers the target in `bundle.json`
+`build.test`. Use it only for a rebuild whose gn inputs are unchanged, and drop
+it again for the first rebuild after the campaign generates its test target:
+
+```bash
+./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product \
+  --build-target base_unittest --ccache --no-prebuilt-sdk --fast-rebuild
+```
+
+Two parameters to leave alone: `--jobs` is deprecated in hb, and
+`--load-test-config` (default on) is what reads `bundle.json`'s `test` field,
+so disabling it hides the generated PBT target.
+`--gn-args enable_notice_collection=false`, which OH lists as a speed-up, is
+aimed at full image builds; on this unittest preflight it measured 26 s against
+the 27 s baseline and forces a gn regen, so it is not worth adding.
+
+For a HarmonyOS tree driven by `build_system.sh` rather than `build.sh`, check
+`--help` on that script before reusing these flags: the parameter set is not
+verified here, and an unsupported flag fails the preflight instead of speeding
+it up.
+
 **Ordinary CMake project.** This is a separate example of `build-run`'s general
 build support, not an OpenHarmony-equivalent path. If the existing
 `CMakeLists.txt` defines `calc_test`, gate on it:
@@ -402,7 +447,7 @@ pi-pbt hook-run <sha>
   [--effort quick|standard|thorough]
   [--provider <p>] [--model <m>]
   [--scope <path>] [--run-id <id>]
-  [--mode text|json] [--tui]
+  [--mode text|json|json-full] [--tui]
 ```
 
 Deletes and recreates `--workdir` and `--out`, then scans and runs PBT on that
@@ -540,7 +585,7 @@ Dashboard: [installation guide](installation.md#5-dashboard-watch-it-work-live).
 | `PBT_OH_WORKSPACE` | Full OH tree (`.repo/` + `out/`) used by official `host_product` or configured device-product builds. Unrelated ordinary CMake projects do not set it. |
 | `PBT_EFFORT` | `quick` / `standard` / `thorough` |
 | `PBT_SCAN_ROOT` | Scan directory; also `--scan-root` |
-| `PBT_HOOK_TUI=1` | TUI for `hook-run` / `watch`; explicit `--mode json` overrides it |
+| `PBT_HOOK_TUI=1` | TUI for `hook-run` / `watch`; an explicit JSON mode overrides it |
 
 Hook-run: [CI / git-hook integration](installation.md#ci--git-hook-integration). Coverage:
 [coverage-tracking.md](coverage-tracking.md).

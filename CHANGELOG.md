@@ -10,6 +10,146 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.20 - 2026-09-17
+
+### English
+
+#### Changed
+
+- **`--mode json` is now a compact event log, not pi's raw session stream.**
+  Each line describes something the agent did: `message_end` reduced to its
+  prose, tool calls, stop reason and token usage; `tool_execution_start` /
+  `tool_execution_end` with large strings clamped in place; and the retry,
+  compaction and settle transitions. Token-level deltas (`text_delta`,
+  `thinking_delta`, `toolcall_delta`), partial tool output
+  (`tool_execution_update`, `bash_execution_update`) and the duplicated full
+  snapshots (`turn_end`, and `agent_end` carrying every message of the run) are
+  dropped. Thinking blocks become a `thinkingChars` count. Unknown event types
+  are retained rather than silently swallowed, with the same string and array
+  clamping applied; use `--mode json-full` when a consumer needs payloads
+  guaranteed unmodified.
+- **`--mode json-full` streams pi's complete protocol unchanged** for consumers
+  that need every delta. Both JSON modes still reject `--tui`, override
+  inherited `PBT_HOOK_TUI=1`, route the build preflight to stderr, and leave
+  exit-code semantics untouched.
+
+#### Fixed
+
+- **A missing test dependency no longer deadlocks a campaign.** The workflow
+  told the agent not to install automatically and to obtain explicit permission
+  for any download, while the randomness guard permits the offline fallback only
+  after a real acquisition attempt — so a headless `hook-run`, with nobody to
+  ask, could neither acquire the framework nor declare the fallback. Acquisition
+  is now authorized and expected, for every dependency in every language:
+  configured repositories and enterprise mirrors — run directly when already
+  root or the manager is user-owned, `sudo -n` only when elevation is actually
+  required and available — then the language package manager in user scope, then
+  vendoring the source pinned to a recorded revision and verified before it is
+  compiled, each with a timeout and a drop to the next rung on failure. Adding a package repository to
+  the system and leaving `sudo` interactive remain forbidden, and the inventory
+  itself stays read-only. When every rung genuinely fails the campaign still runs
+  to completion under the existing `PBT-FALLBACK:` protocol, which keeps the
+  downgrade visible in the test file and `REPORT.md`.
+- Acquisition tracking now covers the ways dependencies are actually obtained,
+  so "every language" holds in the code and not just in the prose. An offline
+  vendor (`cp`/`cp -R`/`cp --recursive`, `rsync --archive`, `tar`, `unzip` of a
+  framework tree) counts, so air-gapped sites copying from a local mirror are no
+  longer credited with nothing. So does manifest-driven acquisition: Java,
+  Kotlin, Scala and Swift have no install command to match — the dependency goes
+  into `pom.xml` / `build.gradle[.kts]` / `libs.versions.toml` / `build.sbt` /
+  `Package.swift` and the build tool fetches it — so both that manifest edit and
+  the subsequent `mvn` / `gradle` / `sbt` / `swift package resolve` /
+  `dotnet restore` step now register. Rantly, Hedgehog, PropCheck and FuzzTest
+  were missing from the recognized names and are included.
+- OpenHarmony keeps its exception on the technical point only — a host package
+  is not a GN target — but an absent `third_party/rapidcheck` is now vendored
+  the way the tree already carries googletest, instead of ending the run.
+
+#### Documentation
+
+- OpenHarmony rebuild-speed parameters, measured on the build host: the same
+  no-op incremental `base_unittest` build takes 27 s normally and 13 s with
+  `--fast-rebuild`, which skips prepare/preloader/loader/gn. That is also why it
+  must stay out of the preflight and out of the first rebuild after a campaign
+  writes `test/pbt/BUILD.gn` and registers the target in `bundle.json`.
+  `--ccache` is already hb's default, `--jobs` is deprecated on that entry
+  point, `--load-test-config` must stay enabled, and
+  `enable_notice_collection=false` measured 26 s against the 27 s baseline, so it
+  does not pay for its forced gn regen. `build_system.sh` on a HarmonyOS tree is
+  unverified here — check its own `--help` before reusing these flags.
+- Installation and subcommand guides document both JSON modes and the dependency
+  acquisition order.
+
+#### Validation and SDK
+
+- Compact-filter unit tests, mode parsing and argv translation, and a real CLI
+  comparison that first asserts the full stream does contain `message_update` /
+  `turn_end` before asserting the compact one does not.
+- A dependency-acquisition policy suite pins the skills against a permission
+  gate returning, the system-prompt inventory block against a "without
+  permission" line, and every unresolved dependency against having no
+  offline-viable rung.
+- Embedded pi remains `0.85.1`; version output is
+  `pi-pbt 0.1.20 (pi 0.85.1)`.
+
+### 中文
+
+#### 变更
+
+- **`--mode json` 现在是精简事件日志，不再是 pi 的原始会话流。** 每行对应 agent
+  真正做的一件事：`message_end` 精简为正文、工具调用、停止原因与 token 用量；
+  `tool_execution_start` / `tool_execution_end` 保留身份，长字符串就地截断；以及
+  重试、压缩、settle 这些转换。token 级增量（`text_delta`、`thinking_delta`、
+  `toolcall_delta`）、工具中间输出（`tool_execution_update`、
+  `bash_execution_update`）和重复的全量快照（`turn_end`，以及携带整轮全部消息的
+  `agent_end`）都被丢弃。思考块只保留 `thinkingChars` 长度计数。未知事件类型会被保留
+  而不是静默吞掉，但同样会应用字符串与数组截断；需要保证载荷不被修改的消费者请用
+  `--mode json-full`。
+- **`--mode json-full` 原样输出 pi 的完整协议**，供需要每个增量的消费者使用。两种
+  JSON 模式仍然拒绝 `--tui`、覆盖继承的 `PBT_HOOK_TUI=1`、把构建 preflight 输出送到
+  stderr，并且都不改变退出码语义。
+
+#### 修复
+
+- **缺少测试依赖不再让战役卡死。** 此前 workflow 告诉 agent 不要自动安装、任何下载
+  都需要显式许可，而随机数守卫只在真实尝试获取之后才放行离线降级——于是无人值守的
+  `hook-run` 没有人可问，既拿不到框架，也声明不了降级。现在获取是被授权且被期待的
+  行为，适用于所有语言的所有依赖：已配置的仓库与企业内网镜像（已是 root 或包管理器属
+  用户自有时直接执行，仅在确需且可用时才加 `sudo -n`）、用户态的语言包管理器、vendor
+  源码（固定到记录在案的 revision 并在编译前校验），每一级都带超时，失败即降到下一级。仍然禁止往系统添加
+  软件源，也禁止让 `sudo` 交互；依赖盘点本身保持只读。全部失败时战役照常跑完，走既有
+  的 `PBT-FALLBACK:` 协议，降级在测试文件和 `REPORT.md` 中都留痕。
+- 获取动作的识别现在覆盖依赖实际的获得方式，"所有语言"落到代码而不只是文案。离线
+  vendor（对框架源码树执行 `cp`/`cp -R`/`cp --recursive`、`rsync --archive`、`tar`、
+  `unzip`）计为真实尝试，内网隔离、只能从本地镜像复制的站点不再颗粒无收。清单式获取
+  同样计入：Java、Kotlin、Scala、Swift 根本没有可匹配的安装命令——依赖写进 `pom.xml`、
+  `build.gradle[.kts]`、`libs.versions.toml`、`build.sbt`、`Package.swift`，由构建工具
+  拉取——因此清单改动本身以及随后的 `mvn`/`gradle`/`sbt`/`swift package resolve`/
+  `dotnet restore` 都会被记录。此前遗漏的 Rantly、Hedgehog、PropCheck、FuzzTest 也已
+  补进可识别的框架名。
+- OpenHarmony 仅在技术点上保留例外——host 包不是 GN target——但 `third_party/rapidcheck`
+  缺失时改为按树中已有的 googletest 方式 vendor 进去，而不是直接结束运行。
+
+#### 文档
+
+- OpenHarmony 构建加速参数，基于构建机实测：同一次无改动的 `base_unittest` 增量构建
+  常规耗时 27 秒，加 `--fast-rebuild` 为 13 秒，因为它跳过 prepare/preloader/loader/gn。
+  这也正是它不能进 preflight、也不能用于战役写入 `test/pbt/BUILD.gn` 并在
+  `bundle.json` 注册目标之后第一次重建的原因。`--ccache` 已是 hb 默认值，`--jobs` 在
+  该入口已标记 deprecated，`--load-test-config` 必须保持开启，而
+  `enable_notice_collection=false` 实测为 26 秒对 27 秒基线，不足以抵消它强制触发的
+  gn 重新生成。HarmonyOS 树上的 `build_system.sh` 未在此验证，复用这些参数前请先对该
+  脚本执行 `--help` 确认。
+- 安装与子命令指南记录了两种 JSON 模式及依赖获取顺序。
+
+#### 验证与 SDK
+
+- 精简过滤器单测、模式解析与 argv 翻译，以及真实 CLI 的对比测试：先断言完整流中确实
+  含有 `message_update` / `turn_end`，再断言精简流中没有。
+- 依赖获取策略套件钉住三件事：skill 不得退回许可门、system prompt 的依赖清单块不得
+  再出现"未经许可不得获取"、每个未解析依赖都必须至少有一条不需要网络的可行路径。
+- 内嵌 pi 保持 `0.85.1`；版本输出为 `pi-pbt 0.1.20 (pi 0.85.1)`。
+
 ## 0.1.19 - 2026-09-16
 
 ### English
