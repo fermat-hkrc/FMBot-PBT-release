@@ -465,6 +465,13 @@ product, and only after the workspace has a runner configured for that product's
 artifact. Do not present a device build as a universal replacement for the host
 path.
 
+There is no single `--build-cmd` for the whole OpenHarmony tree. Reuse this
+**shape**: `--workdir` the provisioned workspace, `--repo` **this** component,
+and a preflight target that **already exists in this component** (for example
+`base_unittest` on `ace_engine`). Do not paste `ace_engine` / `base_unittest`
+into another part. After `out/` is warm, ninja of that one existing target is
+incremental; a full product rebuild every campaign is not required.
+
 **Speeding up repeated OH builds.** `--ccache` is already hb's default, so it
 only states the intent. The parameter that measurably helps is `--fast-rebuild`,
 which skips the prepare/preloader/loader/gn phases and starts at ninja: the same
@@ -517,7 +524,16 @@ pi-pbt build-run \
 The build command is **your prepared input**, not something the agent figures
 out. `build-run` executes it in `--workdir` first (full log in
 `<out>/build.log`); if it fails, PBT never starts and the process exits `3` —
-fix the tree or the command and re-run. This is a **preflight** gate, not a
+fix the tree or the command and re-run.
+
+`--workdir` and `--repo` must belong to **one checkout**: either the same path,
+or one containing the other (the build root normally sits above the module, as
+in the OpenHarmony example above). Two sibling checkouts are rejected before the
+build runs, with an error naming both paths. This is deliberate — provisioned
+workspaces often differ only by a hash suffix, and building in one while testing
+the other silently wastes the whole build, since nothing produced there can be
+tested, covered or reported here. The same rule applies to the build commands a
+campaign runs: one that `cd`s into an unrelated checkout is blocked. This is a **preflight** gate, not a
 post-campaign bug verdict: after preflight succeeds, direct `build-run` uses the
 ordinary pi process exit. Read its reports, or use MCP's `pbt_report` for a
 managed result. If it succeeds, the campaign starts in

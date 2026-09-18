@@ -348,6 +348,10 @@ host 产物在 `out/host/host_product`,不是 `out/host_product`。初次 prefli
 `pbt` target。`host_product` 并不覆盖所有组件:只有组件没有 host 目标、且 workspace
 已经为对应产物配置 runner 时,才使用 device product。
 
+整棵 OpenHarmony 树**没有一条**通用 `--build-cmd`。复用命令**形状**:`--workdir` 为
+workspace,`--repo` 为**当前**组件,门禁用**该部件已存在**的 unittest。不要把
+`ace_engine` / `base_unittest` 贴到别的部件。`out/` 热起来后对该目标 ninja 是增量的。
+
 **加快 OH 重复构建。** `--ccache` 已经是 hb 的默认值，写出来只是显式声明。实测有效的
 是 `--fast-rebuild`：它跳过 prepare/preloader/loader/gn，直接从 ninja 开始，同一次无改动
 的 `base_unittest` 增量构建，不加是 **27 秒**，加上是 **13 秒**。

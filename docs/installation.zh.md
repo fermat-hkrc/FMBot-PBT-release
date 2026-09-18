@@ -402,6 +402,12 @@ pi-pbt build-run \
 product,而且 workspace 必须已经给该 product 的产物配好 runner;不要把 device 构建
 描述成 host 路径的通用替代品。
 
+整棵 OpenHarmony 树**没有一条**通用 `--build-cmd`。复用的是命令**形状**:`--workdir`
+为已准备好的 workspace,`--repo` 为**当前**组件,门禁用**该组件里已经存在**的
+unittest(例如 `ace_engine` 的 `base_unittest`)。不要把 `ace_engine` / `base_unittest`
+复制到别的部件。`out/` 热起来之后,对该现存目标做 ninja 是增量的,不必每个 campaign
+全量编产品。
+
 **加快 OH 重复构建。** `--ccache` 已经是 hb 的默认值，写出来只是显式声明。实测有效的
 是 `--fast-rebuild`：它跳过 prepare/preloader/loader/gn，直接从 ninja 开始，同一次无改动
 的 `base_unittest` 增量构建，不加是 **27 秒**，加上是 **13 秒**。
@@ -448,6 +454,13 @@ pi-pbt build-run \
 以"构建契约"运行:重建只允许复用这条命令(需要时只能把现存目标换成新生成的测试
 目标),重建失败是 STOP 条件、原样记入 `REPORT.md`。agent 不会切换构建系统或推导
 替代编译方式。`--scope` 把 campaign 限制在该路径;只有全仓才省略。
+
+`--workdir` 与 `--repo` 必须属于**同一个 checkout**:要么是同一路径,要么一个包含
+另一个(构建根通常在模块之上,如上面的 OpenHarmony 示例)。两个平级的 checkout 会在
+构建开始前就被拒绝,错误信息里会列出两条路径。这是刻意的:provisioned 出来的工作区
+常常只差一个哈希后缀,在一个里构建、却在另一个里测试,会让整次构建白做——那边产出的
+东西在这边既测不到、也进不了覆盖率和报告。campaign 运行期间的构建命令同样适用这条
+规则:`cd` 进无关 checkout 的构建会被拦下。
 
 注意：`build-run` 的退出码 3 只表示启动前构建失败。preflight 成功后，它沿用普通
 pi 进程退出行为，不会把发现 bug / 缺失报告映射成 hook-run 的 1/2；请读报告，或通过

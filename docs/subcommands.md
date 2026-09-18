@@ -389,6 +389,11 @@ target. `host_product` is not universal: use a device product only when the
 component has no host target and the workspace already has a runner configured
 for the resulting artifact.
 
+There is no single `--build-cmd` for the whole OpenHarmony tree. Reuse this
+**shape**: `--workdir` the workspace, `--repo` **this** component, an **existing**
+unittest of **this** part. Do not paste `ace_engine` / `base_unittest` into another
+component. After `out/` is warm, ninja of that one target is incremental.
+
 **Speeding up repeated OH builds.** `--ccache` is already hb's default, so it
 only states the intent. The parameter that measurably helps is `--fast-rebuild`,
 which skips the prepare/preloader/loader/gn phases and starts at ninja: the same

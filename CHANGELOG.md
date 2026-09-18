@@ -10,6 +10,148 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.21 - 2026-09-18
+
+### English
+
+#### Fixed
+
+- **A build that runs in a different checkout than the campaign is stopped
+  before it starts.** A field campaign was given a build directory in one
+  provisioned workspace while pi-pbt was launched in another — two paths
+  differing only by a hash suffix. The agent faithfully ran a full OpenHarmony
+  component build there, spending 342 s of a 53-minute campaign on artifacts
+  nothing downstream could use; the mismatch surfaced only much later, when a
+  test file written into that tree tripped the outside-repo write guard. A build
+  command whose `cd` target shares no tree with the campaign's source is now
+  blocked, with a corrective reason naming both paths. Paths count as one tree
+  when either contains the other, so the normal shape — build root above the
+  module — still passes, as do relative `cd`s and commands with no `cd`, and
+  paths are normalized first so `..` cannot walk out of the tree. Only build
+  commands are judged: reading a reference checkout elsewhere stays legitimate.
+  The comparison uses the campaign's SOURCE tree rather than the working
+  directory, because `hook-run` deliberately works from an empty clean-room
+  while the SUT stays in its own checkout; the detected OpenHarmony workspace is
+  a legitimate root too, since `build.sh` sits above the component. `build-run`
+  applies the same rule to `--workdir` and `--repo` during argument validation,
+  and both installation guides document the requirement.
+
+- **The agent is told the truth about C++ coverage instead of discovering it
+  mid-campaign.** On a machine with neither gcovr nor lcov, no `--coverage` is
+  injected — while the workflow tells the agent coverage is already configured
+  and must not be hand-rolled. In the same field campaign the agent checked the
+  build files, correctly saw no coverage flag, concluded the instruction was
+  wrong, and took over: roughly thirty rounds and five full rebuilds hand-running
+  `gcov`, first against a version mismatch and then against gcov's file-naming
+  rules, never producing a single `.gcov`. The system prompt now states plainly
+  when coverage is NOT enabled, names the fix (`pip3 install --user gcovr`,
+  which needs no root), and rules out the three moves that consumed that budget:
+  adding coverage flags by hand, rebuilding to change compilers, and running
+  `gcov` directly on object directories.
+
+- **A reporter the agent installs now takes effect.** Tool detection is cached
+  once per process, so a `gcovr` installed on the agent's own initiative was
+  ignored by collection and finalization and rendered nothing. A reporter
+  install marks the probe stale; the next command re-probes and re-applies the
+  coverage environment.
+
+- **The readiness note warns about CMake's cached flags.** Coverage flags travel
+  as environment variables and CMake reads them only when it FIRST configures a
+  build tree, so re-running a target in a tree configured earlier produces no
+  data however the environment is set. The note says so and directs the agent to
+  configure a fresh build tree rather than edit coverage flags into the project.
+
+- **The C++ compiler probe asks the compiler the build will use** (`$CXX`,
+  including forms like `ccache clang++`), falling back to `c++`/`g++`/`clang++`.
+  A host with a versioned or cross compiler and no generic `c++` was previously
+  read as having no C++ toolchain at all.
+
+#### Added
+
+- **C++ coverage is collected through llvm-cov.** A clang machine with
+  `llvm-profdata` and `llvm-cov` but no gcov reporter selects LLVM
+  instrumentation and writes `.profraw` — and previously had no collector at
+  all, so those campaigns produced no C++ report and no gap data. `raw/*.profraw`
+  is now merged with `llvm-profdata` and rendered with `llvm-cov export
+  -format=lcov` (feeding the existing claim cross-check) and `llvm-cov show
+  -format=html`. gcov needs no binary because its counters sit beside the
+  objects, but llvm-cov reads them out of the executable, so the instrumented
+  binaries are located: the usual build outputs are walked at bounded depth
+  rather than the whole project, executables are identified by ELF/Mach-O magic
+  rather than the exec bit, and the campaign's own `*_pbt_test` harness is ranked
+  first. An unmergeable profile and a profile with no locatable binary each
+  report a note instead of failing the campaign.
+
+#### Validation and SDK
+
+- Cross-workspace detection is tested with the field log's real paths, including
+  path normalization, the `hook-run` clean-room shape, and blank roots that must
+  not become a match-everything root.
+- LLVM collection is verified end to end against the real toolchain: the test
+  compiles an instrumented binary with `clang++`, runs it under the campaign's
+  own `LLVM_PROFILE_FILE` pattern, collects, and asserts the parsed lcov
+  separates the function that executed from the one that did not. It skips where
+  clang/llvm are absent.
+- Embedded pi remains `0.85.1`; version output is
+  `pi-pbt 0.1.21 (pi 0.85.1)`.
+
+### 中文
+
+#### 修复
+
+- **在与 campaign 不同 checkout 里运行的构建，会在开始前被拦下。** 现场一次 campaign
+  收到的构建目录属于一个 provisioned 工作区，而 pi-pbt 启动在另一个——两条路径只差一个
+  哈希后缀。agent 忠实地在那边跑完整个 OpenHarmony 组件构建，在 53 分钟的 campaign 里
+  花掉 342 秒，产出后续完全用不上；错配直到很久以后才暴露，是 agent 往那棵树里写测试
+  文件时撞上"仓外写入"守卫。现在 `cd` 目标与 campaign 源码树不同树的构建命令会被拦下,
+  纠正话术同时给出两条路径。判定规则是"互为包含即同树",所以正常形态不受影响:构建根在
+  模块之上、仓内相对 `cd`、完全没有 `cd` 都放行;路径会先规范化,`..` 无法借此走出树外。
+  只判构建命令:去别的 checkout **读**参考实现仍然正当。比较基准是 campaign 的**源码树**
+  而非工作目录,因为 `hook-run` 会刻意在空的 clean-room 里工作、SUT 留在自己的 checkout;
+  探测到的 OpenHarmony 工作区同样是合法根,因为 `build.sh` 就在组件之上。`build-run` 在
+  参数校验阶段对 `--workdir` 与 `--repo` 应用同一规则,中英文安装指南均记录该约束。
+
+- **关于 C++ 覆盖率，agent 现在被如实告知，而不是自己中途发现。** 在既没有 gcovr 也
+  没有 lcov 的机器上不会注入 `--coverage`,而工作流却告诉 agent 覆盖率已经配好、不要
+  自己配。同一次现场 campaign 里,agent 检查构建文件、正确发现没有覆盖率标志、断定指令
+  有误,于是接管:约三十轮和五次完整重建去手跑 `gcov`,先撞版本不匹配、再撞 gcov 的文件
+  命名规则,**始终没有产出任何 `.gcov`**。现在 system prompt 会明确说明覆盖率**未启用**、
+  给出解决命令(`pip3 install --user gcovr`,不需要 root),并禁止烧掉那次预算的三个动作:
+  自己加覆盖率标志、为换编译器重建、直接对对象目录手跑 `gcov`。
+
+- **agent 装上的 reporter 现在会生效。** 工具探测每进程缓存一次,因此 agent 自行装上的
+  `gcovr` 会被收集与收尾阶段忽略、什么也渲染不出。现在安装 reporter 会让探测失效,下一
+  条命令重新探测并重新应用覆盖率环境。
+
+- **提示中加入 CMake 缓存告警。** 覆盖率标志以环境变量传递,而 CMake 只在**首次**配置
+  构建树时读取,因此在更早配置好的树里重跑目标,无论环境怎么设都不会产生数据。提示会
+  说明这一点,并要求 agent 新建构建树,而不是把覆盖率标志改进项目里。
+
+- **C++ 编译器探测改为询问构建真正使用的编译器**(`$CXX`,兼容 `ccache clang++` 这类
+  写法),再回退 `c++`/`g++`/`clang++`。此前带版本号或交叉编译器、且没有通用 `c++` 的
+  机器会被误判为完全没有 C++ 工具链。
+
+#### 新增
+
+- **C++ 覆盖率支持通过 llvm-cov 收集。** 装有 `llvm-profdata` 与 `llvm-cov`、但没有
+  gcov reporter 的 clang 机器会选择 LLVM 插桩并写出 `.profraw`,而此前**根本没有对应的
+  收集器**,这类 campaign 既没有 C++ 报告也没有覆盖缺口数据。现在 `raw/*.profraw` 会由
+  `llvm-profdata` 合并,并通过 `llvm-cov export -format=lcov`(接入既有的"声称 vs 实际
+  执行"交叉核对)与 `llvm-cov show -format=html` 渲染。gcov 不需要二进制,因为计数器就在
+  对象文件旁边;而 llvm-cov 必须从可执行文件里读取,因此需要定位插桩后的二进制:只在常见
+  构建产物目录内按受限深度遍历而不是全项目扫描,用 ELF/Mach-O magic 而非执行位判断可执行
+  文件,并把 campaign 自己的 `*_pbt_test` 排在最前。无法合并的 profile、以及找不到二进制
+  的情况,都会产出带说明的条目,而不是让 campaign 失败。
+
+#### 验证与 SDK
+
+- 跨工作区检测用现场日志里的真实路径做回归,覆盖路径规范化、`hook-run` 的 clean-room
+  形态,以及空根不得退化成"匹配一切"。
+- LLVM 收集走真实工具链端到端验证:测试用 `clang++` 编出插桩二进制,按 campaign 自己的
+  `LLVM_PROFILE_FILE` 模式运行,再走收集器,断言解析出的 lcov 能区分执行过与未执行的函数;
+  缺 clang/llvm 的机器上跳过。
+- 内嵌 pi 保持 `0.85.1`;版本输出为 `pi-pbt 0.1.21 (pi 0.85.1)`。
+
 ## 0.1.20 - 2026-09-17
 
 ### English
