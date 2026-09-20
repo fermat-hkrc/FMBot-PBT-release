@@ -302,6 +302,7 @@ interface is intended.
 pi-pbt build-run --build-cmd "<command>"
   [--workdir <dir>] [--repo <path>] [--out <dir>]
   [--scope <path>] [--func <name>]
+  [--prompt <text>|-p <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
   [--provider <p>] [--model <m>]
@@ -311,7 +312,9 @@ pi-pbt build-run --build-cmd "<command>"
 ### build-run live JSON logs
 
 **Requires pi-pbt v0.1.19 or newer**; check `pi-pbt --version` first. Add
-**`--mode json`** to `build-run`; no separate `-p` is needed. After the build
+**`--mode json`** to `build-run`; it already implies headless output, so no print
+flag is needed (`-p` here is the extra-context flag described above, not pi's
+print switch). After the build
 passes, model updates and tool-call/results stream as JSONL (one JSON event per
 line), without waiting for the final answer or tailing session files. The default
 `--mode text` is not a complete live tool log.
@@ -369,6 +372,29 @@ PBT-worthy function in `--scope` is in play.
 
 `--workdir` = where the build runs. `--repo` = module under test (`pbt-out/`,
 `--scope`). Same directory (typical CMake): `cd` there and omit both.
+
+**Your own context: `--prompt` / `-p` / `--prompt-file`.** The generated prompt
+carries the build contract, the scope, and the SOP entry — but it cannot know the
+domain facts only you have: which of two similar helpers is the real entry point,
+which directory is legacy, what invariant should hold. Pass them as extra prompt
+text:
+
+```bash
+pi-pbt build-run --build-cmd "./build.sh …" \
+  -p "the decoder path is what matters; the deprecated fast path is out of scope"
+
+# repeatable; --prompt-file reads long context from a file
+pi-pbt build-run --build-cmd "./build.sh …" \
+  --prompt-file ./pbt-context.md -p "and ignore third_party/legacy"
+```
+
+`-p` is the short form of `--prompt`; values merge in command-line order, and
+`--prompt-file` is for text too long for a comfortable shell argument. The block
+is **appended** to the generated prompt (the first token stays the `/skill:`
+invocation that loads the SOP body) and is labeled caller-authored context that
+narrows scope and adds oracles; it cannot override the build contract or the SOP
+flow. In these subcommands `-p` is *not* pi's print switch — they already run
+headless, and `-p` with no value is a usage error.
 
 **OpenHarmony: `host_product` first.** This real ArkUI `ace_engine` preflight
 builds the existing `base_unittest` group before the campaign writes tests:
@@ -448,6 +474,7 @@ Details: [installation.md](installation.md#build-first-then-test-build-run-bring
 ```text
 pi-pbt hook-run <sha>
   [--repo <path>] [--out <dir>] [--workdir <dir>] [--spec <file>]
+  [--prompt <text>|-p <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
   [--provider <p>] [--model <m>]
@@ -493,6 +520,9 @@ commit that is not.
 If the repo is an OpenHarmony module, set `PBT_OH_WORKSPACE` or sit inside a
 tree with `.repo/` + `out/` (auto-detect).
 
+`--prompt` / `-p` / `--prompt-file` work exactly as in `build-run` above: your
+own context, appended to the generated prompt.
+
 ---
 
 ## `watch` — every new commit
@@ -501,12 +531,15 @@ tree with `.repo/` + `out/` (auto-detect).
 pi-pbt watch
   [--repo <path>] [--interval <sec>] [--fetch] [--branch <name>]
   [--out <dir>] [--workdir <dir>] [--spec <file>]
+  [--prompt <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--cov-mode incremental|full] [--effort …]
   [--provider <p>] [--model <m>] [--tui]
 ```
 
 Spawns `hook-run` per new commit, oldest first. Default effort **quick**.
+`--prompt` / `--prompt-file` are forwarded to every campaign, so each gets the
+same caller context.
 
 The baseline is the head at startup: commits that already existed are not
 tested. A poll that finds more than **10** new commits — a burst, a rebase, or

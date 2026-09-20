@@ -556,6 +556,23 @@ pi-pbt build-run --build-cmd "…" \
 `--scope`** and must appear **after** `--scope` on the command line. Without
 `--func`, every PBT-worthy function in `--scope` is in play.
 
+`--prompt "<text>"` (short form `-p`) and `--prompt-file <path>` append your own
+context to the campaign prompt: domain rules, which of two similar helpers is the
+real entry point, which directory is legacy, which invariant is worth asserting,
+what to ignore. They are repeatable (values merge in command-line order) and the
+block is appended after the SOP entry — it narrows scope and adds oracles, and
+cannot override the build contract. Use it when the tree alone does not tell the
+agent what you already know:
+
+```bash
+pi-pbt build-run --build-cmd "…" --scope src/decoder.cpp \
+  -p "decode() is the only public entry; the legacy_* helpers are dead code"
+```
+
+In `build-run` / `hook-run`, `-p` is this extra-context flag, **not** pi's print
+switch: those subcommands already run headless. `watch` accepts
+`--prompt` / `--prompt-file` and forwards them to every `hook-run` it spawns.
+
 `--out`, `--lang`, `--effort` (default `standard`), `--provider`,
 `--model`, `--mode text|json|json-full`, and `--tui` work as on `hook-run`.
 `--mode` defaults to `text`; selecting `json` changes the stdout format, not the
@@ -564,7 +581,9 @@ campaign or its exit behavior.
 #### build-run live JSON logs
 
 **Requires pi-pbt v0.1.19 or newer**; check `pi-pbt --version` first. Add
-**`--mode json`** to `build-run`; no separate `-p` is needed. After the build
+**`--mode json`** to `build-run`; it already implies headless output, so no print
+flag is needed (`-p` here is the extra-context flag above, not pi's print
+switch). After the build
 passes, model updates and tool-call/results stream as JSONL (one JSON event per
 line), without waiting for the final answer or tailing session files. The default
 `--mode text` is not a complete live tool log.
@@ -644,6 +663,26 @@ the log. Thinking blocks are replaced by a `thinkingChars` count.
 `--mode json-full` is pi's raw session stream with none of that filtering — every
 delta and every full-message snapshot. Use it when you are consuming the complete
 SDK protocol rather than reading a log; expect one line per streamed token.
+
+**Turning coverage off, and adding your own instructions.** Both campaign
+subcommands accept `--no-coverage` (skip native-coverage instrumentation and
+reporting entirely) and `--prompt-append "<text>"` (extra instructions appended
+to the generated campaign prompt — "only these three functions", "do not touch
+qemu"). `--prompt-append` is the single-string form of the same idea as the
+`--prompt` / `-p` / `--prompt-file` flags documented under `build-run` above; the
+latter also reads long context from a file. The in-session entries have no command line, so they read the same two
+settings from the invocation prose: an explicit `effort: quick` /
+`effort设为 quick`, and `coverage: off` / `不要覆盖率`. A flag or the
+`PBT_EFFORT` / `PBT_CODE_COVERAGE` environment variable always wins over prose.
+
+Coverage is worth turning off when the build system does not consume
+`CFLAGS`/`CXXFLAGS`/`LDFLAGS` at all. GN and Bazel take their compile flags from
+their own configuration, so the exported flags never reach the compiler and
+`pbt-out/code-coverage/` stays empty; pi-pbt now says so in the campaign's
+system prompt rather than leaving an empty directory to be interpreted. Do not
+flip the build system's own global coverage switch to compensate — on
+OpenHarmony that is `use_clang_coverage`, which rebuilds the whole tree with
+ccache defeated.
 
 For automation that needs the SDK event stream, add `--mode json` (the default
 is `--mode text`). JSON mode reserves stdout for SDK events; preflight output,

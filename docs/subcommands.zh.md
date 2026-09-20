@@ -270,6 +270,7 @@ pi-pbt build-run --repo /path/to/repo --workdir /path/to/repo \
 pi-pbt build-run --build-cmd "<command>"
   [--workdir <dir>] [--repo <path>] [--out <dir>]
   [--scope <path>] [--func <name>]
+  [--prompt <text>|-p <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
   [--provider <p>] [--model <m>]
@@ -279,7 +280,8 @@ pi-pbt build-run --build-cmd "<command>"
 ### build-run 实时 JSON 日志
 
 **需要 pi-pbt v0.1.19 或更新版本**，先用 `pi-pbt --version` 确认。
-给 `build-run` 加 **`--mode json`**，无需另加 `-p`：构建通过后，模型文本更新和
+给 `build-run` 加 **`--mode json`**，它本身就意味着无头输出，不需要再另加 print 开关
+（这里的 `-p` 是下面的「调用方补充信息」flag，不是 pi 的 print 开关）。构建通过后，模型文本更新和
 工具调用/结果以 JSONL（一行一个 JSON 事件）实时输出，不必等待最后总结，也不必扫描
 session 文件。默认 `--mode text` 不是完整实时工具日志。
 
@@ -330,6 +332,24 @@ CI 需要裁决时用 `hook-run`。
 
 `--workdir` = 构建执行目录。`--repo` = 被测模块(`pbt-out/`、`--scope`)。
 同一目录(常见 CMake):`cd` 进去,两个 flag 都省略。
+
+**补充你自己的上下文:`--prompt` / `-p` / `--prompt-file`。** 生成的 prompt 里有构建契约、
+范围和 SOP 入口,但它无法知道只有你掌握的领域事实:两个相似 helper 里哪个才是真正的入口、
+哪个目录是历史遗留、应该成立什么不变量。把这些作为补充提示词传进去:
+
+```bash
+pi-pbt build-run --build-cmd "./build.sh …" \
+  -p "decoder 路径才是重点;已废弃的 fast path 不在范围内"
+
+# 可重复;--prompt-file 用于太长、不适合放在 shell 参数里的上下文
+pi-pbt build-run --build-cmd "./build.sh …" \
+  --prompt-file ./pbt-context.md -p "另外忽略 third_party/legacy"
+```
+
+`-p` 是 `--prompt` 的短形式;多个值按命令行顺序合并,`--prompt-file` 读取文件内容。
+这段文本**追加**在生成 prompt 之后(第一个 token 仍是加载 SOP 的 `/skill:` 调用),
+标注为调用方提供的上下文,用于收窄范围、补充 oracle;它不能覆盖构建契约或 SOP 流程。
+在这些子命令里 `-p` **不是** pi 的 print 开关——它们本来就是无头运行,`-p` 不带值会报错。
 
 **OpenHarmony 默认先用 `host_product`。** 下面这条真实 ArkUI `ace_engine`
 preflight 会在 campaign 写测试之前构建现存的 `base_unittest` group:
@@ -398,6 +418,7 @@ pi-pbt build-run --provider xai --model grok-4.6 --lang zh \
 ```text
 pi-pbt hook-run <sha>
   [--repo <path>] [--out <dir>] [--workdir <dir>] [--spec <file>]
+  [--prompt <text>|-p <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
   [--provider <p>] [--model <m>]
@@ -439,6 +460,9 @@ pi-pbt hook-run <sha> --repo /path/to/worktree
 OpenHarmony 模块请设 `PBT_OH_WORKSPACE`,或放在带 `.repo/` + `out/` 的树里
 (可自动检测)。
 
+`--prompt` / `-p` / `--prompt-file` 与上面 `build-run` 完全一致:你自己的上下文,追加到
+生成的 prompt。
+
 ---
 
 ## `watch` — 每个新提交
@@ -447,12 +471,14 @@ OpenHarmony 模块请设 `PBT_OH_WORKSPACE`,或放在带 `.repo/` + `out/` 的�
 pi-pbt watch
   [--repo <path>] [--interval <sec>] [--fetch] [--branch <name>]
   [--out <dir>] [--workdir <dir>] [--spec <file>]
+  [--prompt <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--cov-mode incremental|full] [--effort …]
   [--provider <p>] [--model <m>] [--tui]
 ```
 
-每个新提交拉起一次 `hook-run`,从旧到新。默认 effort **quick**。
+每个新提交拉起一次 `hook-run`,从旧到新。默认 effort **quick**。`--prompt` / `--prompt-file`
+会透传给每次 campaign,所以每次都拿到同一份调用方上下文。
 
 基线是启动时的 head:已经存在的提交不会被测。某次轮询发现超过 **10** 个新提交时——
 一次推送风暴、一次 rebase,或者上一轮 20–30 分钟的战役期间攒下的队列——只测**最新的

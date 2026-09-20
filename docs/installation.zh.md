@@ -478,14 +478,30 @@ pi-pbt build-run --build-cmd "…" \
 指该路径里的**一个符号**。必须先有 `--scope`,且命令行里 `--func` 必须写在
 `--scope` **之后**;不加 `--func` 则覆盖 `--scope` 里所有值得测的函数。
 
-`--out`、`--lang`、`--effort`(默认 `standard`)、`--provider`、`--model`、
-`--mode text|json|json-full`、`--tui` 与 `hook-run` 一致。`--mode` 默认是 `text`；选择
-`json` 只改变 stdout 格式，不改变 campaign 或退出行为。
+`--prompt "<文本>"`(短形式 `-p`)与 `--prompt-file <路径>` 把你自己的上下文追加到
+campaign prompt:领域规则、两个相似 helper 里哪个才是真正入口、哪个目录是历史遗留、
+哪些不变量值得断言、什么应当忽略。可重复(值按命令行顺序合并),文本块追加在 SOP 入口
+之后——用于收窄范围和补充 oracle,不能覆盖构建契约。当代码树本身无法告诉 agent 你已经
+知道的事实时,用它:
+
+```bash
+pi-pbt build-run --build-cmd "…" --scope src/decoder.cpp \
+  -p "decode() 是唯一公开入口;legacy_* 那些 helper 是死代码"
+```
+
+在 `build-run` / `hook-run` 里,`-p` 就是上面这个补充信息 flag,**不是** pi 的 print 开关:
+这些子命令本来就是无头运行。`watch` 接受 `--prompt` / `--prompt-file`,并透传给它拉起的
+每一次 `hook-run`。
+
+`--out`、`--lang`、`--effort`(默认 `standard`)、`--prompt`/`-p`/`--prompt-file`、
+`--provider`、`--model`、`--mode text|json|json-full`、`--tui` 与 `hook-run` 一致。
+`--mode` 默认是 `text`；选择 `json` 只改变 stdout 格式，不改变 campaign 或退出行为。
 
 #### build-run 实时 JSON 日志
 
 **需要 pi-pbt v0.1.19 或更新版本**，先用 `pi-pbt --version` 确认。
-给 `build-run` 加 **`--mode json`**，无需另加 `-p`：构建通过后，模型文本更新和
+给 `build-run` 加 **`--mode json`**，它本身就意味着无头输出，不需要再另加 print 开关
+（这里的 `-p` 是上面的「补充信息」flag，不是 pi 的 print 开关）。构建通过后，模型文本更新和
 工具调用/结果以 JSONL（一行一个 JSON 事件）实时输出，不必等待最后总结，也不必扫描
 session 文件。默认 `--mode text` 不是完整实时工具日志。
 
@@ -557,6 +573,20 @@ pi-pbt hook-run <sha> --repo /path/to/repo --lang zh
 
 `--mode json-full` 是 pi 未经过滤的原始会话事件流：每个增量、每份完整消息快照都在，
 每个流式 token 一行。只有在需要消费完整 SDK 协议（而不是读日志）时才用它。
+
+**关闭覆盖率，以及追加你自己的指令。** 两个 campaign 子命令都接受
+`--no-coverage`(完全跳过原生覆盖率的插桩与报表)和 `--prompt-append "<文本>"`
+(把额外指令追加到生成的 campaign 提示词末尾,比如"只测这三个函数"、"不要动
+qemu")。`--prompt-append` 是上面 `build-run` 一节 `--prompt` / `-p` / `--prompt-file`
+的单字符串形式,后者还能从文件读取长上下文。in-session 入口没有命令行,因此从调用的散文里读同样两项设置:明确写出的
+`effort: quick` / `effort设为 quick`,以及 `coverage: off` / `不要覆盖率`。命令行
+参数或 `PBT_EFFORT` / `PBT_CODE_COVERAGE` 环境变量始终优先于散文。
+
+当构建系统根本不消费 `CFLAGS`/`CXXFLAGS`/`LDFLAGS` 时,关闭覆盖率是合理的。GN 与
+Bazel 的编译标志来自它们自己的配置,导出的标志到不了编译器,`pbt-out/code-coverage/`
+会一直是空的;pi-pbt 现在会在 campaign 的 system prompt 里如实说明,而不是留一个空
+目录让 agent 去猜。不要为此去翻构建系统自带的全局覆盖率开关——在 OpenHarmony 上那是
+`use_clang_coverage`,一开就会让整棵树重建且 ccache 失效。
 
 自动化若需要 SDK 事件流，加 `--mode json`（默认是 `--mode text`）。JSON 模式把
 stdout 专用于 SDK 事件；preflight 输出、扫描诊断及其他运行信息写 stderr；

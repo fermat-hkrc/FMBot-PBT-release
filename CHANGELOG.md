@@ -10,6 +10,136 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.22 - 2026-09-20
+
+### English
+
+#### Added
+
+- **Callers can hand the campaign context the tree does not carry.** `build-run`
+  and `hook-run` now accept `--prompt <text>` (short form `-p`) and
+  `--prompt-file <path>`, repeatable, values merged in command-line order. The
+  text is appended after the SOP entry as an authoritative-context block: it
+  narrows scope and adds oracles, but cannot override the build contract. Use it
+  for what you already know and the tree does not — which of two similar helpers
+  is the real entry point, which directory is legacy, which invariant is worth
+  asserting. It is wired through `watch` (forwarded to each spawned `hook-run`)
+  and MCP `pbt_start`, documented in the install/subcommand guides, the README
+  and the pi-pbt-dev skill, and a `--prompt`/`-p` left without a value is now a
+  usage error rather than a silent empty string. A single-string
+  `--prompt-append <text>` carries the same idea for a one-line instruction. In
+  these subcommands `-p` is the extra-context flag, not pi's print switch: they
+  already run headless.
+
+- **Coverage can be turned off from either side.** `--no-coverage` on
+  `build-run` and `hook-run`, and an explicit `coverage: off` / `不要覆盖率` in
+  the invocation prose for the in-session entries, which have no command line.
+  `PBT_CODE_COVERAGE=0` still exists and still wins. Turn it off when the build
+  system does not consume `CFLAGS`/`CXXFLAGS`/`LDFLAGS` at all — GN and Bazel
+  take their compile flags from their own configuration.
+
+- **The effort tier written in prose is now read.** A campaign launched with
+  "effort设为 quick" in the prompt silently ran at `standard` — one such run
+  took 53 minutes, the next 217. Parsing is deliberately narrow: an explicit
+  key:value or one of a few fixed phrasings. An explicit `--effort` flag or
+  `PBT_EFFORT` still wins.
+
+- **`REPORT.md` opens with a verdict and every bug states its formal
+  proposition.** The report now leads with a Verdict sentence — worst severity
+  and what breaks, or that nothing was found — so "is there anything I need to
+  fix now" is the first thing a developer reads. Each bug entry starts from its
+  formal statement, severity, a counterexample written as a call rather than a
+  bare tuple, and expected/actual, with the framework's verbatim output last.
+  `reportContentIssues` joins the close-out gate, so a report missing either is
+  an incomplete campaign; an explicitly empty Bugs Found section owes no formal.
+
+#### Fixed
+
+- **A build that also greps is no longer capped at the scan ceiling.**
+  `isScanCommand` fired on the mere presence of grep/rg/find and ran before the
+  build check, so `./build.sh … && rg error build.log` was capped at 60 s and
+  the compile was killed mid-flight — twelve times in one field campaign. The
+  agent worked around it with `nohup` plus sleep-and-poll. Machine-wide scans do
+  not escape through this: `isMachineWideScan` still blocks `find /` outright,
+  above and independent of any timeout.
+
+- **The campaign is told when the build system ignores environment compile
+  flags.** Verified on a real OpenHarmony tree: building with
+  `CXXFLAGS="--coverage -DPBT_PROBE_MARKER"` left zero occurrences of the
+  marker in `build.ninja` or the compile lines, so `pbt-out/code-coverage/`
+  stays empty by construction. The system prompt now says so and names
+  `use_clang_coverage` as the trap not to spring, instead of leaving an empty
+  directory to be misread — a previous campaign spent an 11130-target
+  instrumented rebuild on that guess.
+
+#### Documentation
+
+- **Volcengine (火山引擎) model configuration guide** for GLM models served
+  through the Volcengine AI Gateway (`docs/models-glm-volcengine.md` and its
+  Chinese counterpart).
+
+#### Validation and SDK
+
+- Regression tests cover `--prompt` / `--prompt-file` parsing, the
+  build-not-a-scan classification, the coverage-off switches and the
+  report-content gate.
+- Embedded pi stays `0.85.1`; `pi-pbt --version` reports
+  `pi-pbt 0.1.22 (pi 0.85.1)`.
+
+### 中文
+
+#### 新增
+
+- **调用方可以把代码树读不出的上下文交给 campaign。** `build-run` 与 `hook-run`
+  新增 `--prompt <文本>`(短形式 `-p`)与 `--prompt-file <路径>`,可重复,按命令行顺序
+  合并。文本作为"权威上下文"块追加在 SOP 条目之后:收窄范围、补充 oracle,但不能覆盖
+  构建契约。用于代码树说不出、而你已知的信息——两个相似 helper 哪个才是真正入口、哪个
+  目录是遗留代码、该断言哪条不变量。该能力已接入 `watch`(透传给每个拉起的 `hook-run`)
+  与 MCP `pbt_start`,并在安装/子命令指南、README 与 pi-pbt-dev skill 中记录;
+  `--prompt`/`-p` 缺值现在是用法错误,不再静默变成空字符串。单字符串的
+  `--prompt-append <文本>` 是同一意图的一次性指令形式。在这些子命令里 `-p` 是
+  "额外上下文"标志,不是 pi 的 print 开关——它们本来就是无头运行。
+
+- **覆盖率可以从任一侧关闭。** `build-run` 与 `hook-run` 支持 `--no-coverage`;无命令行
+  的会话内入口则在调用语里写 `coverage: off` / `不要覆盖率`。`PBT_CODE_COVERAGE=0`
+  仍然有效且优先级最高。当构建系统完全不消费 `CFLAGS`/`CXXFLAGS`/`LDFLAGS`(GN 与
+  Bazel 从自身配置取编译标志)时应当关闭。
+
+- **写在提示里的 effort 档位现在会被读取。** 提示里写 "effort设为 quick" 的 campaign
+  此前静默按 `standard` 运行——一次跑了 53 分钟,下一次 217 分钟。解析刻意收窄(显式
+  key:value 或少数固定说法);`--effort` 标志或 `PBT_EFFORT` 环境变量仍然优先。
+
+- **`REPORT.md` 以结论开头,每个 bug 都给出形式化命题。** 报告现在先给一句 Verdict——
+  最严重等级与什么会被破坏,或"未发现问题"——让"现在有没有要修的东西"成为开发者读到的
+  第一句。每个 bug 条目以形式化陈述、严重级别、写成调用的反例、期望/实际开头,框架的
+  原始输出放到最后。`reportContentIssues` 已加入收尾门禁:缺任一项即视为 campaign 未
+  完成;显式为空的 Bugs Found 段落不需要形式化命题。
+
+#### 修复
+
+- **既构建又 grep 的命令不再被按扫描上限截断。** `isScanCommand` 只要看到 grep/rg/find
+  就触发,且分支排在构建判断之前,于是 `./build.sh … && rg error build.log` 被限时 60
+  秒、编译被中途杀掉——一次现场 campaign 里发生了十二次。agent 只能用 `nohup` 加轮询
+  绕过。全机扫描不会因此漏网:`isMachineWideScan` 依旧在最上层直接拦截 `find /`,独立
+  于任何超时。
+
+- **构建系统忽略环境编译标志时,campaign 会被如实告知。** 在真实 OpenHarmony 树上验证:
+  以 `CXXFLAGS="--coverage -DPBT_PROBE_MARKER"` 构建后,`build.ninja` 与编译命令行里该
+  标记出现零次,因此 `pbt-out/code-coverage/` 天然为空。现在 system prompt 会说清这一点,
+  并指出 `use_clang_coverage` 是不要踩的陷阱,而不是留下一个空目录让人误读——上一次
+  campaign 正是因为这个猜测花掉了一次 11130 目标的插桩重建。
+
+#### 文档
+
+- **火山引擎(Volcengine)模型配置指南**:通过 Volcengine AI Gateway 使用 GLM 模型
+  (`docs/models-glm-volcengine.md` 及中文版)。
+
+#### 验证与 SDK
+
+- 回归测试覆盖 `--prompt` / `--prompt-file` 解析、"构建不是扫描"的分类、覆盖率关闭开关
+  以及报告内容门禁。
+- 内嵌 pi 保持 `0.85.1`;`pi-pbt --version` 输出 `pi-pbt 0.1.22 (pi 0.85.1)`。
+
 ## 0.1.21 - 2026-09-18
 
 ### English
