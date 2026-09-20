@@ -1,14 +1,16 @@
 # Campaign result contract (`pbt-out/report.json`)
 
-A completed campaign writes two result artifacts:
+A completed campaign writes customer-facing and technical result artifacts:
 
-- `REPORT.md` is the human-readable narrative.
-- `report.json` is the structured result for CI, dashboards, and other programs.
+- `REPORT.html` is the customer-facing overview. It links to every individual bug page.
+- `bug_reports/<slug>.html` is one customer-facing page per confirmed bug.
+- `REPORT.md` is the technical Markdown campaign narrative.
+- `bug_reports/<slug>.md` is the Markdown version of the individual bug report.
+- `report.json` is the structured source for CI, dashboards, and the generated customer reports.
 
-They should describe the same verified facts, but they are separate campaign
-outputs. pi-pbt validates `report.json`; it does **not** currently render
-`REPORT.md` from the JSON. Do not treat one file as an automatically generated
-copy of the other.
+When a valid `report.json` is written, pi-pbt renders matching top-level
+`REPORT.html` and `REPORT.md` overviews plus per-bug HTML/Markdown reports. Do
+not hand-maintain those generated files.
 
 `hook-run` requires both files in the same recognized artifact root. A missing
 or invalid `report.json` makes the check incomplete (exit `2`), even if
@@ -44,7 +46,7 @@ removed in a real `report.json`.
 
 ```jsonc
 {
-  "schemaVersion": 1,                    // bumped when a field changes meaning
+  "schemaVersion": 2,                    // bumped when a field changes meaning
   "generator": { "tool": "pi-pbt", "version": "0.1.17" },
   "run": {
     "date": "2026-09-14",
@@ -79,9 +81,11 @@ removed in a real `report.json`.
       "propertyId": "p1",                 // required — the property that found it
       "summary": "Invert returns identity for a singular matrix",
       "severity": "high",                 // low | medium | high | critical
+      "impact": "Callers may continue calculations using an invalid inverse.",
       "expected": "false / error for a singular matrix",
       "actual": "identity, silently",
       "counterexample": "m = {{1,2},{2,4}}",
+      "fix": "Reject singular matrices before inversion and return the documented error.",
       "reportPath": "bug_reports/invert-singular.md",   // relative to this file
       "reproduction": {
         "build": "./build.sh --product-name host_product --build-target geometry_pbt_test",
@@ -140,7 +144,43 @@ jq -r '.properties[] | select(.status == "failing") | "\(.name) — \(.counterex
 - `reproduction.seed` is a framework replay value or `null` for a deterministic command. RapidCheck's exact shrunk replay is its printed `reproduce=...` token, which belongs in the recorded run command; a RapidCheck seed alone reruns the generated sequence but does not identify the shrunk case. `reproduction.path` is optional and is used with the seed for fast-check replay. See [Replaying the same case](reproducing.md#replaying-the-same-case).
 - `reproduction.build` / `.run` must not contain `...`, `<placeholder>`, `TODO`, `TBD`, `FIXME`, `XXX`, `PLACEHOLDER` or `N/A`.
 - Every bug's property names it back, and their counterexamples agree — one witness per link.
+- `impact` and `fix` are required for every bug so a customer can understand the consequence and the recommended remediation without interpreting test internals.
 - `reportPath` stays inside the artifact directory: no absolute paths, no `..`.
+
+## Customer-facing HTML report template
+
+`REPORT.html` is a compact Chinese overview page with an inline stylesheet. It
+shows the target, test date, tested revision, campaign tier, aggregate property
+counts, and a table of confirmed bugs. Each row links to
+`bug_reports/<slug>.html`; when no bugs are confirmed, the table says so.
+
+Each per-bug HTML page has the following fixed sections:
+
+1. **Issue Synopsis** — severity, identifier, summary, expected behavior,
+   observed behavior, impact assessment, and the minimal counterexample.
+2. **Detection and Validation Methodology** — the linked property test name and
+   identifier, its formal property, oracle type, and system-under-test function.
+3. **Reproduction Protocol** — the recorded working directory, build command,
+   narrow test command, seed, and optional fast-check replay path. It is a
+   pasteable rerun recipe, not evidence of how the property originally failed.
+4. **Remediation Strategy** — the bug's required `fix` field, which records the
+   recommended correction.
+
+The generated Markdown bug report has the same four sections. HTML output
+escapes all report values before placing them in the page. The report generator
+also rejects a `reportPath` that escapes the artifact directory.
+
+### Current discovery-evidence limit
+
+The methodology section currently provides **descriptive discovery metadata**,
+not the source-level evidence itself. It does not embed the property-test code,
+framework failure output, shrinking trace, source excerpt, or line numbers.
+Readers can use `testFile`, `testTarget`, the minimal counterexample, and the
+reproduction command in `report.json` to locate and rerun the test, but cannot
+review its implementation directly from the HTML page. Adding embedded test
+code and captured failure output requires extending the report contract with
+explicit evidence fields; do not infer or fabricate those details while
+rendering.
 
 ## Managed runs
 

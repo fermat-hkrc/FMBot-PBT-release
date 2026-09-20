@@ -237,16 +237,20 @@ pi-pbt
 
 | 产物 | 谁看、有什么用 |
 |---|---|
-| `REPORT.md` | 用户先看这份：被测范围、结果、问题、限制和复现命令。 |
-| `report.json` | **v0.1.18 新增的结构化战役结果**，供 CI、MCP 和其他程序读取；包含 `schemaVersion`、被测提交、构建结果、性质、问题和统计。每个问题都关联发现它的性质与复现命令。 |
-| `bug_reports/*.md` | 每个确认的问题一份详细报告，包含反例与重放步骤。 |
+| `REPORT.html` | 面向客户的报告总览：汇总结果，并链接到每个确认 bug。请从这里开始看。 |
+| `bug_reports/*.html` | 每个确认 bug 的单独客户报告：bug 概述、怎么发现、怎么复现、怎么修。 |
+| `REPORT.md` | 技术 Markdown 战役报告：被测范围、结果、限制和复现命令。 |
+| `bug_reports/*.md` | 每个单独 bug 报告的 Markdown 对应版本。 |
+| `report.json` | 供 CI、MCP 和其他程序读取的结构化战役结果；包含 `schemaVersion`、被测提交、构建结果、性质、问题和统计。每个问题都关联发现它的性质与复现命令。 |
 | `PROPERTIES.md` / `PLAN.md` | 性质清单与战役进度，便于检查测了什么、哪些还没完成。 |
 | `COVERAGE.md` / `COVERAGE_STATUS.md` | 函数/测试进度登记，不是原生行覆盖率百分比；见[覆盖率跟踪](coverage-tracking.md)。 |
 
-`report.json` 是**运行产物，不是用户开跑前要填的配置**。两份报告由 agent 编写，pi-pbt
-校验 JSON 契约；并没有把整个 Markdown 报告从 JSON 自动渲染出来。缺失或截断的报告
+`report.json` 是**运行产物，不是用户开跑前要填的配置**。agent 编写技术版的 `REPORT.md`
+和 `report.json`；JSON 契约校验通过后，pi-pbt 自动从它生成 `REPORT.html` 以及每个 bug
+对应的 HTML/Markdown 报告。缺失或截断的报告
 表示未完成，不能当成“零问题”。字段解释见[报告 schema](report-schema.md)；重放失败、
-取回生成用例及固化入库见[复现与回归指南](reproducing.md)。
+取回生成用例及固化入库见[复现与回归指南](reproducing.md)。这个报告契约同样适用于
+v0.1.18 的替换发行包：需要已修正的安装脚本时刷新压缩包，然后以生成的报告而非进程输出判断结果。
 
 生成的测试位于项目自己的测试树，不在 `pbt-out/`。MCP worktree 模式要先取回
 `changes.patch` 再应用、审阅测试；就地模式的测试已经留在 checkout 中。Kea GUI

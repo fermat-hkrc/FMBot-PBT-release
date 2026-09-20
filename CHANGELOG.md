@@ -10,6 +10,86 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.23 - 2026-09-20
+
+### English
+
+#### Added
+
+- **Customer-facing HTML reports, rendered from the validated `report.json`.**
+  A campaign now emits `REPORT.html` — an overview with a per-bug summary and
+  links — plus one HTML and Markdown page per defect, all derived from the
+  schema-validated JSON rather than hand-written by the agent. The top-level
+  `REPORT.md` is rendered the same way, so the Markdown a developer reads and
+  the HTML a customer opens cannot disagree with the machine-readable record.
+  The HTML overview is exposed through MCP and through the run artifacts, and
+  `docs/report-schema.md` documents the rendered page template.
+
+#### Fixed
+
+- **The HTML is re-rendered at close-out, so a report can no longer ship a
+  stale artifact.** Rendering previously ran only in the `report.json` write
+  guard, at the moment the agent wrote the file: a campaign that wrote a clean
+  report first and its findings later shipped a zero-bug `REPORT.html` with no
+  per-bug page, while `report.json` already recorded the failing property and
+  the bug. `fireReportJsonSteer` now re-renders from the final schema-validated
+  JSON at close-out, and a render failure is reported as a report-json problem
+  instead of passing silently. The workflow SOP names the HTML in the campaign
+  rules, the `pbt-out/` layout, the `REPORT.md` Output Directories template and
+  the close-out checklist, so an artifact list cannot legitimately stop at the
+  Markdown.
+
+- **Embedded pi is upgraded to `0.86.0`.** `@earendil-works/pi-coding-agent`
+  and `@earendil-works/pi-ai` move together to the latest stable release, and
+  the context-runtime test helpers are adapted to the SDK content union the
+  upgrade introduced.
+
+#### Validation and SDK
+
+- Regression tests cover the close-out re-render over a stale overview, a
+  multi-bug overview with correct totals and one working link per bug (including
+  a nested `reportPath` and the per-page back link), the four places the SOP must
+  keep naming the HTML, and the Markdown overview.
+- The Git/worktree/child-process integration suite gets explicit 30-second test
+  and hook timeouts, and the `PbtRunManager` queue-cancellation tests release
+  their queue slots through explicit cancellation, so scheduler contention no
+  longer produces false failures.
+- Embedded pi is `0.86.0`; version output is
+  `pi-pbt 0.1.23 (pi 0.86.0)`.
+
+### 中文
+
+#### 新增
+
+- **面向客户的 HTML 报告，从校验后的 `report.json` 渲染。** 一次 campaign 现在会产出
+  `REPORT.html`——含逐 bug 摘要与链接的总览——以及每个缺陷各一份 HTML 与 Markdown 页面,
+  全部由 schema 校验过的 JSON 派生,而不是 agent 手写。顶层 `REPORT.md` 同样由此渲染,
+  因此开发者读的 Markdown 与客户打开的 HTML 不会和机器可读的记录互相矛盾。HTML 总览
+  通过 MCP 与运行产物暴露,渲染页面模板记录在 `docs/report-schema.md`。
+
+#### 修复
+
+- **收尾时会重新渲染 HTML,报告不会再带着过期产物发布。** 渲染此前只在 `report.json`
+  写入守卫里、也就是 agent 写该文件的那一刻运行:先写干净报告、后写发现问题的 campaign
+  会发出一个零 bug、没有逐 bug 页面的 `REPORT.html`,而 `report.json` 里已经记录了失败
+  属性与 bug。现在 `fireReportJsonSteer` 会在收尾时从最终 schema 校验过的 JSON 重新
+  渲染,渲染失败会作为 report-json 问题上报,而不是静默通过。SOP 在 campaign 规则、
+  `pbt-out/` 布局、`REPORT.md` 的 Output Directories 模板与收尾检查清单里都点名了 HTML,
+  产物清单不可能合法地停在 Markdown。
+
+- **内嵌 pi 升级到 `0.86.0`。** `@earendil-works/pi-coding-agent` 与
+  `@earendil-works/pi-ai` 一同升到最新稳定版;context-runtime 测试辅助代码适配了本次
+  升级引入的 SDK content union。
+
+#### 验证与 SDK
+
+- 回归测试覆盖:在过期总览之上收尾重渲染、多 bug 总览的总数与每个 bug 一个可用链接
+  (含嵌套 `reportPath` 与逐页返回链接)、SOP 必须点名 HTML 的四处位置,以及 Markdown
+  总览。
+- Git/worktree/子进程集成套件显式设置 30 秒 test 与 hook 超时;`PbtRunManager` 队列
+  取消测试改为显式取消释放队列槽位,调度争抢不再产生假失败。
+- 内嵌 pi 为 `0.86.0`;版本输出为 `pi-pbt 0.1.23 (pi 0.86.0)`。
+
 ## 0.1.22 - 2026-09-20
 
 ### English

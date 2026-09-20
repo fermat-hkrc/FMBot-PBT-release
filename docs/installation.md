@@ -275,18 +275,23 @@ runs expose their artifact locations through `pbt_status` and `pbt_report`.
 
 | Artifact | Who uses it and why |
 |---|---|
-| `REPORT.md` | Start here: human-readable scope, results, findings, limitations and reproduction commands. |
-| `report.json` | **New in v0.1.18:** the machine-readable campaign result for CI, MCP and other integrations. It contains `schemaVersion`, tested revision, build result, properties, bugs and totals. Each bug links to the property that found it and its reproduction commands. |
-| `bug_reports/*.md` | One detailed report per confirmed bug, including the counterexample and replay instructions. |
+| `REPORT.html` | Customer-facing overview: result summary and links to every confirmed bug. Start here. |
+| `bug_reports/*.html` | One customer-facing page per confirmed bug: overview, discovery, reproduction and recommended fix. |
+| `REPORT.md` | Technical Markdown campaign narrative: scope, results, limitations and reproduction commands. |
+| `bug_reports/*.md` | Markdown counterpart of each individual bug report. |
+| `report.json` | The machine-readable campaign result for CI, MCP and other integrations. It contains `schemaVersion`, tested revision, build result, properties, bugs and totals. Each bug links to the property that found it and its reproduction commands. |
 | `PROPERTIES.md` / `PLAN.md` | The property ledger and campaign progress; useful for reviewing what was attempted. |
 | `COVERAGE.md` / `COVERAGE_STATUS.md` | Function/testing progress records, not native line-coverage percentages. See [coverage tracking](coverage-tracking.md). |
 
 `report.json` is an output, **not a configuration file to create before running**.
-The agent writes both report views; pi-pbt validates the JSON contract rather
-than automatically generating the whole Markdown report from it. A truncated or
+The agent writes the technical `REPORT.md` and `report.json`; once the JSON
+contract validates, pi-pbt automatically generates `REPORT.html` and the
+individual HTML/Markdown bug reports from it. A truncated or
 missing report is an incomplete run, not “zero bugs”. See the
 [report schema](report-schema.md) for fields and the [reproduction guide](reproducing.md)
-for replaying failures and committing generated tests.
+for replaying failures and committing generated tests. This report contract also applies to
+v0.1.18 replacement archives: refresh the archive when you need the corrected installer,
+then rely on the generated report rather than inferring a clean result from process output.
 
 Generated tests live in the project's test tree, not in `pbt-out/`. With the
 MCP worktree mode, retrieve `changes.patch` before applying/reviewing the tests;
