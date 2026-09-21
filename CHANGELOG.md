@@ -10,6 +10,127 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.24 - 2026-09-21
+
+### English
+
+#### Added
+
+- **The change surface: a campaign is now held to what the diff actually
+  changed.** A thorough campaign (9 properties, ~90 000 generated cases,
+  2 h 20 min) found nothing against a diff that only hardened failure paths,
+  because every property it wrote was a success-path round-trip and nothing in
+  the runtime knew what the diff had touched. From a change source — hook-run's
+  commit, build-run's new `--diff <file>` / `--commit <sha>`, or for the
+  argv-less in-session skills the diff file, commit, range, `HEAD`, uncommitted
+  work or MR export named in the invocation — pi-pbt derives the functions the
+  diff touched (scanning the post-image back from each hunk, so a modified body
+  is found, not only a new definition), flags error-handling changes, writes
+  `pbt-out/CHANGE_SURFACE.md`, and injects the list as the campaign's primary
+  targets. At close-out a changed function with no property, or an
+  error-handling change whose only properties drive the success path, keeps
+  the campaign open. The CLI and the in-session entries converge on one
+  mechanism, so the capability is identical on every entry; the earlier
+  CLI-only `coverage --diff` report only saw functions whose definition line
+  sat inside a hunk.
+- **File-level coverage evidence on every architecture and tier.** When no
+  native instrumentation exists, `coverage_gaps` looks the changed or candidate
+  functions' symbols up in the campaign's test binaries: a function no binary
+  links cannot have executed, whatever the ledger claims. It is presence
+  evidence, named as such wherever it appears, and it costs nothing.
+- **OpenHarmony card: per-target instrumentation, measured.** GN ignores the
+  exported compile flags, and the unittest templates do not forward
+  `ldflags`/`configs`; a `public_configs` carried on an empty `source_set`
+  rebuilds only the target (137 s) and instruments exactly the TUs compiled
+  into it. The card gives that recipe, its measured reach, the architecture
+  ladder (host_product → x86_64 qemu products → arm under qemu-user), and says
+  plainly that arm-under-qemu is feasible by construction but not verified end
+  to end.
+
+#### Fixed
+
+- **Sweep rounds count only evidence-bearing `coverage_gaps` calls.** A call
+  that returned "no instrumented coverage data" used to satisfy the tier's
+  sweep bookkeeping, which is how a thorough campaign recorded its sweep as
+  "incomplete, replaced by analysis" and closed anyway. The tool now answers
+  with a level — line, file, or none with the reason (GN/Bazel ignore the flags;
+  coverage off; no reporter; no binary) — records it in `COVERAGE_STATUS.md`
+  and the report Summary, and a call before any test has run is not a round.
+  The old text claiming "builds are auto-instrumented" was false on GN and led
+  that campaign to blame qemu.
+- **A failing property that turns passing carries re-verification.** The
+  campaign's one real failure, shrunk to a boundary value, was reclassified as a
+  harness mistake and went green with nothing recording that the same input was
+  re-run against the real symbol. A property seen failing that later reads
+  passing/retired without `- Re-verified: <command> → PASS` gets one steer and
+  keeps the close-out open.
+- **pi-pbt's own output is not caveat evidence.** A Design Caveat waiving
+  coverage cited a `pbt-out/` log and the `coverage_gaps` tool's own message as
+  documentation; citations of `pbt-out/`, campaign logs or pi-pbt tools are now
+  skipped by the evidence check.
+- **Report artifacts render in the selected campaign language.** `REPORT.md`,
+  `REPORT.html` and the per-bug pages follow `PBT_LANG` (English or Chinese)
+  instead of a fixed template language; `docs/report-schema.md` documents the
+  contract.
+- `--prompt-append` (0.1.22) was a duplicate of `--prompt` / `-p` /
+  `--prompt-file` that landed at the same time; only the latter remains.
+
+#### Validation and SDK
+
+- Embedded pi is `0.86.1` (updated from `0.85.1`, the current stable); version
+  output is `pi-pbt 0.1.24 (pi 0.86.1)`.
+- The change surface, the evidence levels and the re-verification gate are
+  each exercised through the real `before_agent_start` / `turn_end` runtime on
+  temp git repositories, not only as pure functions; file-level evidence is
+  tested against a real clang++ binary.
+
+### 中文
+
+#### 新增
+
+- **改动面：campaign 现在被要求对准 diff 真正改的代码。** 一次 thorough campaign
+  （9 个性质、约 9 万次生成、2 小时 20 分）对一个只加固失败路径的 diff 零发现，因为它写的
+  全是成功路径的 round-trip，而运行时不知道 diff 改了什么。现在从改动来源——hook-run 的
+  提交、build-run 新增的 `--diff <文件>` / `--commit <sha>`，以及没有命令行的 in-session
+  skill 在调用里点名的 diff 文件、commit、区间、`HEAD`、未提交改动或 MR 导出——pi-pbt 派生
+  diff 触及的函数（从每个 hunk 往回扫 post-image，改了函数体也能找到，不只是新定义），标出
+  错误处理类改动，写入 `pbt-out/CHANGE_SURFACE.md`，并作为首要目标注入。close-out 时，改动
+  函数没有性质、或错误处理改动只有成功路径性质，campaign 不算完成。CLI 与 in-session 入口
+  汇聚到同一机制，能力在每个入口一致；此前 CLI-only 的 `coverage --diff` 只能看到定义行落在
+  hunk 里的函数。
+- **文件级覆盖证据，任意架构、任意档位。** 没有原生插桩时，`coverage_gaps` 在 campaign
+  的测试二进制里查改动/候选函数的符号：没有任何二进制链接到的函数不可能执行过，无论台账
+  怎么写。它是存在性证据，所有出现处都这样标明，且零成本。
+- **OpenHarmony 命令卡：逐目标插桩，实测。** GN 忽略导出的编译标志，unittest 模板不转发
+  `ldflags`/`configs`；挂在空 `source_set` 上的 `public_configs` 只重建该目标（137 秒），
+  且只插桩编进该目标的 TU。命令卡给出配方、实测触达范围、架构阶梯（host_product →
+  x86_64 qemu 产品 → arm + qemu-user），并明说 arm+qemu 按构造可行但未端到端验证。
+
+#### 修复
+
+- **sweep 只计有证据的 `coverage_gaps` 调用。** 返回"无插桩数据"的调用此前也满足档位的
+  sweep 记账，thorough campaign 就是这样把 sweep 记成"未执行，以分析替代"却照常收尾的。
+  工具现在按等级回答——行级、文件级，或"无"并给出原因（GN/Bazel 忽略标志；覆盖率关闭；
+  无 reporter；无二进制），记入 `COVERAGE_STATUS.md` 与报告 Summary；测试未跑时的调用不算
+  轮次。旧文案"构建已自动插桩"在 GN 上是假的，正是它让那次 campaign 把锅甩给 qemu。
+- **失败性质变通过必须复核。** 那次唯一的真实失败收缩到一个边界值后被判为脚手架错误并变绿，
+  没有任何记录表明同一输入在真实符号上重跑过。曾经 failing、之后变 passing/retired 而没有
+  `- Re-verified: <命令> → PASS` 的性质，steer 一次并保持 close-out 未完成。
+- **pi-pbt 自己的输出不是 caveat 证据。** 一条豁免覆盖率的 Design Caveat 引用 `pbt-out/`
+  下的日志和 `coverage_gaps` 工具自身的文案作为文档证据；`pbt-out/` 路径、campaign 日志、
+  pi-pbt 工具名现在被证据判定跳过。
+- **报告产物按所选 campaign 语言渲染。** `REPORT.md`、`REPORT.html` 与逐 bug 页面跟随
+  `PBT_LANG`（中文或英文），不再固定模板语言；`docs/report-schema.md` 记录了该约定。
+- `--prompt-append`（0.1.22）与同期落地的 `--prompt` / `-p` / `--prompt-file` 重复，只保留
+  后者。
+
+#### 验证与 SDK
+
+- 内嵌 pi 为 `0.86.1`（自 `0.85.1` 更新，当前稳定版）；版本输出为
+  `pi-pbt 0.1.24 (pi 0.86.1)`。
+- 改动面、证据等级与复核门禁都在临时 git 仓上经真实的 `before_agent_start` / `turn_end`
+  运行时验证，而非只测纯函数；文件级证据用真实 clang++ 二进制测试。
+
 ## 0.1.23 - 2026-09-20
 
 ### English

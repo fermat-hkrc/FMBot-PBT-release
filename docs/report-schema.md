@@ -149,26 +149,24 @@ jq -r '.properties[] | select(.status == "failing") | "\(.name) — \(.counterex
 
 ## Customer-facing HTML report template
 
-`REPORT.html` is a compact Chinese overview page with an inline stylesheet. It
-shows the target, test date, tested revision, campaign tier, aggregate property
-counts, and a table of confirmed bugs. Each row links to
-`bug_reports/<slug>.html`; when no bugs are confirmed, the table says so.
+`REPORT.html`, generated `REPORT.md`, `bug_reports/<slug>.html`, and
+`bug_reports/<slug>.md` all follow the campaign output language:
 
-Each per-bug HTML page has the following fixed sections:
+- `PBT_LANG=zh` renders Chinese prose, uses `<html lang="zh-CN">`, and uses the
+  per-bug sections **问题概述 / 发现与验证方法 / 复现步骤 / 修复建议**.
+- `PBT_LANG=en` renders English prose, uses `<html lang="en">`, and uses the
+  per-bug sections **Issue Synopsis / Detection and Validation Methodology /
+  Reproduction Protocol / Remediation Strategy**.
 
-1. **Issue Synopsis** — severity, identifier, summary, expected behavior,
-   observed behavior, impact assessment, and the minimal counterexample.
-2. **Detection and Validation Methodology** — the linked property test name and
-   identifier, its formal property, oracle type, and system-under-test function.
-3. **Reproduction Protocol** — the recorded working directory, build command,
-   narrow test command, seed, and optional fast-check replay path. It is a
-   pasteable rerun recipe, not evidence of how the property originally failed.
-4. **Remediation Strategy** — the bug's required `fix` field, which records the
-   recommended correction.
-
-The generated Markdown bug report has the same four sections. HTML output
-escapes all report values before placing them in the page. The report generator
-also rejects a `reportPath` that escapes the artifact directory.
+The overview shows the target, test date, tested revision, campaign tier,
+aggregate property counts, and a table of confirmed bugs. Each row links to
+`bug_reports/<slug>.html`; when no bugs are confirmed, the table says so. The
+per-bug pages include severity, identifier, summary, expected and observed
+behavior, impact, minimal counterexample, linked property metadata, and a
+pasteable reproduction recipe. `report.json` keys remain English and stable as
+the machine-readable contract. HTML output escapes all report values before
+placing them in the page. The report generator also rejects a `reportPath` that
+escapes the artifact directory.
 
 ### Current discovery-evidence limit
 

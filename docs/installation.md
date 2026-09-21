@@ -438,6 +438,17 @@ properties for. Coverage records what **ran**. The report crosses the two:
 - *no evidence* — the symbol was in no report at all, usually an uninstrumented
   target rather than an untrue claim
 
+**Evidence levels.** The `coverage_gaps` tool a campaign calls during its
+contract-surface sweep now reports one of three levels and says which: **line**
+(native instrumentation ran), **file** (no instrumentation, but the changed or
+candidate functions' symbols were checked against the test binaries — a
+function no binary links cannot have executed, whatever the ledger claims), or
+**none**, with the reason (GN/Bazel ignore the exported flags; coverage turned
+off; no reporter; no test binary found). A "no run yet" answer is not a sweep
+round; the other three answers are, and the level goes into `COVERAGE_STATUS.md`
+and the report's Summary. File-level evidence costs nothing and works on every
+architecture and every effort tier.
+
 Turn the whole thing off with `PBT_CODE_COVERAGE=0`.
 
 ### Build first, then test: `build-run` (bring your own build command)
@@ -669,13 +680,23 @@ the log. Thinking blocks are replaced by a `thinkingChars` count.
 delta and every full-message snapshot. Use it when you are consuming the complete
 SDK protocol rather than reading a log; expect one line per streamed token.
 
+**Telling the campaign what changed.** `build-run` takes `--diff <file>` (a
+unified diff, e.g. an MR export) or `--commit <sha>`; `hook-run` already has its
+commit. The in-session entries read the same thing from the invocation prose: a
+`.diff`/`.patch` file name that exists in the repo, a commit sha or `a..b`
+range, "本次提交"/`HEAD`, "未提交改动", or an MR number whose `<n>.diff` export is
+in the repo. From it pi-pbt derives the **change surface** — the functions the
+diff actually touched, with error-handling changes marked — writes it to
+`pbt-out/CHANGE_SURFACE.md`, hands it to the agent as the primary target, and at
+close-out refuses to finish while a changed function has no property or an
+error-handling change has only success-path properties. That is the difference
+between testing the module and testing the change.
+
 **Turning coverage off, and adding your own instructions.** Both campaign
 subcommands accept `--no-coverage` (skip native-coverage instrumentation and
-reporting entirely) and `--prompt-append "<text>"` (extra instructions appended
-to the generated campaign prompt — "only these three functions", "do not touch
-qemu"). `--prompt-append` is the single-string form of the same idea as the
-`--prompt` / `-p` / `--prompt-file` flags documented under `build-run` above; the
-latter also reads long context from a file. The in-session entries have no command line, so they read the same two
+reporting entirely); your own instructions — "only these three functions", "do
+not touch qemu" — go through `--prompt` / `-p` / `--prompt-file`, documented
+under `build-run` above. The in-session entries have no command line, so they read the same two
 settings from the invocation prose: an explicit `effort: quick` /
 `effort设为 quick`, and `coverage: off` / `不要覆盖率`. A flag or the
 `PBT_EFFORT` / `PBT_CODE_COVERAGE` environment variable always wins over prose.

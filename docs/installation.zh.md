@@ -378,6 +378,13 @@ campaign 还会测量**代码到底执行了哪些**,用的是每种语言自带
 - *no evidence* —— 这个符号在所有报表里都没出现,通常是目标没被插桩,而不是声明
   作假
 
+**证据等级。** campaign 在契约面 sweep 中调用的 `coverage_gaps` 工具现在返回三个
+等级之一并说明原因:**行级**(原生插桩生效)、**文件级**(没有插桩,但把改动/候选函数的
+符号与测试二进制核对过——没有任何二进制链接到的函数不可能执行过,无论台账怎么写)、
+**无**,并给出原因(GN/Bazel 忽略导出的标志;覆盖率已关闭;没有 reporter;找不到测试
+二进制)。"还没跑测试"的回答不算 sweep 轮次,其余三种都算,等级会写进
+`COVERAGE_STATUS.md` 和报告的 Summary。文件级证据零成本,任何架构、任何档位都可用。
+
 整个功能可以用 `PBT_CODE_COVERAGE=0` 关掉。
 
 ### 先构建再测试:`build-run`(自带构建命令)
@@ -578,11 +585,19 @@ pi-pbt hook-run <sha> --repo /path/to/repo --lang zh
 `--mode json-full` 是 pi 未经过滤的原始会话事件流：每个增量、每份完整消息快照都在，
 每个流式 token 一行。只有在需要消费完整 SDK 协议（而不是读日志）时才用它。
 
+**告诉 campaign 改了什么。** `build-run` 接受 `--diff <文件>`(unified diff,比如 MR
+导出的补丁)或 `--commit <sha>`;`hook-run` 本来就有它的提交。in-session 入口从调用
+散文里读同样的信息:仓库里存在的 `.diff`/`.patch` 文件名、commit sha 或 `a..b` 区间、
+"本次提交"/`HEAD`、"未提交改动",或者仓库里有对应 `<n>.diff` 导出的 MR 号。pi-pbt
+据此派生**改动面**——diff 真正触及的函数,并标出错误处理类改动——写入
+`pbt-out/CHANGE_SURFACE.md`,作为首要目标交给 agent,并在 close-out 时拒绝结束:只要
+还有改动函数没有性质,或错误处理改动只有成功路径的性质。这是"测模块"和"测改动"的
+区别。
+
 **关闭覆盖率，以及追加你自己的指令。** 两个 campaign 子命令都接受
-`--no-coverage`(完全跳过原生覆盖率的插桩与报表)和 `--prompt-append "<文本>"`
-(把额外指令追加到生成的 campaign 提示词末尾,比如"只测这三个函数"、"不要动
-qemu")。`--prompt-append` 是上面 `build-run` 一节 `--prompt` / `-p` / `--prompt-file`
-的单字符串形式,后者还能从文件读取长上下文。in-session 入口没有命令行,因此从调用的散文里读同样两项设置:明确写出的
+`--no-coverage`(完全跳过原生覆盖率的插桩与报表);你自己的指令——比如"只测这三个
+函数"、"不要动 qemu"——走上面 `build-run` 一节的 `--prompt` / `-p` / `--prompt-file`。
+in-session 入口没有命令行,因此从调用的散文里读同样两项设置:明确写出的
 `effort: quick` / `effort设为 quick`,以及 `coverage: off` / `不要覆盖率`。命令行
 参数或 `PBT_EFFORT` / `PBT_CODE_COVERAGE` 环境变量始终优先于散文。
 

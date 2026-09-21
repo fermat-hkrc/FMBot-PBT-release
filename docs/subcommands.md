@@ -300,6 +300,7 @@ interface is intended.
 
 ```text
 pi-pbt build-run --build-cmd "<command>"
+  [--diff <file> | --commit <sha>]
   [--workdir <dir>] [--repo <path>] [--out <dir>]
   [--scope <path>] [--func <name>]
   [--prompt <text>|-p <text>|--prompt-file <path>]
