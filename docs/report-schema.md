@@ -8,9 +8,14 @@ A completed campaign writes customer-facing and technical result artifacts:
 - `bug_reports/<slug>.md` is the Markdown version of the individual bug report.
 - `report.json` is the structured source for CI, dashboards, and the generated customer reports.
 
-When a valid `report.json` is written, pi-pbt renders matching top-level
-`REPORT.html` and `REPORT.md` overviews plus per-bug HTML/Markdown reports. Do
-not hand-maintain those generated files.
+When a valid `report.json` is written, pi-pbt renders the top-level
+`REPORT.html` and the per-bug `bug_reports/<slug>.html` from it — and renders
+them again at close-out, so the HTML always matches the final validated JSON.
+Do not hand-maintain those HTML files. The Markdown is different: `REPORT.md`
+and `bug_reports/<slug>.md` are authored by the campaign (the technical
+narrative with Verdict, Modules Tested, Design Caveats, change surface and
+coverage evidence), and the renderer never overwrites an existing one; it only
+fills in a Markdown overview or bug page where the campaign left none.
 
 `hook-run` requires both files in the same recognized artifact root. A missing
 or invalid `report.json` makes the check incomplete (exit `2`), even if
@@ -80,13 +85,15 @@ removed in a real `report.json`.
       "id": "b1",
       "propertyId": "p1",                 // required — the property that found it
       "summary": "Invert returns identity for a singular matrix",
-      "severity": "high",                 // low | medium | high | critical
+      "severity": "medium",               // low | medium | high | critical — one step down for a documented limitation
       "impact": "Callers may continue calculations using an invalid inverse.",
       "expected": "false / error for a singular matrix",
       "actual": "identity, silently",
       "counterexample": "m = {{1,2},{2,4}}",
       "fix": "Reject singular matrices before inversion and return the documented error.",
       "reportPath": "bug_reports/invert-singular.md",   // relative to this file
+      "contractBasis": "documented-limitation",        // optional — see "What retires a finding"
+      "documentedBehavior": "Invert assumes a non-singular matrix — matrix4.h:88",  // required with a documented basis
       "reproduction": {
         "build": "./build.sh --product-name host_product --build-target geometry_pbt_test",
         "run": "RC_PARAMS='reproduce=BQSThRncAQAA' out/host/host_product/tests/geometry_pbt_test --gtest_filter=GeometryPbt.Inverse",
@@ -145,12 +152,21 @@ jq -r '.properties[] | select(.status == "failing") | "\(.name) — \(.counterex
 - `reproduction.build` / `.run` must not contain `...`, `<placeholder>`, `TODO`, `TBD`, `FIXME`, `XXX`, `PLACEHOLDER` or `N/A`.
 - Every bug's property names it back, and their counterexamples agree — one witness per link.
 - `impact` and `fix` are required for every bug so a customer can understand the consequence and the recommended remediation without interpreting test internals.
+- `report.json` is refused at write time while the campaign's own artifacts record a finding written out of it: a Design Caveat describing a failure, a passing `PROPERTIES.md` entry with a `Counterexample:`, a Formal admitting the documented value or its sign twin, a writer differential with permuted arguments, or an enumerated domain that omits an enumerator the entry names. The refusal is corrective — file the bug or quote the documentation that declares the input invalid, then write the file again.
+- A bug's contract may be documented or inferred. `REPORT.md`'s bug entry says which under `**Contract evidence:**` (`documented <file:line>` + quote, or `inferred (<signature / type / caller / symmetry>)`); a failing, shrunk property is a bug either way — documentation retires it only by declaring the failing input invalid.
+- `bugs[].contractBasis` is optional (`inferred` | `documented-exclusion` | `documented-limitation` | `documented-and-violated`). It records **what the comment actually claims**, which is the difference between a finding and a test bug:
+  - `documented-exclusion` — the cited text declares the input **invalid / out of domain** (`调用方须保证…`, `never valid`, `precondition`, `must not be persisted`). The generator was wrong; no bug is filed.
+  - `documented-limitation` — the cited text **admits a known gap on an input the API accepts** (`暂不支持闰年`, `cannot handle the NONE suffix`, `not implemented yet`). That is the bug being documented: it is filed, `documentedBehavior` quotes the author's text verbatim with its `file:line`, and the severity is graded one step below what the impact alone would earn (critical→high, high→medium, medium→low), stated as such in `REPORT.md`'s `**Severity:**` line. The validator enforces the one contradiction it can decide — a `documented-limitation` bug cannot also be `critical`: "the author disclosed this" and "the top severity" cannot both be the headline. The step itself stays a judgement the report states, because the impact-based grade is not recoverable from the final field.
+  - `documented-and-violated` — the cited text **states the behavior is handled** while the code violates it. The comment is the contract; it is the strongest evidence a bug can carry.
+  - A comment is evidence, not ground truth. When the code contradicts it, the report says so explicitly instead of treating the comment as authoritative.
+- `bugs[].documentedBehavior` is required whenever `contractBasis` is not `inferred`: the author's text verbatim plus its `file:line`. "We read your comment and it documents the limitation rather than excluding the input" has to be quotable, or the report cannot answer the rebuttal it exists to answer.
 - `reportPath` stays inside the artifact directory: no absolute paths, no `..`.
 
 ## Customer-facing HTML report template
 
-`REPORT.html`, generated `REPORT.md`, `bug_reports/<slug>.html`, and
-`bug_reports/<slug>.md` all follow the campaign output language:
+`REPORT.html`, `bug_reports/<slug>.html`, and any Markdown the renderer fills in
+(`REPORT.md` / `bug_reports/<slug>.md` when the campaign left none) all follow the
+campaign output language:
 
 - `PBT_LANG=zh` renders Chinese prose, uses `<html lang="zh-CN">`, and uses the
   per-bug sections **问题概述 / 发现与验证方法 / 复现步骤 / 修复建议**.
@@ -163,10 +179,14 @@ aggregate property counts, and a table of confirmed bugs. Each row links to
 `bug_reports/<slug>.html`; when no bugs are confirmed, the table says so. The
 per-bug pages include severity, identifier, summary, expected and observed
 behavior, impact, minimal counterexample, linked property metadata, and a
-pasteable reproduction recipe. `report.json` keys remain English and stable as
-the machine-readable contract. HTML output escapes all report values before
-placing them in the page. The report generator also rejects a `reportPath` that
-escapes the artifact directory.
+pasteable reproduction recipe. When `contractBasis` is `documented-limitation`,
+`documented-and-violated`, or `documented-exclusion`, the page also carries a
+**Documentation** block (Chinese: **文档依据**) with the author's verbatim text —
+that block is what tells a developer reading the page that pi-pbt read their
+comment and is disagreeing with it on purpose. `report.json` keys remain English
+and stable as the machine-readable contract. HTML output escapes all report
+values before placing them in the page. The report generator also rejects a
+`reportPath` that escapes the artifact directory.
 
 ### Current discovery-evidence limit
 

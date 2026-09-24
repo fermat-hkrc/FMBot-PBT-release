@@ -329,7 +329,8 @@ pi-pbt build-run \
 CI 需要裁决时用 `hook-run`。
 
 `--scope` 是**路径**。`--func` 是一个**符号**;**必须先有 `--scope`,且写在
-`--scope` 后面**。不加 `--func` 就会覆盖 `--scope` 里所有值得测的函数。
+`--scope` 后面**。不加 `--func` 就会覆盖 `--scope` 里所有值得测的函数。没有
+`--diff`/`--commit` 时，`--func` 就是改动面，不是 `--repo` 的 `git HEAD`。
 
 `--workdir` = 构建执行目录。`--repo` = 被测模块(`pbt-out/`、`--scope`)。
 同一目录(常见 CMake):`cd` 进去,两个 flag 都省略。

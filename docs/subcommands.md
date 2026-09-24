@@ -369,7 +369,11 @@ Use the artifacts to read the result, or use `hook-run` when CI needs a verdict.
 
 `--scope` is a **path** (file or directory). `--func` is one **symbol**; it
 **requires `--scope` and must appear after `--scope`**. Without `--func`, every
-PBT-worthy function in `--scope` is in play.
+PBT-worthy function in `--scope` is in play, and the close-out holds `FUNCTION_INDEX.md`
+to every implementation file under that path (a file the campaign declines needs its own
+line under PLAN.md `- **Skipped modules:**`) — the repository's latest commit is never
+read as the change surface unless you name it. Without `--diff`/`--commit`, `--func`
+is the change surface — not `git HEAD` of `--repo`.
 
 `--workdir` = where the build runs. `--repo` = module under test (`pbt-out/`,
 `--scope`). Same directory (typical CMake): `cd` there and omit both.
@@ -431,7 +435,12 @@ Keep it out of the preflight above. OH's own help restricts it to runs with "no
 change for gn related script", and a campaign changes exactly those files when it
 adds `test/pbt/<subpath>/BUILD.gn` and registers the target in `bundle.json`
 `build.test`. Use it only for a rebuild whose gn inputs are unchanged, and drop
-it again for the first rebuild after the campaign generates its test target:
+it again for the first rebuild after the campaign generates its test target.
+The campaign itself is held to this: once one `build.sh` has reached ninja, a
+repeat `build.sh --build-target …` with no `BUILD.gn` / `.gn(i)` / `bundle.json`
+written since is rejected until it carries `--fast-rebuild` (or uses the ninja
+line). Measured on a live os_account campaign, four `.cpp`-only rebuilds cost
+3.5–5 min each without it:
 
 ```bash
 ./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product \

@@ -10,126 +10,142 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
-## 0.1.24 - 2026-09-21
+## 0.1.25 - 2026-09-24
 
 ### English
 
 #### Added
 
-- **The change surface: a campaign is now held to what the diff actually
-  changed.** A thorough campaign (9 properties, ~90 000 generated cases,
-  2 h 20 min) found nothing against a diff that only hardened failure paths,
-  because every property it wrote was a success-path round-trip and nothing in
-  the runtime knew what the diff had touched. From a change source — hook-run's
-  commit, build-run's new `--diff <file>` / `--commit <sha>`, or for the
-  argv-less in-session skills the diff file, commit, range, `HEAD`, uncommitted
-  work or MR export named in the invocation — pi-pbt derives the functions the
-  diff touched (scanning the post-image back from each hunk, so a modified body
-  is found, not only a new definition), flags error-handling changes, writes
-  `pbt-out/CHANGE_SURFACE.md`, and injects the list as the campaign's primary
-  targets. At close-out a changed function with no property, or an
-  error-handling change whose only properties drive the success path, keeps
-  the campaign open. The CLI and the in-session entries converge on one
-  mechanism, so the capability is identical on every entry; the earlier
-  CLI-only `coverage --diff` report only saw functions whose definition line
-  sat inside a hunk.
-- **File-level coverage evidence on every architecture and tier.** When no
-  native instrumentation exists, `coverage_gaps` looks the changed or candidate
-  functions' symbols up in the campaign's test binaries: a function no binary
-  links cannot have executed, whatever the ledger claims. It is presence
-  evidence, named as such wherever it appears, and it costs nothing.
-- **OpenHarmony card: per-target instrumentation, measured.** GN ignores the
-  exported compile flags, and the unittest templates do not forward
-  `ldflags`/`configs`; a `public_configs` carried on an empty `source_set`
-  rebuilds only the target (137 s) and instruments exactly the TUs compiled
-  into it. The card gives that recipe, its measured reach, the architecture
-  ladder (host_product → x86_64 qemu products → arm under qemu-user), and says
-  plainly that arm-under-qemu is feasible by construction but not verified end
-  to end.
+- **The change surface now covers callers and callees.** Functions the diff
+  touches are expanded to the code that calls them and the code they call
+  (capped, grouped by role in `CHANGE_SURFACE.md` and the activation prompt), and
+  a property that fails against a contract that can be stated or inferred from
+  the signature, type, callers or symmetry is a bug with a `Contract evidence:`
+  line, never a Design Caveat. (#469)
+- **Whole-scope campaigns are held to every source file under the scope.** Files
+  the scan never indexed (outside a PLAN `Skipped` module) are a close-out issue;
+  `build-run`/`hook-run --scope` sets the campaign scope. (#471)
+- **Demotion patterns are caught where they are written.** A generator narrowed
+  around a known-bad input, an oracle weakened in advance (`∨`, `±`, sign twins),
+  a same-cell writer family with no writer-vs-writer differential, a
+  permuted-argument differential and the "reference transcribed wrongly" escape are
+  flagged at `PROPERTIES.md` write time and again at close-out. (#473, #474,
+  #475, #476, #477)
+- **`report.json` is refused while the campaign's own artifacts record a demoted
+  finding**: a Design Caveat describing a failure, a passing entry carrying a
+  counterexample or its own failure narrative, a sign-equivalent oracle, a
+  permuted differential, or an enumerated domain that omits an enumerator the
+  entry itself names. The block is corrective and names the entry. (#478, #479)
+- **Assertion-free PBT stubs are rejected.** A `crash_only` IR entry must name
+  the call it evaluates and its stronger-oracle rejection chain; constant
+  predicates are refused; `expand_property_ir` and the write guard refuse
+  skeletons that still carry a placeholder assertion. The bench L2 gate is
+  excused only for a substantiated bug claim. (#468)
+- **A cited comment is evidence, not a verdict.** The gate resolves a citation to
+  the line it names and decides whether the comment excludes the input from the
+  contract or merely documents a limitation; only the former retires a finding.
+  (#480)
+- `build-run --func` without `--diff`/`--commit` becomes the change surface
+  (`symbol:<file>#<name>`); a bare `HEAD` in SOP text is not a change source.
+  (#465, fixes #463)
+- Releases are published from `v*` tags reachable from `main`; the workflow
+  creates the GitHub Release and syncs its notes from this changelog. (#461)
 
 #### Fixed
 
-- **Sweep rounds count only evidence-bearing `coverage_gaps` calls.** A call
-  that returned "no instrumented coverage data" used to satisfy the tier's
-  sweep bookkeeping, which is how a thorough campaign recorded its sweep as
-  "incomplete, replaced by analysis" and closed anyway. The tool now answers
-  with a level — line, file, or none with the reason (GN/Bazel ignore the flags;
-  coverage off; no reporter; no binary) — records it in `COVERAGE_STATUS.md`
-  and the report Summary, and a call before any test has run is not a round.
-  The old text claiming "builds are auto-instrumented" was false on GN and led
-  that campaign to blame qemu.
-- **A failing property that turns passing carries re-verification.** The
-  campaign's one real failure, shrunk to a boundary value, was reclassified as a
-  harness mistake and went green with nothing recording that the same input was
-  re-run against the real symbol. A property seen failing that later reads
-  passing/retired without `- Re-verified: <command> → PASS` gets one steer and
-  keeps the close-out open.
-- **pi-pbt's own output is not caveat evidence.** A Design Caveat waiving
-  coverage cited a `pbt-out/` log and the `coverage_gaps` tool's own message as
-  documentation; citations of `pbt-out/`, campaign logs or pi-pbt tools are now
-  skipped by the evidence check.
-- **Report artifacts render in the selected campaign language.** `REPORT.md`,
-  `REPORT.html` and the per-bug pages follow `PBT_LANG` (English or Chinese)
-  instead of a fixed template language; `docs/report-schema.md` documents the
-  contract.
-- `--prompt-append` (0.1.22) was a duplicate of `--prompt` / `-p` /
-  `--prompt-file` that landed at the same time; only the latter remains.
+- The report renderer never overwrites an agent-authored `REPORT.md` or
+  `bug_reports/*.md`; only the HTML is regenerated. (#466)
+- Campaign litter: gtest result XML dropped into the SUT or OpenHarmony tree is
+  swept at campaign end, tests run from `pbt-out/run/` with `--gtest_output`
+  redirected, OpenHarmony rebuilds must reuse `--fast-rebuild` unless a gn input
+  changed, broad `pkill`/`killall` is blocked, and OpenHarmony test binaries are
+  found under `out/<product>/tests`. (#467)
+- Demoted-failure wording in `REPORT.md`, `###` caveat subsections, an own unit
+  test cited anywhere in a caveat, and caveats without independent evidence are
+  detected and held at close-out. (#470, #472)
+- xAI login in the compiled Bun binary: every `pi-ai` `auth/oauth/load.js` copy
+  is patched to share its OAuth loaders. (#464)
+- Chinese finding terminology: 最小反例 in watch summaries and bug-report
+  examples. (#462)
 
-#### Validation and SDK
+#### Changed
 
-- Embedded pi is `0.86.1` (updated from `0.85.1`, the current stable); version
-  output is `pi-pbt 0.1.24 (pi 0.86.1)`.
-- The change surface, the evidence levels and the re-verification gate are
-  each exercised through the real `before_agent_start` / `turn_end` runtime on
-  temp git repositories, not only as pure functions; file-level evidence is
-  tested against a real clang++ binary.
+- pi 0.87.1: Claude Opus 5.5 in the built-in Anthropic catalog with adaptive
+  thinking and a 1M context window; `pi-ai` is a single top-level copy. (#481)
+- Model references moved to the Claude 5 family: the binary smoke's dummy model
+  is `anthropic/claude-opus-5-5`, `replay` keeps a deliberately weaker author on
+  `claude-sonnet-5`, and the `PBT_PHASE_MODELS` examples name
+  `claude-opus-5-5`. (#482)
 
 ### 中文
 
 #### 新增
 
-- **改动面：campaign 现在被要求对准 diff 真正改的代码。** 一次 thorough campaign
-  （9 个性质、约 9 万次生成、2 小时 20 分）对一个只加固失败路径的 diff 零发现，因为它写的
-  全是成功路径的 round-trip，而运行时不知道 diff 改了什么。现在从改动来源——hook-run 的
-  提交、build-run 新增的 `--diff <文件>` / `--commit <sha>`，以及没有命令行的 in-session
-  skill 在调用里点名的 diff 文件、commit、区间、`HEAD`、未提交改动或 MR 导出——pi-pbt 派生
-  diff 触及的函数（从每个 hunk 往回扫 post-image，改了函数体也能找到，不只是新定义），标出
-  错误处理类改动，写入 `pbt-out/CHANGE_SURFACE.md`，并作为首要目标注入。close-out 时，改动
-  函数没有性质、或错误处理改动只有成功路径性质，campaign 不算完成。CLI 与 in-session 入口
-  汇聚到同一机制，能力在每个入口一致；此前 CLI-only 的 `coverage --diff` 只能看到定义行落在
-  hunk 里的函数。
-- **文件级覆盖证据，任意架构、任意档位。** 没有原生插桩时，`coverage_gaps` 在 campaign
-  的测试二进制里查改动/候选函数的符号：没有任何二进制链接到的函数不可能执行过，无论台账
-  怎么写。它是存在性证据，所有出现处都这样标明，且零成本。
-- **OpenHarmony 命令卡：逐目标插桩，实测。** GN 忽略导出的编译标志，unittest 模板不转发
-  `ldflags`/`configs`；挂在空 `source_set` 上的 `public_configs` 只重建该目标（137 秒），
-  且只插桩编进该目标的 TU。命令卡给出配方、实测触达范围、架构阶梯（host_product →
-  x86_64 qemu 产品 → arm + qemu-user），并明说 arm+qemu 按构造可行但未端到端验证。
+- **改动面覆盖上下游。** diff 触及的函数会扩展到调用它们的代码与它们调用的代码
+  （有上限，按角色分组写入 `CHANGE_SURFACE.md` 与激活提示）；性质失败时，只要契约
+  能从签名、类型、调用方或对称性陈述或推断出来，就是 bug，须带 `Contract evidence:`
+  行，不得写成 Design Caveat。(#469)
+- **全范围战役必须覆盖范围内每个源文件。** 扫描未索引的文件（PLAN `Skipped`
+  模块之外）成为 close-out 问题；`build-run`/`hook-run --scope` 设定战役范围。(#471)
+- **降级手法在写下时就被捕获。** 围绕已知坏输入收窄的生成器、预先弱化的 oracle
+  （`∨`、`±`、符号等价）、同格 writer 家族缺少 writer 对 writer 的差分、置换参数的
+  差分、以及"参考实现抄错"的托辞，在写 `PROPERTIES.md` 时与 close-out 时都会被
+  标出。(#473、#474、#475、#476、#477)
+- **战役自身产物仍记录着被降级的发现时，拒绝写入 `report.json`**：描述失败的
+  Design Caveat、带最小反例或自述失败经过的 passing 条目、符号等价 oracle、置换差分、
+  或枚举域漏掉条目自己点名的枚举值。拦截是纠正性的，会指出具体条目。(#478、#479)
+- **拒绝无断言的性质测试桩。** `crash_only` IR 条目必须写明被求值的调用及更强
+  oracle 的排除链；常量谓词被拒；`expand_property_ir` 与写入守卫拒绝仍带占位断言的
+  骨架。bench 的 L2 门只对有据可查的 bug 声明放行。(#468)
+- **引用的注释是证据，不是判决。** 门禁把引用解析到它指向的行，判断注释是把该输入
+  排除出契约、还是仅记录一个局限；只有前者能撤回一个发现。(#480)
+- 未给 `--diff`/`--commit` 时，`build-run --func` 成为改动面
+  （`symbol:<file>#<name>`）；SOP 文本里孤立的 `HEAD` 不再被当作改动来源。
+  (#465，修复 #463)
+- 发版由可从 `main` 到达的 `v*` 标签触发；工作流创建 GitHub Release 并从本
+  changelog 同步说明。(#461)
 
 #### 修复
 
-- **sweep 只计有证据的 `coverage_gaps` 调用。** 返回"无插桩数据"的调用此前也满足档位的
-  sweep 记账，thorough campaign 就是这样把 sweep 记成"未执行，以分析替代"却照常收尾的。
-  工具现在按等级回答——行级、文件级，或"无"并给出原因（GN/Bazel 忽略标志；覆盖率关闭；
-  无 reporter；无二进制），记入 `COVERAGE_STATUS.md` 与报告 Summary；测试未跑时的调用不算
-  轮次。旧文案"构建已自动插桩"在 GN 上是假的，正是它让那次 campaign 把锅甩给 qemu。
-- **失败性质变通过必须复核。** 那次唯一的真实失败收缩到一个边界值后被判为脚手架错误并变绿，
-  没有任何记录表明同一输入在真实符号上重跑过。曾经 failing、之后变 passing/retired 而没有
-  `- Re-verified: <命令> → PASS` 的性质，steer 一次并保持 close-out 未完成。
-- **pi-pbt 自己的输出不是 caveat 证据。** 一条豁免覆盖率的 Design Caveat 引用 `pbt-out/`
-  下的日志和 `coverage_gaps` 工具自身的文案作为文档证据；`pbt-out/` 路径、campaign 日志、
-  pi-pbt 工具名现在被证据判定跳过。
-- **报告产物按所选 campaign 语言渲染。** `REPORT.md`、`REPORT.html` 与逐 bug 页面跟随
-  `PBT_LANG`（中文或英文），不再固定模板语言；`docs/report-schema.md` 记录了该约定。
-- `--prompt-append`（0.1.22）与同期落地的 `--prompt` / `-p` / `--prompt-file` 重复，只保留
-  后者。
+- 报告渲染器不再覆盖 agent 撰写的 `REPORT.md` 与 `bug_reports/*.md`，只重新生成
+  HTML。(#466)
+- 战役垃圾文件：落在被测代码或 OpenHarmony 树里的 gtest 结果 XML 在战役结束时清扫，
+  测试从 `pbt-out/run/` 运行并重定向 `--gtest_output`，OpenHarmony 重编译必须复用
+  `--fast-rebuild`（gn 输入未变时），拦截宽泛的 `pkill`/`killall`，并在
+  `out/<product>/tests` 下找到 OpenHarmony 测试二进制。(#467)
+- `REPORT.md` 里的降级措辞、`###` 子节形式的 caveat、caveat 任意位置引用自身单测、
+  以及缺少独立证据的 caveat 都会被识别并在 close-out 时追究。(#470、#472)
+- 编译后的 Bun 二进制里 xAI 登录：每一份 `pi-ai` 的 `auth/oauth/load.js` 都打上
+  共享 OAuth loader 的补丁。(#464)
+- 中文术语：watch 摘要与 bug 报告示例统一使用"最小反例"。(#462)
 
-#### 验证与 SDK
+#### 变更
 
-- 内嵌 pi 为 `0.86.1`（自 `0.85.1` 更新，当前稳定版）；版本输出为
-  `pi-pbt 0.1.24 (pi 0.86.1)`。
-- 改动面、证据等级与复核门禁都在临时 git 仓上经真实的 `before_agent_start` / `turn_end`
-  运行时验证，而非只测纯函数；文件级证据用真实 clang++ 二进制测试。
+- pi 0.87.1：内置 Anthropic 目录加入 Claude Opus 5.5（自适应思考、1M 上下文）；
+  `pi-ai` 只保留顶层一份副本。(#481)
+- 模型引用迁到 Claude 5 系列：二进制冒烟的占位模型改为
+  `anthropic/claude-opus-5-5`，`replay` 仍刻意用较弱的作者模型 `claude-sonnet-5`，
+  `PBT_PHASE_MODELS` 示例改为 `claude-opus-5-5`。(#482)
+
+## 0.1.24 - 2026-09-21
+
+### English
+
+#### Fixed
+
+- **Generated report artifacts now follow `PBT_LANG`.** `REPORT.md`,
+  `REPORT.html`, and each generated per-bug Markdown and HTML page consistently
+  render Chinese for `PBT_LANG=zh` and English for `PBT_LANG=en`; the stable
+  English `report.json` schema remains the machine-readable contract.
+
+### 中文
+
+
+#### 修复
+
+- **生成的报告产物现在遵循 `PBT_LANG`。** `REPORT.md`、`REPORT.html` 以及每个
+  自动生成的 bug Markdown 和 HTML 页面，在 `PBT_LANG=zh` 时统一使用中文，在
+  `PBT_LANG=en` 时统一使用英文；稳定的英文 `report.json` schema 仍是机器可读契约。
 
 ## 0.1.23 - 2026-09-20
 

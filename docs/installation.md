@@ -284,9 +284,11 @@ runs expose their artifact locations through `pbt_status` and `pbt_report`.
 | `COVERAGE.md` / `COVERAGE_STATUS.md` | Function/testing progress records, not native line-coverage percentages. See [coverage tracking](coverage-tracking.md). |
 
 `report.json` is an output, **not a configuration file to create before running**.
-The agent writes the technical `REPORT.md` and `report.json`; once the JSON
-contract validates, pi-pbt automatically generates `REPORT.html` and the
-individual HTML/Markdown bug reports from it. A truncated or
+The agent writes the technical `REPORT.md`, the `bug_reports/*.md` pages and
+`report.json`; once the JSON contract validates, pi-pbt automatically generates
+`REPORT.html` and the individual HTML bug pages from it (a Markdown overview or
+bug page is rendered only where the agent left none — its own Markdown is never
+overwritten). A truncated or
 missing report is an incomplete run, not “zero bugs”. See the
 [report schema](report-schema.md) for fields and the [reproduction guide](reproducing.md)
 for replaying failures and committing generated tests. This report contract also applies to
@@ -559,7 +561,7 @@ failing rebuild is a STOP condition recorded in `REPORT.md`. The agent will not
 switch build systems or derive an alternative way to compile. `--scope` limits
 the campaign to that path; omit it only for a full-repo run.
 
-`--scope` and `--func` are prompt-only limits (not a sandbox):
+`--scope` and `--func` limit the campaign (not a sandbox). With no `--diff`/`--commit`, `--func` **is** the change surface:
 
 ```bash
 pi-pbt build-run --build-cmd "…" \
@@ -570,7 +572,8 @@ pi-pbt build-run --build-cmd "…" \
 `--scope <path>` is a file or directory (omit only for a full-repo run).
 `--func <name>` (optional) names **one symbol** in that path. It **requires
 `--scope`** and must appear **after** `--scope` on the command line. Without
-`--func`, every PBT-worthy function in `--scope` is in play.
+`--func`, every PBT-worthy function in `--scope` is in play. Without `--diff` or
+`--commit`, that symbol is the change surface (not `git HEAD` of `--repo`).
 
 `--prompt "<text>"` (short form `-p`) and `--prompt-file <path>` append your own
 context to the campaign prompt: domain rules, which of two similar helpers is the
@@ -906,7 +909,7 @@ artifacts, and Kea-specific environment variables.
 | `PI_PBT_RUNS_DIR=/path` | where [`pi-pbt mcp`](#delegation-from-another-coding-agent-mcp) persists run state and artifacts (default `~/.pi-pbt/runs`; must be outside the repo under test) |
 | `PBT_OUT_DIR=/path` | where the campaign's artifacts (`PLAN.md`, `PROPERTIES.md`, `COVERAGE.md`, `REPORT.md`, `report.json`, `bug_reports/`) live. **Set automatically** by `build-run` and `hook-run` from their `--out`, so you normally never set it yourself; it exists so the artifact-driven checks read the same directory the campaign writes. Leave it unset for a plain `pi-pbt -p` campaign, which uses `<cwd>/pbt-out`. Do NOT export it in a shell profile: a stale value follows every later campaign, and an inherited one that points somewhere else is exactly the split-brain it was added to prevent |
 | `PBT_MCP_MAX_CONCURRENT=2` | how many MCP-delegated campaigns may run at once (default 1; extra runs queue) |
-| `PBT_PHASE_MODELS='{"plan":"anthropic/claude-opus-5"}'` | route a different model per campaign phase (`scan`, `plan`, `test`, `review`), as `<provider>/<modelId>`. Unset means one model throughout, which is the default. The phase is read off the artifacts under `pbt-out/`, never self-reported by the agent; an unknown model or unconfigured provider silently leaves the campaign on its current model. There is no built-in routing table on purpose: `scan` and `review` are where the campaign decides what the contract is and whether a failure is real, so downgrading them buys tokens at the price of a false pass |
+| `PBT_PHASE_MODELS='{"plan":"anthropic/claude-opus-5-5"}'` | route a different model per campaign phase (`scan`, `plan`, `test`, `review`), as `<provider>/<modelId>`. Unset means one model throughout, which is the default. The phase is read off the artifacts under `pbt-out/`, never self-reported by the agent; an unknown model or unconfigured provider silently leaves the campaign on its current model. There is no built-in routing table on purpose: `scan` and `review` are where the campaign decides what the contract is and whether a failure is real, so downgrading them buys tokens at the price of a false pass |
 
 ## 5. Dashboard: watch it work, live
 

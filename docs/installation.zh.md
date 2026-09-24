@@ -245,9 +245,10 @@ pi-pbt
 | `PROPERTIES.md` / `PLAN.md` | 性质清单与战役进度，便于检查测了什么、哪些还没完成。 |
 | `COVERAGE.md` / `COVERAGE_STATUS.md` | 函数/测试进度登记，不是原生行覆盖率百分比；见[覆盖率跟踪](coverage-tracking.md)。 |
 
-`report.json` 是**运行产物，不是用户开跑前要填的配置**。agent 编写技术版的 `REPORT.md`
-和 `report.json`；JSON 契约校验通过后，pi-pbt 自动从它生成 `REPORT.html` 以及每个 bug
-对应的 HTML/Markdown 报告。缺失或截断的报告
+`report.json` 是**运行产物，不是用户开跑前要填的配置**。agent 编写技术版的 `REPORT.md`、
+`bug_reports/*.md` 和 `report.json`；JSON 契约校验通过后，pi-pbt 自动从它生成 `REPORT.html`
+以及每个 bug 对应的 HTML 页面（只在 agent 没写对应 Markdown 时才补一份 Markdown 总览/bug
+页，绝不覆盖 agent 自己写的 Markdown）。缺失或截断的报告
 表示未完成，不能当成“零问题”。字段解释见[报告 schema](report-schema.md)；重放失败、
 取回生成用例及固化入库见[复现与回归指南](reproducing.md)。这个报告契约同样适用于
 v0.1.18 的替换发行包：需要已修正的安装脚本时刷新压缩包，然后以生成的报告而非进程输出判断结果。
@@ -477,7 +478,7 @@ pi-pbt build-run \
 pi 进程退出行为，不会把发现 bug / 缺失报告映射成 hook-run 的 1/2；请读报告，或通过
 MCP 的 `pbt_report` 读取托管裁决。
 
-`--scope` 与 `--func` 是写进 prompt 的范围限制(不是沙箱):
+`--scope` 与 `--func` 限制战役范围(不是沙箱)。没有 `--diff`/`--commit` 时，`--func` **就是**改动面:
 
 ```bash
 pi-pbt build-run --build-cmd "…" \
@@ -487,7 +488,8 @@ pi-pbt build-run --build-cmd "…" \
 
 `--scope <path>` 是文件或目录(只有全仓才省略)。`--func <name>`(可选)
 指该路径里的**一个符号**。必须先有 `--scope`,且命令行里 `--func` 必须写在
-`--scope` **之后**;不加 `--func` 则覆盖 `--scope` 里所有值得测的函数。
+`--scope` **之后**;不加 `--func` 则覆盖 `--scope` 里所有值得测的函数。没有
+`--diff`/`--commit` 时，该符号就是改动面(不是 `--repo` 的 `git HEAD`)。
 
 `--prompt "<文本>"`(短形式 `-p`)与 `--prompt-file <路径>` 把你自己的上下文追加到
 campaign prompt:领域规则、两个相似 helper 里哪个才是真正入口、哪个目录是历史遗留、
@@ -773,7 +775,7 @@ claude --dangerously-load-development-channels server:pi-pbt
 | `PI_PBT_RUNS_DIR=/path` | [`pi-pbt mcp`](#让别的-coding-agent-委派测试mcp) 保存 run 状态与产物的目录(默认 `~/.pi-pbt/runs`;必须在被测仓库之外) |
 | `PBT_OUT_DIR=/path` | campaign 产物(`PLAN.md`、`PROPERTIES.md`、`COVERAGE.md`、`REPORT.md`、`report.json`、`bug_reports/`)所在目录。`build-run` 与 `hook-run` 会用各自的 `--out` **自动设置**,正常情况下你不需要自己设;它的存在是为了让产物驱动的检查读到与 campaign 写入相同的目录。普通 `pi-pbt -p` 不设它,用 `<cwd>/pbt-out`。**不要写进 shell profile**:残留的值会跟着之后每一次 campaign,而继承来的、指向别处的值正是它要防的那种「两份账本」 |
 | `PBT_MCP_MAX_CONCURRENT=2` | MCP 委派的 campaign 同时最多跑几个(默认 1,多余的排队) |
-| `PBT_PHASE_MODELS='{"plan":"anthropic/claude-opus-5"}'` | 按 campaign 相位(`scan`、`plan`、`test`、`review`)路由不同模型,写作 `<provider>/<modelId>`。不设则全程一个模型,这是默认。相位从 `pbt-out/` 下的产物读出,不由 agent 自报;模型不存在或 provider 未配置时静默保持当前模型。刻意不内置路由表:`scan` 与 `review` 是决定契约是什么、以及失败是否成立的地方,给它们降级是拿假绿换 token |
+| `PBT_PHASE_MODELS='{"plan":"anthropic/claude-opus-5-5"}'` | 按 campaign 相位(`scan`、`plan`、`test`、`review`)路由不同模型,写作 `<provider>/<modelId>`。不设则全程一个模型,这是默认。相位从 `pbt-out/` 下的产物读出,不由 agent 自报;模型不存在或 provider 未配置时静默保持当前模型。刻意不内置路由表:`scan` 与 `review` 是决定契约是什么、以及失败是否成立的地方,给它们降级是拿假绿换 token |
 
 ## 5. 网页面板:实时看它在干什么
 
