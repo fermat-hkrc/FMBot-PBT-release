@@ -16,6 +16,7 @@ directory, described below.
 | Interactive campaign | `pi-pbt` |
 | One headless run (script / nohup, not a gate) | `pi-pbt -p "…"` |
 | Run a known build before a campaign | `pi-pbt build-run --build-cmd "…"` |
+| PBT a HarmonyOS HAP (fast-check / ohosTest) | `pi-pbt build-run --build-cmd "./hvigorw assembleHap"` |
 | Gate **one git commit** (hook / CI) | `pi-pbt hook-run <sha>` |
 | Monitor new commits (best effort) | `pi-pbt watch` |
 | Simulate a developer (no PBT) | `pi-pbt replay --pr <n>` |
@@ -60,6 +61,7 @@ of each are below.
 | **Run a campaign** | `pi-pbt` | Interactive. Describe the target in chat. |
 | | `pi-pbt -p "<prompt>"` | One campaign, headless. For scripts and unattended generation — **not a CI gate**: the process exit code is pi's, not a verdict, so bugs found do not fail the job. Use `hook-run` for that. |
 | | `pi-pbt build-run --build-cmd "<cmd>"` | Your build command is the preflight gate: it runs first, and a non-zero exit stops the campaign before any agent work. After it succeeds, read the artifacts; this command does not apply the `hook-run` verdict exit codes. The campaign runs **in place** — no worktree — because large components cannot build from a detached copy. |
+| | `pi-pbt build-run --build-cmd "./hvigorw assembleHap"` | Same gate. If `--repo`/`--workdir` is a HAP root (project-local `hvigorw` + `oh-package.json5` + `build-profile.json5`; `hvigorw` on `PATH` is not enough), sets `PBT_HAP=1`: fast-check / ohosTest. An ArkTS tree missing that local `hvigorw` is not a HAP root — see [installation.md](installation.md#harmonyos-hap--arkts-apps). |
 | | `pi-pbt hook-run <sha>` | One commit's change set. **The exit code is the verdict**: `0` clean, `1` bugs found, `2` no report or a report that fails the schema, `3` the build failed. The sha selects the diff and the prompt — **the caller checks the tree out**. |
 | | `pi-pbt watch` | Polls a branch and runs one campaign per new commit, oldest first — **newest 10 per poll**, older ones dropped (and logged). |
 | | `pi-pbt test-all` | Reads `pbt-out/FUNCTION_INDEX.md` and campaigns over every candidate function in it. |
@@ -90,7 +92,7 @@ Two that are easy to confuse:
 
 | | What | How you get it | How it is invoked |
 |---|---|---|---|
-| **1. Bundled skills** | 15 SOP documents that drive the campaign itself — `pbt-workflow` (the four phases), `pbt-oracles`, `pbt-patterns`, `openharmony-build-run`, … | Ship **inside the binary**, next to it as `dist/skills/`. You never install them. | The agent loads them automatically. A few are also callable by name in a `pi-pbt` session: `/skill:pbt-workflow`, `/skill:pbt-build-run`, `/skill:pbt-watch`, `/skill:kea-harmony-app`. |
+| **1. Bundled skills** | 16 SOP documents that drive the campaign itself — `pbt-workflow` (the four phases), `pbt-oracles`, `pbt-patterns`, `openharmony-build-run`, `arkts-build-run`, … | Ship **inside the binary**, next to it as `dist/skills/`. You never install them. | The agent loads them automatically. A few are also callable by name in a `pi-pbt` session: `/skill:pbt-workflow`, `/skill:pbt-build-run`, `/skill:pbt-watch`, `/skill:kea-harmony-app`. |
 | **2. The `pi-pbt-dev` skill** | Teaches **your everyday coding agent** (Claude Code, Codex, opencode, codeagent, chrys) to run PBT by calling the `pi-pbt` binary. | `pi-pbt skill-install` — copies it out of the distribution into the host agent's skill directory. | Your host agent picks it up; ask it in plain language ("run PBT on this change"). Codex needs `$pi-pbt-dev` named explicitly. |
 | **3. MCP tools** | Not a skill at all — six tools plus `pbt://` resources. The alternative to 2 when you want the campaign in a **separate process**. | `claude mcp add --transport stdio pi-pbt -- pi-pbt mcp` | The host agent calls `pbt_start` / `pbt_status` / `pbt_report`. |
 
@@ -423,7 +425,7 @@ for the resulting artifact.
 There is no single `--build-cmd` for the whole OpenHarmony tree. Reuse this
 **shape**: `--workdir` the workspace, `--repo` **this** component, an **existing**
 unittest of **this** part. Do not paste `ace_engine` / `base_unittest` into another
-component. After `out/` is warm, ninja of that one target is incremental.
+component. After `out/` is warm, an unchanged-gn rebuild is `build.sh --fast-rebuild`, not bare `ninja -C out/<product>`.
 
 **Speeding up repeated OH builds.** `--ccache` is already hb's default, so it
 only states the intent. The parameter that measurably helps is `--fast-rebuild`,
@@ -438,8 +440,10 @@ adds `test/pbt/<subpath>/BUILD.gn` and registers the target in `bundle.json`
 it again for the first rebuild after the campaign generates its test target.
 The campaign itself is held to this: once one `build.sh` has reached ninja, a
 repeat `build.sh --build-target …` with no `BUILD.gn` / `.gn(i)` / `bundle.json`
-written since is rejected until it carries `--fast-rebuild` (or uses the ninja
-line). Measured on a live os_account campaign, four `.cpp`-only rebuilds cost
+written since is rejected until it carries `--fast-rebuild`. Do not substitute
+bare `ninja -C out/<product>`: its `gn --regeneration` rule can truncate `build.ninja`.
+`ninja -C out/host/host_product` is the host incremental line and is not that rule.
+Measured on a live os_account campaign, four `.cpp`-only rebuilds cost
 3.5–5 min each without it:
 
 ```bash

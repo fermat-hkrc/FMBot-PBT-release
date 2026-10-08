@@ -22,6 +22,7 @@ pi-pbt 自己没有依赖。但它会**真实编译并运行它写出来的测�
 | Rust | `cargo`(会加 `proptest` 开发依赖) |
 | Go | `go` 工具链 |
 | Java | JDK + Maven/Gradle(jqwik) |
+| HarmonyOS HAP | DevEco 命令行(`hvigorw`、`ohpm`)和应用 SDK——缺失时由 `arkts-build-run` 的安装卡代装（有 `sudo` 装发行版包，否则 tarball 解到家目录）。HAP 根是同时有 `oh-package.json5` + `build-profile.json5` 的目录；`hvigorw` 可以是项目包装、`PATH` 上的，或 DevEco 安装目录里的。 |
 | OpenHarmony 组件 | 一份已配置好的 OpenHarmony 源码树及官方构建依赖。优先用原生 `host_product` 测试；只有组件没有 host 目标时才需要已经配置好的 device-product runner。 |
 | 真机上的 HarmonyOS 应用 | `hdc`（HarmonyOS 设备连接工具）以及一份带虚拟环境的 Kea2 —— 见实验性的 [`pi-pbt kea` 指南](kea.zh.md) |
 
@@ -70,6 +71,7 @@ vendor 进测试脚手架**。这个顺序可以避免不必要的联网和重�
 | Linux x64 | `pi-pbt-linux-x64.zip` | 约 42 MiB |
 | Linux arm64(aarch64) | `pi-pbt-linux-arm64.zip` | 约 42 MiB |
 | macOS Apple Silicon | `pi-pbt-macos-arm64.zip` | 约 31 MiB |
+| Windows x64（**实验性**） | `pi-pbt-windows-x64.zip` | 约 40 MiB |
 
 不确定该拿哪个 Linux 版本?跑 `uname -m` —— 显示 `x86_64` 用 x64 那个,显示
 `aarch64` 用 arm64 那个。
@@ -79,8 +81,25 @@ vendor 进测试脚手架**。这个顺序可以避免不必要的联网和重�
 可发现的目录：默认与安装后的主程序相邻，位于 `/usr/local/bin/tools`；显式设置
 `PI_CODING_AGENT_DIR` 时使用 `$PI_CODING_AGENT_DIR/bin`。
 
+### Windows（实验性）
+
+`pi-pbt-windows-x64.zip` 解出 `pi-pbt-windows-x64\`,里面是 `pi-pbt.exe` 和 `tools\fd.exe` / `tools\rg.exe`,
+没有安装脚本。把这个目录加进 `PATH`（或按路径调用 `pi-pbt.exe`）,在 PowerShell 或 cmd 里运行。配置在
+`%USERPROFILE%\.pi-pbt\agent\`（与 Linux 同一套文件）。能做与不能做的：
+
+| | Windows |
+|---|---|
+| Python、Java、JS/TS 战役（Hypothesis、jqwik、fast-check） | 可以——按项目自己的测试命令在终端里跑 |
+| ArkTS / HAP（hvigor + ohpm） | 可以,前提是装了华为官方 DevEco Studio（pi-pbt 在 `Program Files\Huawei\DevEco Studio` 或 `DEVECO_HOME` 下检测,**不代装**）,且有 Git Bash 跑 `arkts-build-run` 的辅助脚本 |
+| C / C++（RapidCheck、CMake、GN）与 OpenHarmony 组件 | 不行——没有 MSVC / OpenHarmony 构建卡片 |
+| `build-run` 构建门 | 可以——命令经平台 shell 执行,输出记进 `build.log` |
+| 仪表盘、Kea、原生覆盖率（`llvm-cov`/`gcov`） | 不行 |
+
+SOP 里的 shell 片段按 POSIX shell 写的；Windows 上 agent 用 PowerShell/cmd 的等价写法,有 Git Bash 就用它。
+Windows 上的问题请提 issue——这个平台是实验性的。
+
 ```bash
-PLATFORM=linux-x64   # 或 linux-arm64 / macos-arm64
+PLATFORM=linux-x64   # 或 linux-arm64 / macos-arm64（Windows 见下节,没有 install.sh）
 sha256sum -c "pi-pbt-${PLATFORM}.zip.sha256"   # 可选的完整性校验
 unzip "pi-pbt-${PLATFORM}.zip"
 cd "pi-pbt-${PLATFORM}"
@@ -230,6 +249,11 @@ pi-pbt
 
 它会依次完成扫描、计划、测试、复核四步；这样的一次完整运行称为 **campaign（战役）**。
 
+战役跑着的时候可以随口问旁的问题，不打断它、也不进它的上下文：`/btw <问题>`（别名 `/side`）
+在独立浮层里开一个带 read/bash/edit 工具的并行子会话，`/btw:ask` 是只读版，`/btw:tangent`
+不继承当前对话。这是随包内置的 [pi-btw](https://github.com/dbachelder/pi-btw)；只在交互式会话里
+加载，`-p` 无人值守运行不会带上它。
+
 ### 运行后看什么
 
 完成一次**源码性质测试战役**后，默认在 `pbt-out/` 查找下列产物。指定了 `--out` 就去
@@ -278,12 +302,43 @@ pi-pbt -p "对当前仓库做性质测试(PBT),产物写到 pbt-out/。"
 并优先检查原生 `host_product` 测试。只有组件没有 host 目标、且 workspace 已经为
 对应产物配置 runner 时才退到 device product;不是所有组件都支持 host 构建。
 判断依据是仓库内容本身(例如 `@ohos/` 的 `bundle.json`)。
+HarmonyOS ArkTS 应用另有一套识别方式——见 [HAP / ArkTS](#harmonyos-hap--arkts-应用)。
 
-若想在脚本里把入口写死,首条消息以 `/skill:pbt-workflow` 开头:
+### HarmonyOS HAP / ArkTS 应用
+
+专页：[ArkTS PBT（HarmonyOS HAP）](pbt/arkts.zh.md)
+（[English](pbt/arkts.md)）。
+
+目录里有 `oh-package.json5` 和 `build-profile.json5`（项目内或上级目录）就是 **HAP 根**。
+`hvigorw` 包装不是必需的：工具链取最先解析到的 `hvigorw`——项目包装、`PATH` 上的
+（DevEco 包会把它链到 `/usr/bin`）、或 `$DEVECO_HOME` / `/opt/devecostudio` /
+`~/devecostudio` 下的安装。一个都没有时,战役会被告知,并按内置 `arkts-build-run`
+skill 的安装卡从 [devecostudio-linux](https://github.com/alex3236/devecostudio-linux)
+的包安装 DevEco：有 `sudo`（或 root）装发行版包,否则把 tarball 解到家目录。项目的
+`compileSdkVersion` / `runtimeOS` 会与已装 SDK 对比,战役会被告知怎么对齐（装一个
+额外 SDK,或用定点 edit 抬高项目的 SDK 号）。
+
+在 HAP 根上,自由提示的 `pi-pbt` / `-p` 会用 ohosTest 里的 Hypium + fast-check。建议钉住构建。
+这里的 `hvigorw` 取解析到的那一个——DevEco 包会把它放到 `PATH`；只有项目自带包装时才写 `./hvigorw`：
 
 ```bash
-pi-pbt -p "/skill:pbt-workflow 对当前仓库做性质测试(PBT),目标是找出 bug。产物写到 pbt-out/。"
+pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"
 ```
+
+工具链缺失或其 SDK 与项目不一致时,`build-run` 不会自己跑构建门：`build.log` 记下原因,
+战役被要求先按 `arkts-build-run` 的安装卡安装/对齐,再运行这条命令,通过后才开始写性质。
+
+`build-run` 会给这个进程设 `PBT_HAP=1`。
+
+带 `@ohos/` `bundle.json` 的 OpenHarmony ArkTS 应用模块（`oh-package.json5` +
+`build-profile.json5`、`.ets` 源码）同样是 HAP 根——由清单决定,不看项目内有没有
+`hvigorw`。要在没有清单的树上强制 HAP 模式,只在那一条命令上设 `PBT_HAP=1`：
+
+```bash
+PBT_HAP=1 pi-pbt -p "对当前仓库做性质测试;结果写到 pbt-out/。"
+```
+
+不要把 `PBT_HAP` 导出到 shell 配置里：残留的 `1` 会把后面的 C++ 战役强制成 HAP 模式。
 
 ### 挖多深:effort 档位
 
@@ -457,6 +512,19 @@ pi-pbt build-run \
   --repo /path/to/cmake-project \
   --build-cmd "cmake -S . -B build && cmake --build build --target calc_test -j$(nproc)" \
   --scope src/calc.cpp \
+  --lang zh
+```
+
+**HarmonyOS HAP / ArkTS。** 门禁必须落在 HAP 根上(项目内 `hvigorw` +
+`oh-package.json5` + `build-profile.json5`)。这样才能自动设 `PBT_HAP=1`、选用
+ohosTest 里的 Hypium+fast-check。只在 `PATH` 上有 `hvigorw` 不算 HAP 根——见
+[HAP / ArkTS](#harmonyos-hap--arkts-应用):
+
+```bash
+pi-pbt build-run \
+  --workdir /path/to/hap-app \
+  --repo /path/to/hap-app \
+  --build-cmd "./hvigorw assembleHap" \
   --lang zh
 ```
 
@@ -767,6 +835,7 @@ claude --dangerously-load-development-channels server:pi-pbt
 | `PBT_LANG=zh` / `en` | 全程用中文或英文思考并写产物;子命令也可用 `--lang`。`en` 在战役提示本身是中文时仍会注入英文指令 |
 | `PBT_SCAN_ROOT=/path` | 要扫描的仓库路径。用于工作目录是一份干净副本的场景(git hook / CI) |
 | `PBT_OH_WORKSPACE=/path` | 预先准备好的完整 OpenHarmony 源码环境(源码 + 编译工具链 + 已编译好的依赖),直接复用而不是从头推导怎么单独构建。仓库位于这样的环境内部时(某个上级目录同时有 `.repo/` 和 `out/`)会**自动识别**,只有要覆盖时才需要显式设置;启动日志会打印实际用的是哪个 |
+| `PBT_HAP=1` | `build-run` 在 HAP 根上**自动**设置(项目内 `hvigorw` + `oh-package.json5` + `build-profile.json5`;`PATH` 上的 `hvigorw` 不算)。选用 ohosTest 里的 Hypium+fast-check。自由入口 `pi-pbt` / `-p` 用同一套三文件检查;若树是 ArkTS 但缺本地 `hvigorw`,只在**该条命令**上设 `PBT_HAP=1`(见 [HAP / ArkTS](#harmonyos-hap--arkts-应用))。不要写进 shell profile |
 | `PBT_HOOK_TUI=1` | 等同 `hook-run --tui` / `watch --tui`:用交互式界面跑(需要终端;结束后等你 `/quit`) |
 | `PBT_EFFORT=quick\|standard\|thorough` | 一次 campaign 挖多深(见[effort 档位](#挖多深effort-档位));`hook-run` / `watch` 上的 `--effort` 优先级更高。默认:`hook-run`/`watch` 为 `quick`,其他入口为 `standard`。实验性的 Kea 模式在未单独配置深度时也使用该档位，见 [Kea 指南](kea.zh.md)。 |
 | `PBT_TEST_JOBS=8` | 测试和构建跑多宽(见[并行度](#跑多宽并行度));填数字、`max` 或 `auto`(默认:机器空闲核心数)。`PBT_TEST_JOBS=1` 强制串行 —— 把失败判定为 bug 之前的串行复核必须用它 |

@@ -26,6 +26,7 @@ present:
 | Rust | `cargo` (`proptest` is added as a dev-dependency) |
 | Go | `go` toolchain |
 | Java | JDK + Maven/Gradle (jqwik) |
+| HarmonyOS HAP | DevEco CLI (`hvigorw`, `ohpm`) and the app SDK — installed for you by the `arkts-build-run` install card when missing (distro package with `sudo`, tarball otherwise). A HAP root is a directory with `oh-package.json5` + `build-profile.json5`; `hvigorw` may be the project wrapper, on `PATH`, or under the DevEco install. |
 | OpenHarmony components | A provisioned OpenHarmony source tree and its official build prerequisites. Prefer native `host_product` tests; a device-product runner is needed only for components with no host target. |
 | A HarmonyOS app on a real phone | `hdc` (HarmonyOS device connector) and a Kea2 checkout with its virtualenv — see the experimental [`pi-pbt kea` guide](kea.md) |
 
@@ -85,9 +86,30 @@ Releases page, an internal mirror, or a direct handoff). Each ships with a
 | Linux x64 | `pi-pbt-linux-x64.zip` | ~42 MiB |
 | Linux arm64 (aarch64) | `pi-pbt-linux-arm64.zip` | ~42 MiB |
 | macOS Apple Silicon | `pi-pbt-macos-arm64.zip` | ~31 MiB |
+| Windows x64 (**experimental**) | `pi-pbt-windows-x64.zip` | ~40 MiB |
 
 Not sure which Linux one you need? `uname -m` — `x86_64` takes the x64 file,
 `aarch64` the arm64 one.
+
+### Windows (experimental)
+
+`pi-pbt-windows-x64.zip` extracts to `pi-pbt-windows-x64\` holding
+`pi-pbt.exe` and `tools\fd.exe` / `tools\rg.exe`; there is no installer. Put
+that directory on `PATH` (or call `pi-pbt.exe` by path) and run it from
+PowerShell or cmd. Configuration lives in `%USERPROFILE%\.pi-pbt\agent\`
+(same files as on Linux). What works and what does not:
+
+| | Windows |
+|---|---|
+| Python, Java, JS/TS campaigns (Hypothesis, jqwik, fast-check) | yes — the project's own test runner is invoked as it would be from a terminal |
+| ArkTS / HAP (hvigor + ohpm) | yes, with Huawei's official DevEco Studio installed (pi-pbt detects it under `Program Files\Huawei\DevEco Studio` or `DEVECO_HOME`; it never installs it) and Git Bash for the `arkts-build-run` helper scripts |
+| C / C++ (RapidCheck, CMake, GN) and OpenHarmony components | no — no MSVC or OpenHarmony build cards |
+| `build-run` gate | yes — the command runs through the platform shell and its output is captured to `build.log` |
+| Dashboard, Kea, native coverage (`llvm-cov`/`gcov`) | no |
+
+The SOP's shell snippets are written for a POSIX shell; on Windows the agent
+uses PowerShell/cmd equivalents, or Git Bash when present. Report Windows
+findings as issues — the platform is experimental.
 
 Every archive extracts to a same-named directory containing `pi-pbt`, an
 `install.sh` installer, and adjacent `tools/fd` and `tools/rg`. Run the bundled
@@ -96,7 +118,7 @@ pi-pbt can discover them: beside the installed executable in `/usr/local/bin/too
 by default, or `$PI_CODING_AGENT_DIR/bin` when that override is explicitly set.
 
 ```bash
-PLATFORM=linux-x64   # or linux-arm64 / macos-arm64
+PLATFORM=linux-x64   # or linux-arm64 / macos-arm64 (Windows: see above, no install.sh)
 sha256sum -c "pi-pbt-${PLATFORM}.zip.sha256"   # optional integrity check
 unzip "pi-pbt-${PLATFORM}.zip"
 cd "pi-pbt-${PLATFORM}"
@@ -267,6 +289,13 @@ properties, run them, and produce bug reports.
 It works through four steps — scan, plan, test, review. One such run is called
 a **campaign**.
 
+While a campaign runs you can ask a side question without interrupting it or
+polluting its context: `/btw <question>` (alias `/side`) opens a parallel
+sub-session with read/bash/edit tool access in its own overlay, `/btw:ask` a
+read-only one, `/btw:tangent` one that does not inherit the conversation. The
+bundled [pi-btw](https://github.com/dbachelder/pi-btw) package provides it;
+it loads in interactive sessions only, never in `-p` runs.
+
 ### Read the results
 
 A completed **source-code PBT campaign** produces the following artifacts in
@@ -325,6 +354,54 @@ path, checking native `host_product` tests first. A device product is only a
 fallback when the component has no host target and the workspace already has a
 runner configured for that artifact; not every component supports host builds.
 Detection uses the repository's own contents (e.g. an `@ohos/` `bundle.json`).
+HarmonyOS ArkTS apps are detected separately — see [HAP / ArkTS](#harmonyos-hap--arkts-apps).
+
+### HarmonyOS HAP / ArkTS apps
+
+Dedicated page: [ArkTS PBT (HarmonyOS HAP)](pbt/arkts.md)
+([中文](pbt/arkts.zh.md)).
+
+pi-pbt treats a directory as a **HAP root** when it contains `oh-package.json5`
+and `build-profile.json5` (in the project or a parent directory). The `hvigorw`
+wrapper is optional: the toolchain is whichever `hvigorw` resolves first — the
+project wrapper, `hvigorw` on `PATH` (the DevEco package symlinks it into
+`/usr/bin`), or a DevEco install at `$DEVECO_HOME`, `/opt/devecostudio` or
+`~/devecostudio`. When none exists, the campaign is told so and the bundled
+`arkts-build-run` skill's install card installs DevEco from the
+[devecostudio-linux](https://github.com/alex3236/devecostudio-linux) packages:
+with `sudo` (or as root) the distro package, otherwise the tarball into the home
+directory. The project's `compileSdkVersion` / `runtimeOS` are compared with the
+installed SDK and the campaign is told what to align (an extra SDK, or raising
+the project's SDK numbers with a targeted edit).
+
+On a HAP root, free-form `pi-pbt` / `-p` uses Hypium + fast-check in `ohosTest`.
+Prefer pinning the build. `hvigorw` here is whichever resolves — the DevEco
+package puts it on `PATH`; use `./hvigorw` only when the project ships the
+wrapper:
+
+```bash
+pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"
+```
+
+When the toolchain is missing or its SDK disagrees with the project, `build-run`
+does not run the build gate itself: `build.log` records why, and the campaign
+is told to install/align first (the `arkts-build-run` install card) and then
+run that exact command before writing any property.
+
+`build-run` then sets `PBT_HAP=1` for that process.
+
+OpenHarmony application modules that are ArkTS (`oh-package.json5` +
+`build-profile.json5`, `.ets` sources) and also carry an `@ohos/` `bundle.json`
+are HAP roots too — the manifests decide, not a project-local `hvigorw`. To force
+HAP mode on a tree that lacks the manifests, set `PBT_HAP=1` **on that command
+only**:
+
+```bash
+PBT_HAP=1 pi-pbt -p "Run property-based testing on this repository; write results to pbt-out/."
+```
+
+Do not export `PBT_HAP` in a shell profile: a leftover `1` forces HAP mode on
+later C++ campaigns.
 
 To pin the entry point explicitly in a script, lead the first message with
 `/skill:pbt-workflow`:
@@ -536,6 +613,19 @@ pi-pbt build-run \
   --repo /path/to/cmake-project \
   --build-cmd "cmake -S . -B build && cmake --build build --target calc_test -j$(nproc)" \
   --scope src/calc.cpp \
+  --lang en
+```
+
+**HarmonyOS HAP / ArkTS.** Gate on a HAP root (project-local `hvigorw` +
+`oh-package.json5` + `build-profile.json5`). That is what sets `PBT_HAP=1` and
+selects Hypium+fast-check in `ohosTest`. `hvigorw` only on `PATH` is not a HAP
+root — see [HAP / ArkTS](#harmonyos-hap--arkts-apps):
+
+```bash
+pi-pbt build-run \
+  --workdir /path/to/hap-app \
+  --repo /path/to/hap-app \
+  --build-cmd "./hvigorw assembleHap" \
   --lang en
 ```
 
@@ -901,6 +991,7 @@ artifacts, and Kea-specific environment variables.
 | `PBT_LANG=zh` / `en` | Chinese or English narration and artifacts; also `--lang` on subcommands. `en` still injects an English directive when the campaign prompt is Chinese |
 | `PBT_SCAN_ROOT=/path` | the repo to scan, for setups where the working directory is a clean copy (git hooks, CI) |
 | `PBT_OH_WORKSPACE=/path` | a pre-built full OpenHarmony source environment (source tree + toolchain + built dependencies) to reuse, instead of working out how to build the component standalone. **Detected automatically** when the repo sits inside such an environment (a parent directory with both `.repo/` and `out/`) — set it explicitly only to override; the startup log prints which one is in use |
+| `PBT_HAP=1` | Set **automatically** by `build-run` when `--repo`/`--workdir` is a HAP root (project-local `hvigorw` + `oh-package.json5` + `build-profile.json5`; `hvigorw` on `PATH` is not enough). Selects Hypium+fast-check in `ohosTest`. A free-form `pi-pbt` / `-p` run uses the same three-file check; if the tree is ArkTS but missing that local `hvigorw`, set `PBT_HAP=1` **on that command only** (see [HAP / ArkTS](#harmonyos-hap--arkts-apps)). Do not set in a shell profile |
 | `PBT_HOOK_TUI=1` | same as `hook-run --tui` / `watch --tui`: run in the interactive interface (needs a terminal; waits for `/quit`) |
 | `PBT_EFFORT=quick\|standard\|thorough` | how deep a campaign digs (see [effort tiers](#how-deep-it-digs-effort-tiers)); also `--effort` on `hook-run` / `watch`, which takes priority. Default: `quick` for `hook-run`/`watch`, `standard` elsewhere. The experimental Kea mode also uses this tier when its own depth is not configured; see [the Kea guide](kea.md). |
 | `PBT_TEST_JOBS=8` | how wide tests and builds run (see [parallelism](#how-wide-it-runs-parallelism)); a number, `max`, or `auto` (default: the machine's idle cores). `PBT_TEST_JOBS=1` forces serial — required when reconfirming a failure before filing it as a bug |

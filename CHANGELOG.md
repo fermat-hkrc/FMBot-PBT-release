@@ -10,6 +10,122 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.26 - 2026-10-08
+
+### English
+
+#### Added
+
+- **ArkTS / HarmonyOS HAP campaigns.** `build-run` recognizes a hvigor project
+  (`oh-package.json5` + `build-profile.json5`) from every workflow entry, writes
+  Hypium + fast-check properties into the module's `ohosTest`, and runs them on an
+  emulator or device with `aa test`. The `arkts-build-run` card deck covers the
+  toolchain, fast-check as a local HAR, signing, emulator and reading
+  `OHOS_REPORT_RESULT`. `.ets` codegen targets HAP fast-check. (#492, #493, #494,
+  #495, #521)
+- **ArkTS toolchain detection and install.** hvigor is found in the project, on
+  `PATH` or under a DevEco install, and the SDK is checked against the project's
+  API level (ready / align / missing). On Linux a missing toolchain can be
+  installed from the pinned, sha256-verified DevEco package (sudo when available,
+  a tarball in the home directory otherwise); on Windows and macOS pi-pbt detects
+  Huawei's official DevEco Studio and does not install it. (#506, #509)
+- **Every bug carries its evidence.** `report.json` schema 4 requires the
+  violated law, the offending code (file, line and the snippet, re-read from the
+  tree), the root cause, the raw failure output, a regression test and a fix
+  shown as code; the Markdown templates and HTML pages render all of it. (#490,
+  #498)
+- **Chinese campaigns are held to Chinese typography and vocabulary.** zhlint
+  checks every artifact and `report.json`'s prose; the `zh_typography_fix` tool
+  corrects all artifacts in one call and re-renders the HTML. A dictionary check
+  (CC-CEDICT for characters and traditional forms, the jieba lexicon for words)
+  reports traditional forms and unknown characters, and lists stretches no known
+  word covers as coinage candidates. (#499, #500, #501, #502, #508, #519)
+- **Markdown lint on every campaign artifact**: headings glued to the next line
+  are fixed by the close-out gate itself; lint is raised only after the
+  substantive close-out issues are resolved. (#496, #504, #510)
+- **Windows x64 release (experimental).** `pi-pbt-windows-x64.zip` ships
+  `pi-pbt.exe` with `fd.exe`/`rg.exe`; paths, scan guards and `build-run` work
+  without bash. Python, Java and JS/TS campaigns are the target; C/C++ and
+  OpenHarmony are not supported on Windows. (#507)
+- **`/btw`** side conversations in interactive sessions (bundled `pi-btw`).
+  (#505)
+
+#### Changed
+
+- pi 1.1.0 (`pi-coding-agent`, `pi-ai`), bundled `pi-btw` 0.7.1. pi's
+  `codemode` tool — and MCP tools, whose default exposure is codemode — runs in
+  the single-file binary; the binary smoke executes one codemode call. (#520)
+- `report.json` can be corrected with `edit`: the file an edit produces is
+  validated like a write. (#510)
+- The 160-column line-width lint is removed. (#519)
+- Round-trip properties follow the caller's store, and same-name overloads stay
+  in scope. (#486)
+
+#### Fixed
+
+- HAP passing/failing properties must import the real `--scope` module, not a
+  transcribed copy or an SDK stand-in, and are rejected after the scope file is
+  rewritten; a directory `--scope` matches each property's own source file.
+  (#511, #513, #516, #518)
+- Shell writes to `pbt-out/report.json`, `PROPERTIES.md`, `PLAN.md` and
+  `bug_reports/*.md` are refused; a shell replace that matches nothing can no
+  longer pass silently. (#484, #519)
+- `--scope` stays the SUT, no-op GN rebuilds are skipped, and OpenHarmony
+  rebuilds stay on a warm `build.sh`. (#485, #497)
+- A no-op `--build-cmd` cannot attest a host PBT run. (#503)
+- `REPORT.md` is allowed in a custom `--out` directory. (#517)
+- Symbols are read from the unstripped twin of a stripped test binary. (#487)
+
+### 中文
+
+#### 新增
+
+- **ArkTS / HarmonyOS HAP 战役。** 各个工作流入口都能识别 hvigor 工程
+  （`oh-package.json5` + `build-profile.json5`）；`build-run` 把 Hypium + fast-check
+  性质写进模块的 `ohosTest`，在模拟器或真机上用 `aa test` 运行。`arkts-build-run`
+  卡片组覆盖工具链、以本地 HAR 引入 fast-check、签名、模拟器和读取
+  `OHOS_REPORT_RESULT`。`.ets` 代码生成对应 HAP 的 fast-check。(#492、#493、#494、
+  #495、#521)
+- **ArkTS 工具链检测与安装。** 从工程目录、`PATH` 或 DevEco 安装目录找到 hvigor，
+  并按工程的 API 级别检查 SDK（可用 / 需对齐 / 缺失）。Linux 上缺工具链时可从锁定
+  且校验 sha256 的 DevEco 包安装（有 sudo 时装系统包，否则解压到家目录）；Windows
+  与 macOS 上只检测华为官方 DevEco Studio，不代为安装。(#506、#509)
+- **每个缺陷都带证据。** `report.json` 第 4 版要求写明被违反的规律、问题代码（文件、
+  行号和代码片段，从源码中重新读取核对）、根因、原始失败输出、回归测试和以代码形式给出的
+  修复；Markdown 模板与 HTML 页面全部呈现。(#490、#498)
+- **中文战役按中文排版与用词检查。** zhlint 检查每个产物和 `report.json` 的正文
+  字段；`zh_typography_fix` 工具一次调用改正全部产物并重新渲染 HTML。词典检查
+  （CC-CEDICT 管字与繁简，jieba 词库管词）报告繁体字词和不存在的字，并把没有任何
+  已知词覆盖的连续字段列为疑似生造词。(#499、#500、#501、#502、#508、#519)
+- **所有战役产物都做 Markdown 检查**：标题与下一行粘连由收尾门禁直接修正；只有在
+  实质性收尾问题解决后才提示排版问题。(#496、#504、#510)
+- **Windows x64 发行包（实验性）。** `pi-pbt-windows-x64.zip` 含 `pi-pbt.exe` 及
+  `fd.exe`/`rg.exe`；路径处理、扫描守卫和 `build-run` 不依赖 bash。目标是 Python、
+  Java、JS/TS 战役；Windows 上不支持 C/C++ 与 OpenHarmony。(#507)
+- 交互会话支持 **`/btw`** 旁路对话（内置 `pi-btw`）。(#505)
+
+#### 变更
+
+- pi 升级到 1.1.0（`pi-coding-agent`、`pi-ai`），内置 `pi-btw` 升到 0.7.1。pi 的
+  `codemode` 工具，以及默认经 codemode 暴露的 MCP 工具，可在单文件二进制中运行；
+  二进制冒烟会实际执行一次 codemode 调用。(#520)
+- `report.json` 可以用 `edit` 修改：edit 生成的文件与 write 一样经过完整校验。(#510)
+- 删除 160 列行宽检查。(#519)
+- 往返性质跟随调用方的存储方式，同名重载保留在范围内。(#486)
+
+#### 修复
+
+- HAP 的 passing/failing 性质必须导入真实的 `--scope` 模块，不能是抄写的副本或 SDK
+  替身；scope 文件被改写后会被拒绝；目录形式的 `--scope` 按每条性质自己的源文件
+  匹配。(#511、#513、#516、#518)
+- 拒绝用 shell 写 `pbt-out/report.json`、`PROPERTIES.md`、`PLAN.md` 和
+  `bug_reports/*.md`；shell 替换落空时不会再静默成功。(#484、#519)
+- `--scope` 始终是被测对象，跳过无改动的 GN 重编译，OpenHarmony 重编译保持在已预热的
+  `build.sh` 上。(#485、#497)
+- 空操作的 `--build-cmd` 不能为主机上的性质测试运行作证。(#503)
+- 自定义 `--out` 目录中允许写 `REPORT.md`。(#517)
+- 从剥离符号的测试二进制对应的未剥离版本读取符号。(#487)
+
 ## 0.1.25 - 2026-09-24
 
 ### English

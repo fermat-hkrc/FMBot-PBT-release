@@ -51,7 +51,7 @@ removed in a real `report.json`.
 
 ```jsonc
 {
-  "schemaVersion": 2,                    // bumped when a field changes meaning
+  "schemaVersion": 4,                    // bumped when a field changes meaning
   "generator": { "tool": "pi-pbt", "version": "0.1.17" },
   "run": {
     "date": "2026-09-14",
@@ -72,6 +72,7 @@ removed in a real `report.json`.
       "formal": "∀ m. invertible(m) ⇒ m * inverse(m) ≈ identity",
       "oracle": "round_trip",
       "sourceFile": "/srv/oh/foundation/arkui/ace_engine/frameworks/base/geometry/matrix4.cpp",
+      "sourceLine": 88,                  // one-based definition line in sourceFile
       "functionName": "Matrix4::Invert",
       "testFile": "/srv/oh/foundation/arkui/ace_engine/test/pbt/base/geometry_pbt_test.cpp",
       "testTarget": "geometry_pbt_test",
@@ -86,12 +87,21 @@ removed in a real `report.json`.
       "propertyId": "p1",                 // required — the property that found it
       "summary": "Invert returns identity for a singular matrix",
       "severity": "medium",               // low | medium | high | critical — one step down for a documented limitation
+      "law": "A singular matrix has no inverse: Invert must report failure, never return a matrix.",
       "impact": "Callers may continue calculations using an invalid inverse.",
       "expected": "false / error for a singular matrix",
       "actual": "identity, silently",
       "counterexample": "m = {{1,2},{2,4}}",
-      "fix": "Reject singular matrices before inversion and return the documented error.",
-      "reportPath": "bug_reports/invert-singular.md",   // relative to this file
+      "rootCause": "matrix4.cpp:91 divides by the determinant without testing it for zero, so 1/0 becomes inf and the cofactor loop normalises to identity.",
+      "offendingCode": {                  // re-read from the tree; a paraphrase is refused
+        "file": "/srv/oh/foundation/arkui/ace_engine/frameworks/base/geometry/matrix4.cpp",
+        "line": 91,
+        "snippet": "const double inv = 1.0 / det;"
+      },
+      "fix": "Test the determinant first: `if (NearZero(det)) { return false; }` before `const double inv = 1.0 / det;`.",
+      "regressionTest": "/srv/oh/foundation/arkui/ace_engine/test/pbt/base/geometry_pbt_test.cpp",   // or null
+      "rawOutput": "Falsifiable after 12 tests and 3 shrinks: m = {{1,2},{2,4}} — Invert() returned true",
+      "reportPath": "bug_reports/invert-singular.md",   // relative to this file; one bug per file
       "contractBasis": "documented-limitation",        // optional — see "What retires a finding"
       "documentedBehavior": "Invert assumes a non-singular matrix — matrix4.h:88",  // required with a documented basis
       "reproduction": {
@@ -151,7 +161,9 @@ jq -r '.properties[] | select(.status == "failing") | "\(.name) — \(.counterex
 - `reproduction.seed` is a framework replay value or `null` for a deterministic command. RapidCheck's exact shrunk replay is its printed `reproduce=...` token, which belongs in the recorded run command; a RapidCheck seed alone reruns the generated sequence but does not identify the shrunk case. `reproduction.path` is optional and is used with the seed for fast-check replay. See [Replaying the same case](reproducing.md#replaying-the-same-case).
 - `reproduction.build` / `.run` must not contain `...`, `<placeholder>`, `TODO`, `TBD`, `FIXME`, `XXX`, `PLACEHOLDER` or `N/A`.
 - Every bug's property names it back, and their counterexamples agree — one witness per link.
-- `impact` and `fix` are required for every bug so a customer can understand the consequence and the recommended remediation without interpreting test internals.
+- `impact` and `fix` are required for every bug so a customer can understand the consequence and the recommended remediation without interpreting test internals. `fix` must show the change **as code** — a fenced block or an inline code span with the corrected line(s) — and must not be a pointer at another bug (`同 b1`, `see b1`): every page stands alone.
+- **Every bug carries its evidence** (schema 4): `law` (the invariant violated, plain language), `rootCause` (`file:line` + why), `offendingCode` (`file` absolute and inside `run.repository`, `line` one-based, `snippet` the defective line(s) verbatim), `rawOutput` (the framework's failure text) and `regressionTest` (absolute path inside `run.repository`, or `null` while none is written). None of them may still carry the skeleton's `<...>` template phrase. The `offendingCode` snippet is **re-read from the tree** when the campaign writes `report.json`, at every close-out, and in the final gates (`hook-run`, the run manager — which judges it before a worktree is torn down): matching is whitespace-insensitive per line and tolerates the snippet starting within two lines of `line`; a paraphrase, an elision or a stale line number is refused with the line the file actually has there. `regressionTest: null` is accepted only at write time; the close-out and the final gates require a readable file, so a page never ships saying "not written yet". An edit of the campaign's `report.json` is judged on the file it produces (the edits are applied to the current text, exactly and uniquely, and the result runs the same checks as a write), so one field can be corrected with `edit`; an edit whose text is not found once is refused rather than left to a fuzzy match.
+- `reportPath` is unique across bugs and ends in `.md` — one bug, one file. Two bugs sharing a path render to the same `<slug>.html`, and the second silently replaces the first (observed on ace_engine `scroll_container`: b2 overwrote b1's page).
 - `report.json` is refused at write time while the campaign's own artifacts record a finding written out of it: a Design Caveat describing a failure, a passing `PROPERTIES.md` entry with a `Counterexample:`, a Formal admitting the documented value or its sign twin, a writer differential with permuted arguments, or an enumerated domain that omits an enumerator the entry names. The refusal is corrective — file the bug or quote the documentation that declares the input invalid, then write the file again.
 - A bug's contract may be documented or inferred. `REPORT.md`'s bug entry says which under `**Contract evidence:**` (`documented <file:line>` + quote, or `inferred (<signature / type / caller / symmetry>)`); a failing, shrunk property is a bug either way — documentation retires it only by declaring the failing input invalid.
 - `bugs[].contractBasis` is optional (`inferred` | `documented-exclusion` | `documented-limitation` | `documented-and-violated`). It records **what the comment actually claims**, which is the difference between a finding and a test bug:
@@ -164,22 +176,49 @@ jq -r '.properties[] | select(.status == "failing") | "\(.name) — \(.counterex
 
 ## Customer-facing HTML report template
 
+`src/templates/pbt-bug-report.html` and `src/templates/pbt-bug-report.md` are
+the repository-visible, versioned sources of the per-defect HTML and fallback
+Markdown layouts. They have fixed placeholders for the five required sections;
+`src/pbt-html-report.ts` only supplies data from validated `report.json`.
+`npm run build` stages both at `dist/templates/`, and the Bun binary embeds and
+extracts the same files. Do not hand-write generated `bug_reports/*.html`.
+Existing agent-authored bug Markdown is preserved rather than overwritten; when
+there is no Markdown, the fixed `.md` template is rendered.
+
 `REPORT.html`, `bug_reports/<slug>.html`, and any Markdown the renderer fills in
 (`REPORT.md` / `bug_reports/<slug>.md` when the campaign left none) all follow the
 campaign output language:
 
 - `PBT_LANG=zh` renders Chinese prose, uses `<html lang="zh-CN">`, and uses the
-  per-bug sections **问题概述 / 发现与验证方法 / 复现步骤 / 修复建议**.
+  per-bug sections **问题概述 / 问题代码 / 发现与验证方法 / 复现步骤 / 修复建议**.
 - `PBT_LANG=en` renders English prose, uses `<html lang="en">`, and uses the
-  per-bug sections **Issue Synopsis / Detection and Validation Methodology /
-  Reproduction Protocol / Remediation Strategy**.
+  per-bug sections **Issue Synopsis / Offending Code / Detection and Validation
+  Methodology / Reproduction Protocol / Remediation Strategy**.
 
-The overview shows the target, test date, tested revision, campaign tier,
-aggregate property counts, and a table of confirmed bugs. Each row links to
-`bug_reports/<slug>.html`; when no bugs are confirmed, the table says so. The
-per-bug pages include severity, identifier, summary, expected and observed
-behavior, impact, minimal counterexample, linked property metadata, and a
-pasteable reproduction recipe. When `contractBasis` is `documented-limitation`,
+The overview shows the target, test date, tested revision, campaign tier, the
+build command and working directory, aggregate property counts, a table of
+confirmed bugs (with impact) and a table of every property tested — id, name,
+status, the formal statement, the SUT function with its `sourceFile:sourceLine`,
+and the defect it found. Each bug row links to `bug_reports/<slug>.html`; when
+no bugs are confirmed, the table says so. A per-bug page always places fields
+in its five fixed reader-oriented sections:
+
+- **Issue Synopsis / 问题概述**: severity, identifier, summary, the violated
+  contract (`law`), expected and observed behavior, impact, minimal
+  counterexample, and report context shown in the overview.
+- **Offending Code / 问题代码**: `offendingCode.file:line`, the quoted snippet
+  in a code block, and `rootCause`.
+- **Detection and Validation Methodology / 发现与验证方法**: property metadata,
+  formal property, oracle, SUT function, absolute `sourceFile:sourceLine`, test
+  file, test target, and any documentation provenance.
+- **Reproduction Protocol / 复现步骤**: absolute work directory, actual build
+  and narrowed run commands, seed, fast-check path where applicable, and the
+  framework's raw failure output (`rawOutput`) in a code block.
+- **Remediation Strategy / 修复建议**: `fix` with its fenced blocks rendered as
+  code, and the `regressionTest` path.
+
+The renderer renders only what `report.json` carries; it never infers evidence
+from freeform Markdown. When `contractBasis` is `documented-limitation`,
 `documented-and-violated`, or `documented-exclusion`, the page also carries a
 **Documentation** block (Chinese: **文档依据**) with the author's verbatim text —
 that block is what tells a developer reading the page that pi-pbt read their
@@ -188,17 +227,15 @@ and stable as the machine-readable contract. HTML output escapes all report
 values before placing them in the page. The report generator also rejects a
 `reportPath` that escapes the artifact directory.
 
-### Current discovery-evidence limit
+### Evidence the page embeds, and what it still does not
 
-The methodology section currently provides **descriptive discovery metadata**,
-not the source-level evidence itself. It does not embed the property-test code,
-framework failure output, shrinking trace, source excerpt, or line numbers.
-Readers can use `testFile`, `testTarget`, the minimal counterexample, and the
-reproduction command in `report.json` to locate and rerun the test, but cannot
-review its implementation directly from the HTML page. Adding embedded test
-code and captured failure output requires extending the report contract with
-explicit evidence fields; do not infer or fabricate those details while
-rendering.
+Schema 4 closed the gap this section used to describe: the page embeds the
+offending source excerpt, the root cause, the framework's failure output, the
+fix as code and the regression test path. What it still does not embed is the
+property-test code itself and the shrinking trace — the test file and target
+are named, the reproduction command re-runs the case, and the shrunk witness
+is the counterexample. Adding those would be a further contract extension; do
+not infer or fabricate them while rendering.
 
 ## Managed runs
 

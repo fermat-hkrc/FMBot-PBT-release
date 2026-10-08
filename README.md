@@ -21,6 +21,7 @@ includes an installer and search tools; tested projects need their own toolchain
 | Linux x64 | [`pi-pbt-linux-x64.zip`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-x64.zip) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-x64.zip.sha256) |
 | Linux arm64 (aarch64) | [`pi-pbt-linux-arm64.zip`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-arm64.zip) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-arm64.zip.sha256) |
 | macOS Apple Silicon | [`pi-pbt-macos-arm64.zip`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-macos-arm64.zip) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-macos-arm64.zip.sha256) |
+| Windows x64 (experimental) | [`pi-pbt-windows-x64.zip`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-windows-x64.zip) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-windows-x64.zip.sha256) |
 
 Not sure which Linux build you need? `uname -m` — `x86_64` takes the x64 file,
 `aarch64` the arm64 one. Older versions are on the
