@@ -14,7 +14,7 @@
 | 交互式 campaign | `pi-pbt` |
 | 无头跑一次（脚本 / nohup，不做门禁） | `pi-pbt -p "…"` |
 | campaign 前先跑已知构建 | `pi-pbt build-run --build-cmd "…"` |
-| HarmonyOS HAP（fast-check / ohosTest） | `pi-pbt build-run --build-cmd "./hvigorw assembleHap"` |
+| HarmonyOS HAP（fast-check / ohosTest） | `pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"` |
 | 门禁**一次 git 提交**（hook / CI） | `pi-pbt hook-run <sha>` |
 | 监视新提交（尽力而为） | `pi-pbt watch` |
 | 模拟开发者（不做 PBT） | `pi-pbt replay --pr <n>` |
@@ -23,6 +23,7 @@
 | 根据 `pbt-out/` 打覆盖率 | `pi-pbt coverage` |
 | Findings dashboard | `pi-pbt dashboard` |
 | 给 Claude Code / Codex 的 MCP | `pi-pbt mcp` |
+| 继续中断的战役 | `pi-pbt resume` |
 | 版本 | `pi-pbt --version` |
 
 provider/model 覆盖不只支持 `build-run`：自由 `pi-pbt`、`build-run`、
@@ -30,6 +31,11 @@ provider/model 覆盖不只支持 `build-run`：自由 `pi-pbt`、`build-run`、
 `pbt_start` / `pbt_watch_start` 有对应的 `provider`、`model` 字段。
 `replay` 只接受 `--model`；Kea 从 `kea.config.yml` 读取 `provider` 和
 `model`。不传覆盖值时使用 `~/.pi-pbt/agent/` 的配置。
+
+`build-run`、`hook-run`、`watch` 还接受 `--thinking off|minimal|low|medium|high|xhigh|max`，
+在发出请求前校验。有的服务会拒绝某个档位，例如始终思考的 GLM 端点会以错误 1210 拒绝
+`medium`。此时战役以退出码 `2` 停止，`interruption.json` 写明需要改什么：换一个它接受的
+档位，或在 `models.json` 里用 pi 的 `thinkingLevelMap` 统一映射（例如 `{"medium": "high"}`）。
 
 `kea` 是真机 HarmonyOS GUI 测试的**实验功能**；前置条件、配置和命令见
 [Kea 使用指南](kea.zh.md)。
@@ -56,7 +62,7 @@ provider/model 覆盖不只支持 `build-run`：自由 `pi-pbt`、`build-run`、
 | **跑战役** | `pi-pbt` | 交互式，在对话里说明目标。 |
 | | `pi-pbt -p "<prompt>"` | 无人值守跑一次。给脚本和自动产出用——**不是 CI 门禁**：进程退出码是 pi 的，不承载裁决，发现 bug 也不会让流水线变红。门禁用 `hook-run`。 |
 | | `pi-pbt build-run --build-cmd "<命令>"` | 你的构建命令是 preflight 闸：先跑它，非零退出就在任何 agent 工作之前停掉战役。成功后要读产物；这条命令不套用 `hook-run` 的裁决退出码。之后战役**就地运行**（不建 worktree）——大型组件无法在独立副本里构建。 |
-| | `pi-pbt build-run --build-cmd "./hvigorw assembleHap"` | 同一道闸。`--repo`/`--workdir` 若是 HAP 根（项目内 `hvigorw` + `oh-package.json5` + `build-profile.json5`;`PATH` 上的 `hvigorw` 不算），自动设 `PBT_HAP=1`：fast-check / ohosTest。缺本地 `hvigorw` 的 ArkTS 树不是 HAP 根——见 [installation.zh.md](installation.zh.md#harmonyos-hap--arkts-应用)。 |
+| | `pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"` | 同一道闸。`--repo`/`--workdir` 若是 HAP 根（`oh-package.json5` + `build-profile.json5`；只在 DevEco 安装里找到的 `hvigorw` 会在本次运行中加入 `PATH`），自动设 `PBT_HAP=1`：ohosTest 里的 Hypium + PandaCheck，再 `aa test`。不是主机 `ark`。见 [installation.zh.md](installation.zh.md#harmonyos-hap--arkts-应用)。 |
 | | `pi-pbt hook-run <sha>` | 单个 commit 的改动集。**退出码就是裁决**：`0` 干净、`1` 发现 bug、`2` 没有报告或报告不合 schema、`3` 构建失败。sha 只用来取 diff 和写进 prompt，**检出由调用方负责**。 |
 | | `pi-pbt watch` | 轮询分支，每个新 commit 跑一轮，从旧到新——**每次轮询最多 10 个**，更旧的会被丢弃（有日志）。 |
 | | `pi-pbt test-all` | 读 `pbt-out/FUNCTION_INDEX.md`，对其中每个候选函数跑。 |
@@ -75,7 +81,9 @@ provider/model 覆盖不只支持 `build-run`：自由 `pi-pbt`、`build-run`、
   普通 pi 进程的退出码，发现 bug 不会映射成 `1`，缺报告也不会映射成 `2`。`hook-run`
   才是由产物裁决退出码的 CI 检查。两者**不能在一次调用里组合**：`hook-run` 没有
   `--build-cmd`。仓库需要特定构建命令时，在 `hook-run` 前一个 CI 步骤里先构建好，
-  campaign 可以复用热的构建树。
+  campaign 可以复用热的构建树。两者都会沿用写在仓库之外的测试的结论：`hook-run`
+  每次清空工作目录，所以 pi-pbt 先从结论库把这些测试（以及它绑定的工作目录文件）放回；
+  `build-run` 的 workdir 本来就保留它们，只在丢失时放回。
 - **`-p` 与 `mcp`**。`-p` 在当前进程里跑完战役、阻塞等待。`mcp` 把战役交给另一个进程、
   立刻返回 run id，调用方可以继续干别的。
 
@@ -276,7 +284,7 @@ pi-pbt build-run --build-cmd "<command>"
   [--prompt <text>|-p <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
-  [--provider <p>] [--model <m>]
+  [--provider <p>] [--model <m>] [--thinking <level>]
   [--mode text|json|json-full] [--tui]
 ```
 
@@ -425,7 +433,7 @@ pi-pbt hook-run <sha>
   [--prompt <text>|-p <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
-  [--provider <p>] [--model <m>]
+  [--provider <p>] [--model <m>] [--thinking <level>]
   [--scope <path>] [--run-id <id>]
   [--mode text|json|json-full] [--tui]
 ```
@@ -478,7 +486,7 @@ pi-pbt watch
   [--prompt <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--cov-mode incremental|full] [--effort …]
-  [--provider <p>] [--model <m>] [--tui]
+  [--provider <p>] [--model <m>] [--thinking <level>] [--tui]
 ```
 
 每个新提交拉起一次 `hook-run`,从旧到新。默认 effort **quick**。`--prompt` / `--prompt-file`
@@ -567,3 +575,25 @@ Dashboard：[安装指南](installation.zh.md#5-网页面板实时看它在干�
 
 Hook-run：[CI / git hook 集成](installation.zh.md#ci--git-hook-集成)。覆盖率：
 [coverage-tracking.md](coverage-tracking.md)。
+
+
+## `finalize`
+
+`pi-pbt finalize [--out <目录>] [--lang en|zh]` 从被测仓库根目录确定性校验并渲染已有
+战役，不请求模型。校验 schema、源码和回归测试及 Gradle 证据、降级矛盾后，生成
+HTML 并更新程序自有覆盖率页脚。不改 report.json，不编写或执行测试。退出码 `0`
+表示交付有效，包括已发现缺陷的报告；`2` 表示证据不完整、无效或渲染失败。此命令
+不替代 `hook-run` 的检查结论。
+
+## `resume`
+
+`pi-pbt resume [--out <目录>] [--thinking <等级>] [--force] [--attempts <n>] [--wait <秒>]`
+继续以退出码 `2` 停止并留下 `interruption.json` 的战役（`--out` 默认为
+`$PBT_OUT_DIR`，否则为 `./pbt-out`；也会查找嵌套的 `<out>/pbt-out/` 记录）。它通过同一
+二进制，按记录的 provider、模型、思考等级、工作目录和白名单内的 `PBT_*` 设置重新启动
+原会话；调用方已设置的变量优先，但 `PBT_OUT_DIR` 固定为记录所在目录。记录的源码根目录和函数级目标以 `PBT_SOURCE_ROOT`、
+`PBT_FUNCTION_TARGET` 恢复，提示词范围和战役起点以 `PBT_RESUME_SCOPE`、`PBT_RESUME_STARTED_AT`
+恢复（均仅由 `resume` 设置）；解析出的语言和变更来源以 `PBT_LANG`、`PBT_CHANGE_SOURCE` 恢复。配置类中断默认拒绝，需给出 `--thinking`
+或 `--force`。`--attempts`（默认 `1`）只重试额度、限流和服务类中断，每次间隔
+`--wait` 秒（默认 `0`），某次运行结束且没有新的中断时立即停止。退出码为最后一次恢复
+运行的退出码，无可恢复内容时为 `2`。续跑是无头 `-p` 运行，不是新的 `hook-run` 检查。

@@ -16,7 +16,7 @@ directory, described below.
 | Interactive campaign | `pi-pbt` |
 | One headless run (script / nohup, not a gate) | `pi-pbt -p "…"` |
 | Run a known build before a campaign | `pi-pbt build-run --build-cmd "…"` |
-| PBT a HarmonyOS HAP (fast-check / ohosTest) | `pi-pbt build-run --build-cmd "./hvigorw assembleHap"` |
+| PBT a HarmonyOS HAP (fast-check / ohosTest) | `pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"` |
 | Gate **one git commit** (hook / CI) | `pi-pbt hook-run <sha>` |
 | Monitor new commits (best effort) | `pi-pbt watch` |
 | Simulate a developer (no PBT) | `pi-pbt replay --pr <n>` |
@@ -25,6 +25,7 @@ directory, described below.
 | Print coverage from `pbt-out/` | `pi-pbt coverage` |
 | Findings dashboard | `pi-pbt dashboard` |
 | MCP for Claude Code / Codex | `pi-pbt mcp` |
+| Continue an interrupted campaign | `pi-pbt resume` |
 | Version | `pi-pbt --version` |
 
 Provider/model selection is not limited to `build-run`: `--provider` and
@@ -32,6 +33,13 @@ Provider/model selection is not limited to `build-run`: `--provider` and
 and `test-all`; MCP `pbt_start` / `pbt_watch_start` expose matching `provider`
 and `model` fields. `replay` accepts `--model` only. Kea reads `provider` and
 `model` from `kea.config.yml`. Omit overrides to use `~/.pi-pbt/agent/`.
+
+`build-run`, `hook-run` and `watch` also accept `--thinking off|minimal|low|medium|high|xhigh|max`
+(validated before any request). Some providers reject a level — a GLM endpoint
+that always thinks rejects `medium` with error 1210. The campaign then stops
+with exit `2` and `interruption.json` says what to change: pass an accepted
+level, or map it once in `models.json` with pi's `thinkingLevelMap`
+(for example `{"medium": "high"}`).
 
 `kea` is **experimental** GUI testing on a HarmonyOS phone; see the
 [Kea guide](kea.md) for prerequisites, configuration and commands.
@@ -61,7 +69,7 @@ of each are below.
 | **Run a campaign** | `pi-pbt` | Interactive. Describe the target in chat. |
 | | `pi-pbt -p "<prompt>"` | One campaign, headless. For scripts and unattended generation — **not a CI gate**: the process exit code is pi's, not a verdict, so bugs found do not fail the job. Use `hook-run` for that. |
 | | `pi-pbt build-run --build-cmd "<cmd>"` | Your build command is the preflight gate: it runs first, and a non-zero exit stops the campaign before any agent work. After it succeeds, read the artifacts; this command does not apply the `hook-run` verdict exit codes. The campaign runs **in place** — no worktree — because large components cannot build from a detached copy. |
-| | `pi-pbt build-run --build-cmd "./hvigorw assembleHap"` | Same gate. If `--repo`/`--workdir` is a HAP root (project-local `hvigorw` + `oh-package.json5` + `build-profile.json5`; `hvigorw` on `PATH` is not enough), sets `PBT_HAP=1`: fast-check / ohosTest. An ArkTS tree missing that local `hvigorw` is not a HAP root — see [installation.md](installation.md#harmonyos-hap--arkts-apps). |
+| | `pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"` | Same gate. If `--repo`/`--workdir` is a HAP root (`oh-package.json5` + `build-profile.json5`; a `hvigorw` found only in a DevEco install is put on `PATH` for the run), sets `PBT_HAP=1`: Hypium + PandaCheck in ohosTest, then `aa test`. Not host `ark`. See [installation.md](installation.md#harmonyos-hap--arkts-apps). |
 | | `pi-pbt hook-run <sha>` | One commit's change set. **The exit code is the verdict**: `0` clean, `1` bugs found, `2` no report or a report that fails the schema, `3` the build failed. The sha selects the diff and the prompt — **the caller checks the tree out**. |
 | | `pi-pbt watch` | Polls a branch and runs one campaign per new commit, oldest first — **newest 10 per poll**, older ones dropped (and logged). |
 | | `pi-pbt test-all` | Reads `pbt-out/FUNCTION_INDEX.md` and campaigns over every candidate function in it. |
@@ -83,7 +91,10 @@ Two that are easy to confuse:
   the artifact verdict. The two do **not** compose in one invocation:
   `hook-run` takes no `--build-cmd`. If a repository needs a specific build,
   run that build in the CI step before `hook-run`; the campaign can reuse the
-  warm tree.
+  warm tree. Either one carries over a verdict whose test it wrote outside the
+  repository: `hook-run` wipes its workdir each run, so pi-pbt restores such a
+  test (and the workdir files it is bound to) from the verdict store first;
+  `build-run`'s workdir keeps them, and they are restored only if lost.
 - **`-p` vs `mcp`.** `-p` runs the campaign in this process and blocks.
   `mcp` hands the campaign to a separate process and returns a run id
   immediately, so the caller keeps working while it runs.
@@ -308,7 +319,7 @@ pi-pbt build-run --build-cmd "<command>"
   [--prompt <text>|-p <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
-  [--provider <p>] [--model <m>]
+  [--provider <p>] [--model <m>] [--thinking <level>]
   [--mode text|json|json-full] [--tui]
 ```
 
@@ -491,7 +502,7 @@ pi-pbt hook-run <sha>
   [--prompt <text>|-p <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--effort quick|standard|thorough]
-  [--provider <p>] [--model <m>]
+  [--provider <p>] [--model <m>] [--thinking <level>]
   [--scope <path>] [--run-id <id>]
   [--mode text|json|json-full] [--tui]
 ```
@@ -548,7 +559,7 @@ pi-pbt watch
   [--prompt <text>|--prompt-file <path>]
   [--lang zh] [--scan-root <dir>]
   [--cov-mode incremental|full] [--effort …]
-  [--provider <p>] [--model <m>] [--tui]
+  [--provider <p>] [--model <m>] [--thinking <level>] [--tui]
 ```
 
 Spawns `hook-run` per new commit, oldest first. Default effort **quick**.
@@ -641,3 +652,33 @@ Dashboard: [installation guide](installation.md#5-dashboard-watch-it-work-live).
 
 Hook-run: [CI / git-hook integration](installation.md#ci--git-hook-integration). Coverage:
 [coverage-tracking.md](coverage-tracking.md).
+
+
+## `finalize`
+
+`pi-pbt finalize [--out <dir>] [--lang en|zh]` deterministically validates and
+renders an existing campaign from the SUT repository root, without a model
+request. It checks schema, source/regression/Gradle evidence and demotion
+contradictions before generating HTML and updating the owned coverage footer.
+It does not edit report.json or author/run tests. Exit `0`: validated delivery,
+including a bugs-found report. Exit `2`: incomplete/invalid evidence or rendering
+failure. This complements, rather than replaces, `hook-run`'s check verdict.
+
+## `resume`
+
+`pi-pbt resume [--out <dir>] [--thinking <level>] [--force] [--attempts <n>] [--wait <seconds>]`
+continues a campaign that stopped with exit `2` and `interruption.json`
+(default `--out`: `$PBT_OUT_DIR`, else `./pbt-out`; a nested `<out>/pbt-out/`
+record is found too). It relaunches the saved session through the same binary
+with the recorded provider, model, thinking level, working directory and
+allow-listed `PBT_*` settings; variables set by the caller win, except
+`PBT_OUT_DIR`, which stays pinned to the record's directory. The recorded
+source root, function-scoped target, prose scope and campaign start are restored
+as `PBT_SOURCE_ROOT`, `PBT_FUNCTION_TARGET`, `PBT_RESUME_SCOPE` and
+`PBT_RESUME_STARTED_AT` (set by `resume` only); the resolved language and change
+source as `PBT_LANG` and `PBT_CHANGE_SOURCE`. A configuration interruption is refused unless
+`--thinking` or `--force` is given. `--attempts` (default `1`) retries only
+quota, rate-limit and provider interruptions, sleeping `--wait` seconds (default
+`0`) between attempts, and stops as soon as a run ends without a new
+interruption. Exit: the last resumed run's code, or `2` when there is nothing to
+resume. The continuation is a headless `-p` run, not a new `hook-run` gate.

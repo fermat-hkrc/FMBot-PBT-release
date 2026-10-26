@@ -113,7 +113,8 @@ removed in a real `report.json`.
       }
     }
   ],
-  "totals": { "properties": 1, "passing": 0, "failing": 1, "bugs": 1 }
+  "totals": { "properties": 1, "passing": 0, "failing": 1, "bugs": 1 },
+  "review": { "status": "reviewed", "findings": 2 }   // optional in the schema; see "Independent review"
 }
 ```
 
@@ -251,8 +252,44 @@ An in-place managed run (selected when `pbt_start` receives `build_cmd`) has no
 relocation step: its absolute paths already refer to the repository where the
 campaign ran.
 
+## Independent review
+
+`review` records whether an independent reviewer checked this result:
+
+- `{ "status": "reviewed", "findings": <n> }` — the close-out review ran
+  (`pbt-out/REVIEW.md`, one read-only reviewer child with a fresh context) and
+  every one of its `n` findings has a response in that file;
+- `{ "status": "not-reviewed", "reason": "...", "detail": "<why>" }` — it did
+  not, with `reason` one of `disabled` (`PBT_CLOSEOUT_REVIEW=off`),
+  `reviewer-unavailable` (the bundled pi-subagents did not accept the reviewer
+  in that session) or `reviewer-failed` (the reviewer failed twice and the
+  campaign went on without it).
+
+The field is optional in the schema, so a report without it is still valid
+schema 4 and `schemaVersion` does not change: read a missing `review` as
+"unknown", never as "reviewed". A pi-pbt campaign always writes it: the
+campaign's write of `report.json` and the final gate compare it with what the
+campaign actually did, and a `not-reviewed` result also needs REPORT.md's
+`**Independent review:** not reviewed (<reason>) — <why>` line.
+
 ## Compatibility
 
 `schemaVersion` is the compatibility boundary. A consumer must check it before
 using fields and reject a version it does not know. Adding an optional field
 does not require a bump; changing a field's meaning or removing one does.
+
+### Kotlin / Gradle execution evidence
+
+When Gradle XML exists for an authored Kotlin suite, each executed property's
+`testCase` identifies `fully.qualified.Class#method` from `gradle_test_results`.
+The report gate checks that case's actual status and rejects omitted failures
+in that suite. The XML must be newer than the suite's last edit. Shared KMP
+source does not prove all targets ran; `testTarget` records the actual task.
+
+### Multiple witnesses of one defect
+
+`bug.propertyId` selects the primary failing reproducer and retains its exact
+counterexample/backlink checks. Additional failing properties may reference the
+same `bugId` with different witnesses. Bug counts and failing-property counts
+need not be equal. A live Gradle XML failure cannot become `retired` merely to
+deduplicate a defect; correct or disable an invalid test and rerun first.

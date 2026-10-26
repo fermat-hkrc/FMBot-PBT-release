@@ -26,6 +26,7 @@ present:
 | Rust | `cargo` (`proptest` is added as a dev-dependency) |
 | Go | `go` toolchain |
 | Java | JDK + Maven/Gradle (jqwik) |
+| Kotlin, incl. Multiplatform | JDK + the project's Gradle wrapper (kotest-property in the existing test source set, `commonTest` for KMP, resolved from Maven Central); run only targets whose toolchains are available and record each tested task |
 | HarmonyOS HAP | DevEco CLI (`hvigorw`, `ohpm`) and the app SDK — installed for you by the `arkts-build-run` install card when missing (distro package with `sudo`, tarball otherwise). A HAP root is a directory with `oh-package.json5` + `build-profile.json5`; `hvigorw` may be the project wrapper, on `PATH`, or under the DevEco install. |
 | OpenHarmony components | A provisioned OpenHarmony source tree and its official build prerequisites. Prefer native `host_product` tests; a device-product runner is needed only for components with no host target. |
 | A HarmonyOS app on a real phone | `hdc` (HarmonyOS device connector) and a Kea2 checkout with its virtualenv — see the experimental [`pi-pbt kea` guide](kea.md) |
@@ -101,7 +102,7 @@ PowerShell or cmd. Configuration lives in `%USERPROFILE%\.pi-pbt\agent\`
 
 | | Windows |
 |---|---|
-| Python, Java, JS/TS campaigns (Hypothesis, jqwik, fast-check) | yes — the project's own test runner is invoked as it would be from a terminal |
+| Python, Java, Kotlin, JS/TS campaigns (Hypothesis, jqwik, kotest-property, fast-check) | yes — the project's own test runner is invoked as it would be from a terminal |
 | ArkTS / HAP (hvigor + ohpm) | yes, with Huawei's official DevEco Studio installed (pi-pbt detects it under `Program Files\Huawei\DevEco Studio` or `DEVECO_HOME`; it never installs it) and Git Bash for the `arkts-build-run` helper scripts |
 | C / C++ (RapidCheck, CMake, GN) and OpenHarmony components | no — no MSVC or OpenHarmony build cards |
 | `build-run` gate | yes — the command runs through the platform shell and its output is captured to `build.log` |
@@ -296,6 +297,25 @@ read-only one, `/btw:tangent` one that does not inherit the conversation. The
 bundled [pi-btw](https://github.com/dbachelder/pi-btw) package provides it;
 it loads in interactive sessions only, never in `-p` runs.
 
+pi-pbt also bundles [pi-subagents](https://github.com/nicobailon/pi-subagents),
+which provides the `subagent` tool (fresh-context child sessions, parallel
+fan-out, background runs; `/subagents-doctor` checks its setup). It loads in
+interactive sessions with its skills and prompts, and in `-p` runs as the
+extension only. Campaigns use it for one thing on their own: the **independent
+close-out review**. Before a campaign may file its result, it runs one
+read-only reviewer child (fresh context; `read`, `grep`, `find`, `ls` only) over
+`PROPERTIES.md`, every `bug_reports/*.md` and the source lines they cite, asking
+whether each filed bug's contract evidence supports it and whether any passing
+property's oracle is weakened. pi-pbt writes the verdict to `pbt-out/REVIEW.md`,
+and the result is refused until every finding in it has been answered. The
+reviewer uses the same model as the campaign unless you route it elsewhere with
+pi-subagents' `agentOverrides.pbt-closeout-reviewer` setting (see its
+configuration docs). Set `PBT_CLOSEOUT_REVIEW=off` to skip the review, at the
+cost of that independent check. A result that was not independently reviewed
+(turned off, reviewer unavailable, or the reviewer failed twice) says so: the
+machine-readable result carries `"review": {"status": "not-reviewed", "reason": ...}`
+and REPORT.md an `**Independent review:** not reviewed (...)` line.
+
 ### Read the results
 
 A completed **source-code PBT campaign** produces the following artifacts in
@@ -310,6 +330,7 @@ runs expose their artifact locations through `pbt_status` and `pbt_report`.
 | `bug_reports/*.md` | Markdown counterpart of each individual bug report. |
 | `report.json` | The machine-readable campaign result for CI, MCP and other integrations. It contains `schemaVersion`, tested revision, build result, properties, bugs and totals. Each bug links to the property that found it and its reproduction commands. |
 | `PROPERTIES.md` / `PLAN.md` | The property ledger and campaign progress; useful for reviewing what was attempted. |
+| `REVIEW.md` | The independent close-out review: each finding against a filed bug or a passing oracle, and the campaign's response to it. Whether the review happened is also recorded in `report.json` (`review`). |
 | `COVERAGE.md` / `COVERAGE_STATUS.md` | Function/testing progress records, not native line-coverage percentages. See [coverage tracking](coverage-tracking.md). |
 
 `report.json` is an output, **not a configuration file to create before running**.
@@ -330,8 +351,11 @@ in-place runs already leave them in your checkout. Kea GUI runs have a separate
 [artifact format](kea.md#artifacts-and-failures).
 
 Diagnostic files are conditional: `dependencies.json` describes discovered C++
-dependencies, `guards.jsonl` records blocked calls, and `recovery.json` records
-an attempted recovery. Their absence does not by itself make a run incomplete.
+dependencies, `guards.jsonl` records blocked calls, `recovery.json` records
+an attempted recovery, and `compaction.jsonl` records each context compaction
+during the campaign (one line per outcome: reason, tokens before, whether the
+campaign-state block was attached, or the error). Their absence does not by
+itself make a run incomplete.
 
 All subcommands (`build-run`, `hook-run`, `watch`, `replay`, `scan`, …) are listed
 in [subcommands.md](subcommands.md) ([中文](subcommands.zh.md)).
@@ -374,19 +398,22 @@ directory. The project's `compileSdkVersion` / `runtimeOS` are compared with the
 installed SDK and the campaign is told what to align (an extra SDK, or raising
 the project's SDK numbers with a targeted edit).
 
-On a HAP root, free-form `pi-pbt` / `-p` uses Hypium + fast-check in `ohosTest`.
-Prefer pinning the build. `hvigorw` here is whichever resolves — the DevEco
-package puts it on `PATH`; use `./hvigorw` only when the project ships the
-wrapper:
+On a HAP root, free-form `pi-pbt` / `-p` and `build-run` use Hypium +
+PandaCheck in `ohosTest`. The verdict is `hdc shell aa test`
+(`OHOS_REPORT_RESULT`). Host `es2panda`/`ark` (`PBT_PANDA=1`,
+`PANDACHECK_RESULT`) is a separate runner, and only when the tree is not a
+HAP root. Prefer pinning the build. `hvigorw` here is whichever resolves —
+the DevEco package puts it on `PATH`; use `./hvigorw` only when the project
+ships the wrapper:
 
 ```bash
 pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"
 ```
 
-When the toolchain is missing or its SDK disagrees with the project, `build-run`
-does not run the build gate itself: `build.log` records why, and the campaign
-is told to install/align first (the `arkts-build-run` install card) and then
-run that exact command before writing any property.
+When `hvigorw` or the SDK is missing, `build-run` does not run `--build-cmd`:
+`build.log` records why, and the campaign is told to install first. An SDK
+align note (`runtimeOS`, API flavour) is a warning. It does not skip the
+operator command.
 
 `build-run` then sets `PBT_HAP=1` for that process.
 
@@ -494,6 +521,7 @@ own coverage tooling, and leaves that toolchain's native HTML report under
 | Go | `go tool cover` | the Go toolchain |
 | JavaScript/TypeScript | the report your runner already writes (c8, vitest, jest) | that runner's coverage provider |
 | Java | JaCoCo's own report, adopted if the build produced one | JaCoCo configured in the build |
+| Kotlin | Kover's own HTML report (`build/reports/kover/html`), adopted if the build produced one | the Kover Gradle plugin applied in the build |
 
 Instrumentation is switched on by adding each toolchain's flags to the
 environment *before* the campaign builds anything (coverage is a build-time
@@ -616,16 +644,26 @@ pi-pbt build-run \
   --lang en
 ```
 
-**HarmonyOS HAP / ArkTS.** Gate on a HAP root (project-local `hvigorw` +
-`oh-package.json5` + `build-profile.json5`). That is what sets `PBT_HAP=1` and
-selects Hypium+fast-check in `ohosTest`. `hvigorw` only on `PATH` is not a HAP
-root — see [HAP / ArkTS](#harmonyos-hap--arkts-apps):
+**HarmonyOS HAP / ArkTS.** Gate on a HAP root (`oh-package.json5` +
+`build-profile.json5`). That sets `PBT_HAP=1` and selects Hypium + PandaCheck
+in `ohosTest`, then `aa test`. It does not select host `ark`. `hvigorw` may be
+the project wrapper, on `PATH`, or under DevEco — see
+[HAP / ArkTS](#harmonyos-hap--arkts-apps).
+When the only `hvigorw` is inside a DevEco install, `build-run` puts its
+directory on `PATH` for that run (and sets `DEVECO_SDK_HOME` if unset), so the
+bare `hvigorw …` command below works.
+
+On a fresh clone run `ohpm install --all` first. If `signingConfigs` points at
+certificates that are not on this machine (common in open-source HAPs), the
+gate stops at `SignHap` after a successful compile and prints a `HINT`: remove
+`signingConfig` from the product you build so hvigor emits `*-unsigned.hap`;
+the campaign signs with the SDK debug certificate. pi-pbt never edits it for you:
 
 ```bash
 pi-pbt build-run \
   --workdir /path/to/hap-app \
   --repo /path/to/hap-app \
-  --build-cmd "./hvigorw assembleHap" \
+  --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon" \
   --lang en
 ```
 
@@ -683,7 +721,7 @@ switch: those subcommands already run headless. `watch` accepts
 `--prompt` / `--prompt-file` and forwards them to every `hook-run` it spawns.
 
 `--out`, `--lang`, `--effort` (default `standard`), `--provider`,
-`--model`, `--mode text|json|json-full`, and `--tui` work as on `hook-run`.
+`--model`, `--thinking`, `--mode text|json|json-full`, and `--tui` work as on `hook-run`.
 `--mode` defaults to `text`; selecting `json` changes the stdout format, not the
 campaign or its exit behavior.
 
@@ -991,11 +1029,16 @@ artifacts, and Kea-specific environment variables.
 | `PBT_LANG=zh` / `en` | Chinese or English narration and artifacts; also `--lang` on subcommands. `en` still injects an English directive when the campaign prompt is Chinese |
 | `PBT_SCAN_ROOT=/path` | the repo to scan, for setups where the working directory is a clean copy (git hooks, CI) |
 | `PBT_OH_WORKSPACE=/path` | a pre-built full OpenHarmony source environment (source tree + toolchain + built dependencies) to reuse, instead of working out how to build the component standalone. **Detected automatically** when the repo sits inside such an environment (a parent directory with both `.repo/` and `out/`) — set it explicitly only to override; the startup log prints which one is in use |
-| `PBT_HAP=1` | Set **automatically** by `build-run` when `--repo`/`--workdir` is a HAP root (project-local `hvigorw` + `oh-package.json5` + `build-profile.json5`; `hvigorw` on `PATH` is not enough). Selects Hypium+fast-check in `ohosTest`. A free-form `pi-pbt` / `-p` run uses the same three-file check; if the tree is ArkTS but missing that local `hvigorw`, set `PBT_HAP=1` **on that command only** (see [HAP / ArkTS](#harmonyos-hap--arkts-apps)). Do not set in a shell profile |
+| `PBT_HAP=1` | Set **automatically** by `build-run` when `--repo`/`--workdir` is a HAP root (`oh-package.json5` + `build-profile.json5`). ohosTest uses Hypium + PandaCheck (`import { check, property } from 'PandaCheck'`) and `aa test`. Host `ark` is `PBT_PANDA=1`, and only when the tree is not a HAP root. Do not set in a shell profile |
 | `PBT_HOOK_TUI=1` | same as `hook-run --tui` / `watch --tui`: run in the interactive interface (needs a terminal; waits for `/quit`) |
 | `PBT_EFFORT=quick\|standard\|thorough` | how deep a campaign digs (see [effort tiers](#how-deep-it-digs-effort-tiers)); also `--effort` on `hook-run` / `watch`, which takes priority. Default: `quick` for `hook-run`/`watch`, `standard` elsewhere. The experimental Kea mode also uses this tier when its own depth is not configured; see [the Kea guide](kea.md). |
 | `PBT_TEST_JOBS=8` | how wide tests and builds run (see [parallelism](#how-wide-it-runs-parallelism)); a number, `max`, or `auto` (default: the machine's idle cores). `PBT_TEST_JOBS=1` forces serial — required when reconfirming a failure before filing it as a bug |
 | `PBT_CODE_COVERAGE=0` | turn off native code-coverage instrumentation and reporting (see [code coverage](#code-coverage-reports)); on by default, and it degrades silently when a toolchain is missing |
+| `PBT_CLOSEOUT_REVIEW=off` | skip the independent close-out review (`pbt-out/REVIEW.md`) a campaign otherwise must run, through the bundled pi-subagents, before it may write `report.json`. On by default; also `0` / `false`. The result then records `"review": {"status": "not-reviewed", "reason": "disabled"}` |
+| `PBT_CLOSEOUT_REVIEW_TIMEOUT=<minutes>` | time limit for each reviewer child of the close-out review (default 20). The review runs as parallel children, one per bug report and one per batch of three passing properties; a child that fails or times out is re-run alone on the next `closeout_review` call. How many run at once adapts: one more after each success, half after a failure, and half as soon as a child reports a rate-limit backoff (pi-subagents' provider diagnostics). The review is incremental: a later call reviews only the bug reports and passing properties that changed, or whose cited test, source or documentation files changed, and keeps the others with their findings and responses |
+| `PBT_VERDICTS=off` | do not record per-property verdicts (and so carry nothing over). After a delivered campaign (a valid `report.json` written by that campaign that passes delivery's checks), pi-pbt records each property's status, the commit tested, the effort tier, a failing case's seed, its ledger entry, its close-out review, and a fingerprint of the ledger entry, the test file, the SUT file and the files the entry cites, under `~/.pi-pbt/verdicts/<repository>/` (`PI_PBT_VERDICTS_DIR` moves it). Also `0` / `false` |
+| `PBT_CARRY=off` | run every property again. By default a full campaign starting without a `PROPERTIES.md` carries over the passing properties an earlier campaign verified at the same or a higher effort tier, when nothing they are bound to has changed (byte for byte: the entry, the test file, the SUT file, every cited file, the SUT's whole module — the nearest directory with a build file — minus tests and documentation, every module their imports reach, and the build configuration and lockfiles up to the repository top; toolchain versions are not bound), run with the same test target and build command (a `build-run` with another `--build-cmd` carries nothing), and written in the campaign's output language: they are written into the ledger with a `- Carried over:` line, keep their close-out review, are not run again, and are marked `carriedOver` in `report.json`, `**Carried over:**` in `REPORT.md` and in the HTML report. A test written outside the repository — in `hook-run`'s clean-room workdir, a managed run's work directory, or a `build-run` workdir above the module — is bound the same way, with what it imports and the rest of its module in the workdir (build files and linked sources; other tests excluded); those files are kept by content in the verdict store (`blobs/`), put back into the next campaign's workdir before the check, and removed again when they do not carry. Not under a hard `--scope`. Also `0` / `false` |
+| `PBT_CARRY_SAMPLE=<share>` | the spot-check of carried-over verdicts (default `0.1`; `0` turns it off): each heading that could be carried is instead re-run with this probability, in the ledger as `approved`. A re-run that does not pass again means the fingerprints missed something in this repository: carry-over is then off for it until a campaign that carries nothing has re-verified the records |
 | `PBT_BARE=1` | run as plain pi: no orchestration extension, no bundled skills, no campaign guards. Exists for A/B-measuring the harness's own contribution (benchmarking); not for normal use |
 | `PI_PBT_RUNS_DIR=/path` | where [`pi-pbt mcp`](#delegation-from-another-coding-agent-mcp) persists run state and artifacts (default `~/.pi-pbt/runs`; must be outside the repo under test) |
 | `PBT_OUT_DIR=/path` | where the campaign's artifacts (`PLAN.md`, `PROPERTIES.md`, `COVERAGE.md`, `REPORT.md`, `report.json`, `bug_reports/`) live. **Set automatically** by `build-run` and `hook-run` from their `--out`, so you normally never set it yourself; it exists so the artifact-driven checks read the same directory the campaign writes. Leave it unset for a plain `pi-pbt -p` campaign, which uses `<cwd>/pbt-out`. Do NOT export it in a shell profile: a stale value follows every later campaign, and an inherited one that points somewhere else is exactly the split-brain it was added to prevent |
@@ -1074,3 +1117,72 @@ Notes:
   context limit and the provider's error/usage limits, then start a new run with
   a smaller scope or a suitable model. Keep the logs when reporting the issue;
   repeatedly sending “continue” is not a fix.
+
+### Interrupted campaigns
+
+A final provider error or cancellation is an interruption, not a completed
+campaign. Headless pi-pbt exits with code `2` and preserves tests, artifacts and
+`interruption.json` in the campaign output directory. The diagnostic records
+the provider error, selected model/thinking level, saved session path, working
+directory and the campaign's `PBT_*` settings, with resume arguments. Fix
+provider quota or configuration before resuming. Do not reset the repository or
+discard the generated tests. Continue the campaign with:
+
+```bash
+pi-pbt resume --out pbt-out                          # one attempt
+pi-pbt resume --out pbt-out --attempts 6 --wait 1800 # keep resuming quota/rate-limit/provider stops
+```
+
+`resume` relaunches the saved session with the recorded provider, model,
+thinking level, working directory and campaign settings (an allow-list of
+`PBT_*` variables such as `PBT_SCOPE`, `PBT_BUILD_CMD`, `PBT_EFFORT`).
+Variables you set in the calling shell win over the recorded ones, except
+`PBT_OUT_DIR`, which stays the directory holding `interruption.json`. A build
+command that looks like it embeds a credential is not recorded; `resume` then
+asks you to export it again. A HAP campaign's DevEco `PATH`/`DEVECO_SDK_HOME`
+is detected again rather than stored. The campaign's source root (for a
+`hook-run`, the repository rather than the clean-room workdir) and a
+function-scoped target are restored through `PBT_SOURCE_ROOT` and
+`PBT_FUNCTION_TARGET`, a scope stated in the prompt through `PBT_RESUME_SCOPE`,
+and the campaign start through `PBT_RESUME_STARTED_AT` (so the continuation
+appends to the existing `guards.jsonl`). `resume` sets these for the
+continuation; do not set them by hand. The language and change source the
+original prompt implied come back as `PBT_LANG` and `PBT_CHANGE_SOURCE`. A
+resumed `--cov-mode full` sweep continues where it stopped instead of starting
+the sweep over. A headless `-p` run with `PBT_OUT_DIR` set renders its coverage
+footers there instead of `./pbt-out`. It refuses a configuration error
+(for example a rejected thinking level, also when it followed a quota error)
+unless you pass `--thinking <level>`, or
+`--force` after fixing the provider configuration. With `--attempts`, it only
+retries quota, rate-limit and provider interruptions, waits `--wait` seconds
+between attempts, and stops when a run ends without a new interruption. Its exit
+code is that of the last resumed run, or `2` when nothing could be resumed. The
+continuation is a headless `-p` run on the same session, not a new `hook-run`;
+validate the result with `pi-pbt finalize`. No automatic model switch or
+thinking reduction is performed. Transient failures handled successfully by SDK
+retries do not leave an interruption diagnostic.
+
+Unattended campaigns need more patience with rate limits than pi's interactive
+defaults. When `~/.pi-pbt/agent/settings.json` has no `retry` key, pi-pbt writes
+one on launch: 7 agent-level retries from a 4 s backoff (about 8.5 minutes in
+total), and 3 provider-level retries (`retry.provider.maxRetries`) that wait the
+server's `Retry-After`, capped at 2 minutes (`retry.provider.maxRetryDelayMs`).
+A `retry` key you set yourself is never changed. One that is still exactly an
+earlier pi-pbt default is upgraded to the current one.
+
+Before a full headless campaign returns success, pi-pbt revalidates report.json,
+source/regression/Gradle evidence and derives the HTML again. Missing or invalid
+delivery exits `2`, even when a file operation bypassed a tool-call pattern.
+This is distinct from hook-run exit `1` for a completed bugs-found campaign.
+
+
+### Finalize existing campaign evidence without a model call
+
+From the SUT repository root, run `pi-pbt finalize --out pbt-out --lang en`
+(or `--lang zh`). It validates schema, source/regression and Gradle XML evidence,
+checks demotion contradictions, regenerates HTML and refreshes only its owned
+coverage footer. It does not author tests, alter report.json or rerun the SUT.
+Exit `0` means validated delivery, even when the report contains bugs; exit `2`
+means missing/invalid evidence or rendering failure. No provider credentials or
+LLM request is needed for this step. It cannot turn an interrupted test run into
+verified results by filling missing facts.

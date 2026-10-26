@@ -10,6 +10,137 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.1.27 - 2026-10-26
+
+### English
+
+#### Added
+
+- **Incremental campaigns: what passed on unchanged evidence is not run again.**
+  Every delivered campaign records each property's verdict under
+  `~/.pi-pbt/verdicts/<repository>/`, bound byte for byte to its ledger entry,
+  test, SUT, cited files, the SUT's whole module, every module its imports
+  reach, the build configuration, the build command, the test target and the
+  campaign language. A new full campaign carries the passing ones over: they are
+  written into the ledger with a `- Carried over:` line, keep their close-out
+  review, and are marked in `report.json`, `REPORT.md` and the HTML report. A
+  random 10% are re-run as a spot-check, and a different result turns carry-over
+  off for the repository until a campaign re-verifies everything. Tests written
+  outside the repository (hook-run's clean room, a managed run, a build-run
+  workspace) are snapshotted and restored. Anything that cannot be bound is run
+  again. `PBT_VERDICTS=off`, `PBT_CARRY=off` and `PBT_CARRY_SAMPLE=<rate>`
+  control it. (#586, #588, #589, #595, #597)
+- **Independent close-out review.** `report.json` is filed only after reviewer
+  subagents (bundled `pi-subagents`) have checked every bug report and every
+  passing property. Reviewers run as parallel shares whose window adapts to
+  progress and to provider rate-limit backoff, and a re-run reviews only what
+  changed. `PBT_CLOSEOUT_REVIEW=off` and `PBT_CLOSEOUT_REVIEW_TIMEOUT` control
+  it. (#572, #575, #592, #593, #594)
+- **Kotlin (Multiplatform) projects.** Kotlin is scanned, properties are placed
+  in the project's own source sets, and a kotest-property backend generates
+  them; a Gradle or Maven build/test task counts as the project's build.
+  (#554, #555, #556)
+- **ArkTS HAP campaigns run on PandaCheck**, with Hypium and `aa test`; the
+  shipped PandaCheck face is the reviewed one. (#557, #560)
+- **`pi-pbt resume`** continues a campaign interrupted by a provider error from
+  its `interruption.json`, with the same model, thinking level and campaign
+  settings. A provider error or cancellation now ends a headless run with exit
+  code 2 and an `interruption.json`, not a normal-looking report. (#556, #569)
+- **Campaign state survives context compaction**: artifact locations, failing
+  properties and the bug reports they owe, and the steers already raised are
+  kept in the compaction summary. (#568)
+- A ViewStack identity oracle for deferred stack-top writes in OpenHarmony
+  campaigns. (#553)
+
+#### Changed
+
+- pi 1.4.0 (`pi-coding-agent`, `pi-ai`); bundled `pi-btw` 0.8.0 and
+  `pi-subagents` 0.81.0. Bundled pi packages now track the pinned pi. (#553,
+  #565, #567, #591)
+- Chinese typography is checked and fixed by AutoCorrect instead of zhlint;
+  YAML/TOML front matter is left alone. (#585, #594)
+- Provider requests retry 429/5xx themselves and honor `Retry-After`; seeded
+  retry settings a user never changed are upgraded. (#577)
+- The exit-time delivery check runs at close-out, while the agent can still fix
+  what it finds. (#561)
+- A packer that wraps a value outside a numeric domain the tree already rejects
+  is not filed as a missing clamp. (#600)
+
+#### Fixed
+
+- ArkTS: a passing property is rejected when it does not really exercise
+  `--func` — it skips a union, nullish, enum, literal or overload arm, casts an
+  enum or struct, infers a generic, skips a callback, lets a throw escape (also
+  from a callee up to three imports away), or calls a sibling instead of
+  `--func`. Literal unions, tuples, primitive arrays, rest and default
+  parameters and imported enums are drawn with the matching generator. (#524,
+  #526, #528, #530, #532, #536, #538, #540, #542, #544, #546, #548, #550, #552,
+  #566, #571, #573, #574, #576, #578, #579, #581, #583, #587, #590, #596, #599,
+  #601, #603)
+- An all-retired HAP `report.json` after a real hvigorw build is accepted. (#534)
+- `build-run` on a fresh-clone HAP explains a missing `ohpm install` or
+  author-only signing material, and accepts `--thinking`; a debug-signed HAP
+  lists its requested permissions in the profile ACL. (#558, #559)
+- A command that only displays files is not taken as a test run. (#562, #564)
+- A harness run by absolute path is capped at 10 minutes. (#563)
+
+### 中文
+
+#### 新增
+
+- **增量战役：依据未变、已经通过的性质不再重跑。** 每次交付的战役都会把各性质的结论
+  记在 `~/.pi-pbt/verdicts/<仓库>/` 下，逐字节绑定其台账条目、测试、被测源文件、引用
+  文件、被测文件所在的整个模块、其 import 所及的每个模块、构建配置、构建命令、测试
+  目标和战役语言。新的完整战役会沿用其中通过的性质：带 `- Carried over:` 行写入台账，
+  沿用收尾复核结论，并在 `report.json`、`REPORT.md` 和 HTML 报告中注明。随机抽取 10%
+  重跑作为抽查，结果不一致就关闭该仓库的沿用，直到有一次战役全部重新验证。写在仓库
+  之外的测试（hook-run 的隔离目录、托管运行、build-run 的工作区）会做快照并恢复。
+  无法绑定的一律重跑。由 `PBT_VERDICTS=off`、`PBT_CARRY=off` 和
+  `PBT_CARRY_SAMPLE=<比例>` 控制。(#586、#588、#589、#595、#597)
+- **独立收尾复核。** 只有复核子代理（内置 `pi-subagents`）检查过每份缺陷报告和每个
+  通过的性质后，才能写出 `report.json`。复核以并行分片执行，窗口随进度和服务商限流
+  退避自动调整；重新运行时只复核改动过的部分。由 `PBT_CLOSEOUT_REVIEW=off` 和
+  `PBT_CLOSEOUT_REVIEW_TIMEOUT` 控制。(#572、#575、#592、#593、#594)
+- **Kotlin（Multiplatform）项目。** 扫描 Kotlin，把性质放进项目自己的源码集，由
+  kotest-property 后端生成；Gradle 或 Maven 的构建/测试任务算作项目构建。
+  (#554、#555、#556)
+- **ArkTS HAP 战役改用 PandaCheck**，配合 Hypium 和 `aa test`；随包附带的
+  PandaCheck 接口为评审后的版本。(#557、#560)
+- **`pi-pbt resume`** 按 `interruption.json` 继续被服务商错误中断的战役，沿用原来的
+  模型、思考强度和战役设置。服务商错误或取消现在让无界面运行以退出码 2 结束并写出
+  `interruption.json`，不再生成看似正常的报告。(#556、#569)
+- **战役状态在上下文压缩后保留**：产物位置、失败的性质及其待写的缺陷报告、已发出的
+  提示都会写进压缩摘要。(#568)
+- OpenHarmony 战役新增 ViewStack 身份预言，用于延迟写栈顶的场景。(#553)
+
+#### 变更
+
+- pi 升级到 1.4.0（`pi-coding-agent`、`pi-ai`），内置 `pi-btw` 升到 0.8.0、
+  `pi-subagents` 升到 0.81.0。内置的 pi 扩展包随 pi 版本一起升级。(#553、#565、
+  #567、#591)
+- 中文排版改由 AutoCorrect 检查和修正，取代 zhlint；YAML/TOML front matter 不做
+  改动。(#585、#594)
+- 服务商请求遇到 429/5xx 会自行重试并遵循 `Retry-After`；用户未改动过的重试默认值
+  会自动升级。(#577)
+- 交付时的退出检查提前到收尾阶段执行，agent 还能修正发现的问题。(#561)
+- 打包函数对代码树本已拒绝的数值域之外的值回绕时，不再记为缺少截断的缺陷。(#600)
+
+#### 修复
+
+- ArkTS：没有真正覆盖 `--func` 的通过性质会被拒绝，包括漏掉联合、空值、枚举、字面量
+  或重载分支，强转枚举或结构体，依赖泛型推断，跳过回调，放过异常（包括最多隔三层
+  import 的被调函数抛出的异常），或调用同文件的其他函数而不是 `--func`。字面量联合、
+  元组、基本类型数组、剩余参数、默认参数和导入的枚举都用对应的生成器抽取。(#524、
+  #526、#528、#530、#532、#536、#538、#540、#542、#544、#546、#548、#550、#552、
+  #566、#571、#573、#574、#576、#578、#579、#581、#583、#587、#590、#596、#599、
+  #601、#603)
+- 真实执行 hvigorw 构建后全部为 retired 的 HAP `report.json` 可以通过。(#534)
+- 对新克隆的 HAP 运行 `build-run` 时，会说明缺少 `ohpm install` 或签名材料只在作者
+  机器上，并接受 `--thinking`；调试签名的 HAP 会把申请的权限列入 profile ACL。
+  (#558、#559)
+- 只显示文件内容的命令不算测试运行。(#562、#564)
+- 按绝对路径运行的测试程序限时 10 分钟。(#563)
+
 ## 0.1.26 - 2026-10-08
 
 ### English

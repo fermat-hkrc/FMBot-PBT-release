@@ -22,6 +22,7 @@ pi-pbt 自己没有依赖。但它会**真实编译并运行它写出来的测�
 | Rust | `cargo`(会加 `proptest` 开发依赖) |
 | Go | `go` 工具链 |
 | Java | JDK + Maven/Gradle(jqwik) |
+| Kotlin（含 Multiplatform） | JDK + 项目自带的 Gradle wrapper（kotest-property 放现有测试源集，KMP 为 `commonTest`，由 Maven Central 解析）；只运行工具链可用的目标，逐项记录实际测试任务 |
 | HarmonyOS HAP | DevEco 命令行(`hvigorw`、`ohpm`)和应用 SDK——缺失时由 `arkts-build-run` 的安装卡代装（有 `sudo` 装发行版包，否则 tarball 解到家目录）。HAP 根是同时有 `oh-package.json5` + `build-profile.json5` 的目录；`hvigorw` 可以是项目包装、`PATH` 上的，或 DevEco 安装目录里的。 |
 | OpenHarmony 组件 | 一份已配置好的 OpenHarmony 源码树及官方构建依赖。优先用原生 `host_product` 测试；只有组件没有 host 目标时才需要已经配置好的 device-product runner。 |
 | 真机上的 HarmonyOS 应用 | `hdc`（HarmonyOS 设备连接工具）以及一份带虚拟环境的 Kea2 —— 见实验性的 [`pi-pbt kea` 指南](kea.zh.md) |
@@ -89,7 +90,7 @@ vendor 进测试脚手架**。这个顺序可以避免不必要的联网和重�
 
 | | Windows |
 |---|---|
-| Python、Java、JS/TS 战役（Hypothesis、jqwik、fast-check） | 可以——按项目自己的测试命令在终端里跑 |
+| Python、Java、Kotlin、JS/TS 战役（Hypothesis、jqwik、kotest-property、fast-check） | 可以——按项目自己的测试命令在终端里跑 |
 | ArkTS / HAP（hvigor + ohpm） | 可以,前提是装了华为官方 DevEco Studio（pi-pbt 在 `Program Files\Huawei\DevEco Studio` 或 `DEVECO_HOME` 下检测,**不代装**）,且有 Git Bash 跑 `arkts-build-run` 的辅助脚本 |
 | C / C++（RapidCheck、CMake、GN）与 OpenHarmony 组件 | 不行——没有 MSVC / OpenHarmony 构建卡片 |
 | `build-run` 构建门 | 可以——命令经平台 shell 执行,输出记进 `build.log` |
@@ -254,6 +255,19 @@ pi-pbt
 不继承当前对话。这是随包内置的 [pi-btw](https://github.com/dbachelder/pi-btw)；只在交互式会话里
 加载，`-p` 无人值守运行不会带上它。
 
+pi-pbt 还内置了 [pi-subagents](https://github.com/nicobailon/pi-subagents)，提供 `subagent`
+工具（独立上下文的子会话、并行分派、后台运行；`/subagents-doctor` 可检查配置）。交互式会话里连同它的
+技能和提示模板一起加载，`-p` 运行只加载扩展本身。战役自己只用它做一件事：**独立收尾复核**。战役在提交结果
+之前，必须先跑一个只读复核子会话（全新上下文，只有 `read`、`grep`、`find`、`ls`），
+检查 `PROPERTIES.md`、每个 `bug_reports/*.md` 及其引用的源码行：每个已提交 bug 的契约证据是否
+真的成立，每个通过的性质的判定是否被削弱。pi-pbt 把结论写到 `pbt-out/REVIEW.md`；其中每条意见
+都得到回应之前，结果文件会被拒绝。复核默认用与战役相同的模型，可通过 pi-subagents 的
+`agentOverrides.pbt-closeout-reviewer` 配置改用别的模型（见它的配置文档）。设置
+`PBT_CLOSEOUT_REVIEW=off` 可跳过复核，代价是少了这道独立检查。没有经过独立复核的结果
+（被关闭、复核不可用、复核两次失败）会如实写明：结构化结果带
+`"review": {"status": "not-reviewed", "reason": ...}`，REPORT.md 带
+`**Independent review:** not reviewed (...)` 一行。
+
 ### 运行后看什么
 
 完成一次**源码性质测试战役**后，默认在 `pbt-out/` 查找下列产物。指定了 `--out` 就去
@@ -267,6 +281,7 @@ pi-pbt
 | `bug_reports/*.md` | 每个单独 bug 报告的 Markdown 对应版本。 |
 | `report.json` | 供 CI、MCP 和其他程序读取的结构化战役结果；包含 `schemaVersion`、被测提交、构建结果、性质、问题和统计。每个问题都关联发现它的性质与复现命令。 |
 | `PROPERTIES.md` / `PLAN.md` | 性质清单与战役进度，便于检查测了什么、哪些还没完成。 |
+| `REVIEW.md` | 独立收尾复核：针对已提交 bug 或通过性质判定的每条意见，以及战役对它的回应。是否做过复核也记录在 `report.json` 的 `review` 字段。 |
 | `COVERAGE.md` / `COVERAGE_STATUS.md` | 函数/测试进度登记，不是原生行覆盖率百分比；见[覆盖率跟踪](coverage-tracking.md)。 |
 
 `report.json` 是**运行产物，不是用户开跑前要填的配置**。agent 编写技术版的 `REPORT.md`、
@@ -282,7 +297,8 @@ v0.1.18 的替换发行包：需要已修正的安装脚本时刷新压缩包，
 运行使用另一套[产物格式](kea.zh.md#产物与失败)。
 
 诊断文件按需出现：`dependencies.json` 是 C++ 依赖清单，`guards.jsonl` 记录工具拦截，
-`recovery.json` 记录恢复尝试；缺少这些可选诊断本身不表示战役失败。
+`recovery.json` 记录恢复尝试，`compaction.jsonl` 记录战役期间每次上下文压缩（每个结果一行：
+触发原因、压缩前 token 数、是否附加了战役状态块，或失败原因）；缺少这些可选诊断本身不表示战役失败。
 
 全部子命令(`build-run`、`hook-run`、`watch`、`replay`、`scan` …)见
 [subcommands.zh.md](subcommands.zh.md)([English](subcommands.md))。
@@ -318,15 +334,17 @@ skill 的安装卡从 [devecostudio-linux](https://github.com/alex3236/devecostu
 `compileSdkVersion` / `runtimeOS` 会与已装 SDK 对比,战役会被告知怎么对齐（装一个
 额外 SDK,或用定点 edit 抬高项目的 SDK 号）。
 
-在 HAP 根上,自由提示的 `pi-pbt` / `-p` 会用 ohosTest 里的 Hypium + fast-check。建议钉住构建。
+HAP 根上，自由提示的 `pi-pbt` / `-p` 和 `build-run` 都用 ohosTest 里的 Hypium +
+PandaCheck。结论是 `hdc shell aa test`（`OHOS_REPORT_RESULT`）。主机 `es2panda`/`ark`
+（`PBT_PANDA=1`、`PANDACHECK_RESULT`）是另一条 runner，只在树不是 HAP 根时使用。建议钉住构建。
 这里的 `hvigorw` 取解析到的那一个——DevEco 包会把它放到 `PATH`；只有项目自带包装时才写 `./hvigorw`：
 
 ```bash
 pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"
 ```
 
-工具链缺失或其 SDK 与项目不一致时,`build-run` 不会自己跑构建门：`build.log` 记下原因,
-战役被要求先按 `arkts-build-run` 的安装卡安装/对齐,再运行这条命令,通过后才开始写性质。
+`hvigorw` 或 SDK 缺失时，`build-run` 不跑 `--build-cmd`：`build.log` 记下原因，战役被要求先安装。
+SDK 对齐提示（`runtimeOS`、API 口味）只是警告，不会跳过操作者的命令。
 
 `build-run` 会给这个进程设 `PBT_HAP=1`。
 
@@ -414,6 +432,7 @@ campaign 还会测量**代码到底执行了哪些**,用的是每种语言自带
 | Go | `go tool cover` | Go 工具链 |
 | JavaScript/TypeScript | 直接采纳你的运行器已经产出的报表(c8、vitest、jest) | 该运行器的覆盖率插件 |
 | Java | 采纳构建产出的 JaCoCo 报表 | 构建里配好 JaCoCo |
+| Kotlin | 采纳构建产出的 Kover HTML 报表（`build/reports/kover/html`） | 构建里应用了 Kover Gradle 插件 |
 
 插桩是在 campaign 构建任何东西**之前**,把各工具链的编译选项加进环境来打开的
 (覆盖率是构建期决定的,事后补不上)。你自己设过的值一律保留不动。工具缺失、
@@ -515,16 +534,20 @@ pi-pbt build-run \
   --lang zh
 ```
 
-**HarmonyOS HAP / ArkTS。** 门禁必须落在 HAP 根上(项目内 `hvigorw` +
-`oh-package.json5` + `build-profile.json5`)。这样才能自动设 `PBT_HAP=1`、选用
-ohosTest 里的 Hypium+fast-check。只在 `PATH` 上有 `hvigorw` 不算 HAP 根——见
-[HAP / ArkTS](#harmonyos-hap--arkts-应用):
+**HarmonyOS HAP / ArkTS。** 门禁必须落在 HAP 根上（`oh-package.json5` +
+`build-profile.json5`）。这会自动设 `PBT_HAP=1`，选用 ohosTest 里的 Hypium + PandaCheck，
+再跑 `aa test`。不会选主机 `ark`。`hvigorw` 可以是项目包装、`PATH` 上的，或 DevEco 里的——见
+[HAP / ArkTS](#harmonyos-hap--arkts-应用)。若 `hvigorw` 只存在于 DevEco 安装目录里，`build-run` 会在本次运行中把它的目录加到 `PATH`（`DEVECO_SDK_HOME` 未设时一并设置），下面的裸 `hvigorw …` 命令因此可以直接用。
+
+新克隆的工程先执行 `ohpm install --all`。若 `signingConfigs` 指向本机没有的证书（开源 HAP
+常见），门禁会在编译成功后停在 `SignHap`，并打印一条 `HINT`：从所构建的 product 中去掉
+`signingConfig`，hvigor 就会产出 `*-unsigned.hap`，战役用 SDK 调试证书签名。pi-pbt 不会替你改这个文件：
 
 ```bash
 pi-pbt build-run \
   --workdir /path/to/hap-app \
   --repo /path/to/hap-app \
-  --build-cmd "./hvigorw assembleHap" \
+  --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon" \
   --lang zh
 ```
 
@@ -575,7 +598,7 @@ pi-pbt build-run --build-cmd "…" --scope src/decoder.cpp \
 每一次 `hook-run`。
 
 `--out`、`--lang`、`--effort`(默认 `standard`)、`--prompt`/`-p`/`--prompt-file`、
-`--provider`、`--model`、`--mode text|json|json-full`、`--tui` 与 `hook-run` 一致。
+`--provider`、`--model`、`--thinking`、`--mode text|json|json-full`、`--tui` 与 `hook-run` 一致。
 `--mode` 默认是 `text`；选择 `json` 只改变 stdout 格式，不改变 campaign 或退出行为。
 
 #### build-run 实时 JSON 日志
@@ -835,11 +858,16 @@ claude --dangerously-load-development-channels server:pi-pbt
 | `PBT_LANG=zh` / `en` | 全程用中文或英文思考并写产物;子命令也可用 `--lang`。`en` 在战役提示本身是中文时仍会注入英文指令 |
 | `PBT_SCAN_ROOT=/path` | 要扫描的仓库路径。用于工作目录是一份干净副本的场景(git hook / CI) |
 | `PBT_OH_WORKSPACE=/path` | 预先准备好的完整 OpenHarmony 源码环境(源码 + 编译工具链 + 已编译好的依赖),直接复用而不是从头推导怎么单独构建。仓库位于这样的环境内部时(某个上级目录同时有 `.repo/` 和 `out/`)会**自动识别**,只有要覆盖时才需要显式设置;启动日志会打印实际用的是哪个 |
-| `PBT_HAP=1` | `build-run` 在 HAP 根上**自动**设置(项目内 `hvigorw` + `oh-package.json5` + `build-profile.json5`;`PATH` 上的 `hvigorw` 不算)。选用 ohosTest 里的 Hypium+fast-check。自由入口 `pi-pbt` / `-p` 用同一套三文件检查;若树是 ArkTS 但缺本地 `hvigorw`,只在**该条命令**上设 `PBT_HAP=1`(见 [HAP / ArkTS](#harmonyos-hap--arkts-应用))。不要写进 shell profile |
+| `PBT_HAP=1` | `build-run` 在 HAP 根上**自动**设置（`oh-package.json5` + `build-profile.json5`）。ohosTest 用 Hypium + PandaCheck（`import { check, property } from 'PandaCheck'`）和 `aa test`。主机 `ark` 是 `PBT_PANDA=1`，且只在树不是 HAP 根时使用。不要写进 shell profile |
 | `PBT_HOOK_TUI=1` | 等同 `hook-run --tui` / `watch --tui`:用交互式界面跑(需要终端;结束后等你 `/quit`) |
 | `PBT_EFFORT=quick\|standard\|thorough` | 一次 campaign 挖多深(见[effort 档位](#挖多深effort-档位));`hook-run` / `watch` 上的 `--effort` 优先级更高。默认:`hook-run`/`watch` 为 `quick`,其他入口为 `standard`。实验性的 Kea 模式在未单独配置深度时也使用该档位，见 [Kea 指南](kea.zh.md)。 |
 | `PBT_TEST_JOBS=8` | 测试和构建跑多宽(见[并行度](#跑多宽并行度));填数字、`max` 或 `auto`(默认:机器空闲核心数)。`PBT_TEST_JOBS=1` 强制串行 —— 把失败判定为 bug 之前的串行复核必须用它 |
 | `PBT_CODE_COVERAGE=0` | 关掉原生代码覆盖率的插桩与报表(见[代码覆盖率报表](#代码覆盖率报表));默认开启,工具链缺失时静默降级 |
+| `PBT_CLOSEOUT_REVIEW=off` | 跳过独立收尾复核（`pbt-out/REVIEW.md`）。默认开启：战役必须先经内置的 pi-subagents 完成复核，才能写 `report.json`；也接受 `0` / `false`。此时结果记录 `"review": {"status": "not-reviewed", "reason": "disabled"}` |
+| `PBT_CLOSEOUT_REVIEW_TIMEOUT=<分钟>` | 收尾复核中每个复核子代理的时限（默认 20）。复核以并行子代理执行：每份 bug 报告一个，通过的性质每 3 个一批；失败或超时的子代理在下次调用 `closeout_review` 时单独重跑。同时运行的个数自适应：每成功一个加一，失败一次减半，子代理一报告限流退避（pi-subagents 的 provider 诊断）也立即减半。复核是增量的：再次调用时只复核内容有变化（或其引用的测试、源码、文档有变化）的 bug 报告和通过的性质，其余沿用上一轮的结论、意见和回应 |
+| `PBT_VERDICTS=off` | 不记录各性质的结论（因此也不沿用）。一次战役交付（本次写出、有效且通过交付检查的 `report.json`）后，pi-pbt 会为每个性质记下结论、所测提交、强度档位、失败用例的种子、台账条目、收尾复核结论，以及台账条目、测试文件、被测源文件和条目引用文件的指纹，存在 `~/.pi-pbt/verdicts/<仓库>/` 下（可用 `PI_PBT_VERDICTS_DIR` 改位置）。也接受 `0` / `false` |
+| `PBT_CARRY=off` | 所有性质都重新运行。默认情况下，一次没有 `PROPERTIES.md` 的完整战役开始时，会沿用以前战役在相同或更高强度档位验证通过、且所依赖内容逐字节未变（条目、测试文件、被测源文件、所有引用文件、被测文件所在的整个模块——最近一个含构建文件的目录，不含测试和文档——以及其 import 所及的每个模块、直到仓库根目录的构建配置和锁文件；工具链版本不在其内），且测试目标和构建命令相同（`build-run` 换了 `--build-cmd` 就不沿用）、条目语言与本次输出语言一致的性质：它们带 `- Carried over:` 行写入台账，沿用收尾复核结论，不再运行，并在 `report.json` 中标 `carriedOver`、在 `REPORT.md` 中写 `**Carried over:**`、在 HTML 报告中注明。写在仓库之外的测试——`hook-run` 的隔离工作目录、托管运行的工作目录，或 `build-run` 在模块之上的 workdir——同样绑定，另加它 import 的内容，以及它在工作目录中所在模块的其余文件（构建文件和链接进来的源码，不含其他测试）；这些文件按内容存入结论库（`blobs/`），下一次战役检查前放回其工作目录，不沿用时再删掉。硬性 `--scope` 下不沿用。也接受 `0` / `false` |
+| `PBT_CARRY_SAMPLE=<比例>` | 沿用结论的抽查（默认 `0.1`；`0` 关闭）：每个本可沿用的标题以这个概率改为重跑，在台账中为 `approved`。重跑结果不再是通过，说明指纹在该仓库漏掉了某些东西：此后该仓库停止沿用，直到一次不沿用任何结论的战役重新验证这些记录 |
 | `PBT_BARE=1` | 以纯 pi 运行:不加载编排扩展、内置技能与 campaign 守卫。用于 A/B 度量 harness 自身贡献(benchmark 场景),非日常使用 |
 | `PI_PBT_RUNS_DIR=/path` | [`pi-pbt mcp`](#让别的-coding-agent-委派测试mcp) 保存 run 状态与产物的目录(默认 `~/.pi-pbt/runs`;必须在被测仓库之外) |
 | `PBT_OUT_DIR=/path` | campaign 产物(`PLAN.md`、`PROPERTIES.md`、`COVERAGE.md`、`REPORT.md`、`report.json`、`bug_reports/`)所在目录。`build-run` 与 `hook-run` 会用各自的 `--out` **自动设置**,正常情况下你不需要自己设;它的存在是为了让产物驱动的检查读到与 campaign 写入相同的目录。普通 `pi-pbt -p` 不设它,用 `<cwd>/pbt-out`。**不要写进 shell profile**:残留的值会跟着之后每一次 campaign,而继承来的、指向别处的值正是它要防的那种「两份账本」 |
@@ -903,3 +931,52 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8000/   # 期望 200(�
   `~/.pi-pbt/agent/sessions/` 下的会话日志。并非每种停止都会触发恢复，取消或 provider
   错误也不由此机制重试。若仍停止，请检查模型配置的上下文上限及 provider 的错误/额度，
   再缩小测试范围或换用合适的模型重新运行。反馈问题时附上日志，不要只反复发送“继续”。
+
+### 战役中断与恢复
+
+模型服务最终报错或运行被取消时，不能算战役完成。无头 pi-pbt 返回退出码 `2`，保留
+测试、产物，并在输出目录写入 `interruption.json`。诊断中记录服务错误、选定模型和
+思考等级、会话路径、工作目录、战役的 `PBT_*` 设置与恢复参数。先解决额度或配置问题，
+再恢复原会话，不要重置仓库或删除已有测试。用以下命令继续战役：
+
+```bash
+pi-pbt resume --out pbt-out                          # 恢复一次
+pi-pbt resume --out pbt-out --attempts 6 --wait 1800 # 额度/限流/服务中断时持续恢复
+```
+
+`resume` 按记录的 provider、模型、思考等级、工作目录和战役设置（`PBT_SCOPE`、
+`PBT_BUILD_CMD`、`PBT_EFFORT` 等白名单内的 `PBT_*` 变量）重新启动原会话。调用方 shell
+中已设置的变量优先于记录值，但 `PBT_OUT_DIR` 始终固定为 `interruption.json` 所在目录。
+看起来含有凭据的构建命令不会被记录，`resume` 会要求重新导出它。HAP 战役的 DevEco
+`PATH`/`DEVECO_SDK_HOME` 会重新探测，不做存储。战役的源码根目录（`hook-run` 时为仓库
+而非 clean-room 工作目录）和函数级目标通过 `PBT_SOURCE_ROOT`、`PBT_FUNCTION_TARGET`
+恢复，提示词中声明的范围通过 `PBT_RESUME_SCOPE` 恢复，战役起点通过
+`PBT_RESUME_STARTED_AT` 恢复（续跑因此追加到已有的 `guards.jsonl`）。这些变量由 `resume`
+为续跑设置，请勿手动设置。原提示词隐含的语言和变更来源以 `PBT_LANG`、`PBT_CHANGE_SOURCE`
+恢复。恢复的 `--cov-mode full` 全量扫描会从中断处继续，不会重新开始。设置了 `PBT_OUT_DIR` 的无头 `-p` 运行会把
+覆盖率页脚写到该目录，而不是 `./pbt-out`。配置错误（例如思考等级被拒，包括额度
+错误之后出现的这类错误）默认拒绝恢复，
+需传 `--thinking <等级>`，或在修好 provider 配置后传 `--force`。配合 `--attempts`
+时只重试额度、限流和服务类中断，每次间隔 `--wait` 秒；某次运行结束且没有产生新的
+中断时即停止。退出码为最后一次恢复运行的退出码，无法恢复时为 `2`。续跑是同一会话上的
+无头 `-p` 运行，不是新的 `hook-run`；结果请用 `pi-pbt finalize` 校验。不会自动切换
+模型或降低思考等级。SDK 重试成功的临时错误不会留下中断诊断。
+
+无人值守的战役比 pi 交互模式更需要耐心应对限流。`~/.pi-pbt/agent/settings.json`
+中没有 `retry` 时，pi-pbt 启动时会写入一份：智能体层 7 次重试，从 4 秒开始指数退避
+（总计约 8.5 分钟）；provider 层 3 次重试（`retry.provider.maxRetries`），按服务端的
+`Retry-After` 等待，单次最长 2 分钟（`retry.provider.maxRetryDelayMs`）。你自己设置的
+`retry` 不会被改动；仍与 pi-pbt 早先默认值完全相同的，会升级为当前默认值。
+
+完整无头战役返回成功前，pi-pbt 会再次校验 report.json、源码和回归测试及 Gradle 执行
+证据，并重新生成 HTML。即使某次文件操作绕过了调用模式检测，缺失或无效交付也返回
+退出码 `2`，不能算完成。这与 hook-run 已完整交付、但发现缺陷时的退出码 `1` 不同。
+
+
+### 不调用模型，确定性完成已有交付
+
+在被测仓库根目录执行 `pi-pbt finalize --out pbt-out --lang zh`（英文用 `--lang en`）。
+它校验 schema、源码和回归文件及 Gradle XML 证据，检查降级矛盾，重新生成 HTML，
+只刷新自身生成的覆盖率页脚；不编写测试，不改 report.json，不重新运行被测代码。
+退出码 `0` 表示交付已校验，即使其中报告了缺陷；`2` 表示证据缺失、无效或渲染失败。
+此步骤无需模型凭据，也不会发起模型请求，更不会替中断的运行补造测试事实。
