@@ -22,7 +22,7 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 
 `let`、`const`、类型推断、`void`、运算符、`if` / `switch` / 循环和 `this` 是语法，不计入。性质不抽取它们。
 
-这份 34 行清单里，**13 项已支持，7 项部分支持，14 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
+这份 34 行清单里，**14 项已支持，9 项部分支持，11 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
 
 | 教程特性 | pi-pbt | 含义 |
 | --- | --- | --- |
@@ -34,14 +34,14 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 | `number` / `string` / `boolean` 的数组 | 已支持 | `array(integer())`、`array(string())` 或 `array(boolean())`。只抽元素会被拒绝。 |
 | `enum` | 已支持 | 同文件，或相对导入一跳，用每个成员的 `constantFrom`。第二跳看不见。 |
 | 联合 | 部分支持 | 原语、字符串字面量、数字字面量、混合字面量，以及字面量加开放原语，能抽取。不可抽的臂 `retired`。 |
-| 类型别名 | 不支持 | 不展开 `type` 名字后面藏着的联合。 |
+| 类型别名 | 部分支持 | 可抽取的别名，如 `type Mode = 'xs' \| 'sm'`，会展开并走既有门禁。`Date` 或 class 的别名不展开。 |
 | 可选参数 | 已支持 | `oneof` 加 `constant(undefined)`。 |
 | 默认参数 | 已支持 | `number`、`string` 或 `boolean` 的默认参数必须既省略又传入抽取值。 |
 | rest 参数 | 已支持 | `func(...xs)`，`xs` 是 `number`、`string` 或 `boolean` 的 `array()`。裸元素列表会被拒绝。 |
 | 函数类型 | 部分支持 | 真正的 `(...) =>` 用具名函数或箭头。`Function` 和 `ESObject` `retired`。 |
 | 重载 | 部分支持 | 每个原语臂或每种元数都要调用。非原语臂 `retired`。 |
 | 带字段的 class 或 `struct` | 已支持 | 在 `--scope` 里声明时，用 `new` 或每个字段的 `record`。 |
-| `static` 字段或方法 | 不支持 | 被测符号是函数，不是 `Class.method`。 |
+| `static` 字段或方法 | 部分支持 | 参数为 `number`、`string` 或 `boolean` 的 public static 方法必须写成 `Class.method(drawn)`。static 字段不在此门禁内。 |
 | getter / setter | 不支持 | 不是抽取值。 |
 | 继承、`super`、抽象类 | 不支持 | 不构造。 |
 | `private` / `protected` 字段 | 不支持 | 套件不得改 `--scope` 来暴露它。 |
@@ -55,7 +55,7 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 | nullish，`T` 或 `null` / `undefined` | 已支持 | `arkNullish`。调用不得用 `!` 或 `??` 丢掉该臂。 |
 | `--func` 的具名导入 | 已支持 | `passing` / `failing` 必须导入该文件并调用该符号。 |
 | 导入别名或命名空间 | 已支持 | `id as ident` 和 `ids.id(...)` 算。调用兄弟符号不算。 |
-| 默认导出 | 不支持 | 不是 `--func` 的绑定。 |
+| 默认导出 | 已支持 | 默认导出的函数必须按默认导入并调用。class 或值的默认导出不是这个绑定。 |
 | 动态 `import()` | 不支持 | 结果是 `ESObject`。 |
 | `throw` / `try` | 部分支持 | `--func`、同文件被调、直接导入，以及最多三跳的 throw 必须捕获。第四跳看不见。 |
 | `@interface` 注解 | 不支持 | 不是值。 |

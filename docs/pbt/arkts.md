@@ -26,7 +26,7 @@ types, call shapes, and modules. It is not a percent of ArkTS.
 `let`, `const`, inference, `void`, operators, `if` / `switch` / loops, and
 `this` are syntax. They are not in the count. A property does not draw them.
 
-**13 supported, 7 partial, 14 not supported** on this 34-row checklist.
+**14 supported, 9 partial, 11 not supported** on this 34-row checklist.
 Supported means a passing or failing property can use that form, and a
 close-out gate requires it. Partial means only some forms of that tutorial
 heading are drawn or caught. Not supported means we do not draw it, or the
@@ -42,14 +42,14 @@ honest close is `retired`.
 | array of `number` / `string` / `boolean` | supported | `array(integer())`, `array(string())`, or `array(boolean())`. A bare element is rejected. |
 | `enum` | supported | `constantFrom` of every member in the same file, or one relative import. A second hop is invisible. |
 | union | partial | Primitive, string-literal, numeric-literal, mixed-literal, and literal-plus-primitive unions are drawn. An undrawable arm is `retired`. |
-| type alias | not supported | A `type` name is not expanded to the union it hides. |
+| type alias | partial | A drawable alias such as `type Mode = 'xs' \| 'sm'` is expanded and the existing gate applies. An alias of `Date` or a class is not expanded. |
 | optional parameter | supported | `oneof` with `constant(undefined)`. |
 | default parameter | supported | A `number`, `string`, or `boolean` default must be both omitted and passed as a drawn value. |
 | rest parameter | supported | `func(...xs)` where `xs` is `array()` of `number`, `string`, or `boolean`. A bare list is rejected. |
 | function type | partial | A real `(...) =>` is a named function or an arrow. `Function` and `ESObject` are `retired`. |
 | overload | partial | Every primitive arm, or every arity, must be called. A non-primitive arm is `retired`. |
 | class or `struct` with fields | supported | `new` or `record` of every field, when declared in `--scope`. |
-| `static` field or method | not supported | The scoped symbol is a function, not `Class.method`. |
+| `static` field or method | partial | A public static method with a `number`, `string`, or `boolean` parameter must be called as `Class.method(drawn)`. A static field stays outside. |
 | getter / setter | not supported | Not a drawn value. |
 | inheritance, `super`, abstract class | not supported | Not constructed. |
 | `private` / `protected` field | not supported | The suite must not edit `--scope` to expose it. |
@@ -63,7 +63,7 @@ honest close is `retired`.
 | nullish `T` or `null` / `undefined` | supported | `arkNullish`. The call must not use `!` or `??` to drop the arm. |
 | named import of `--func` | supported | A passing or failing property must import the file and call that symbol. |
 | import alias or namespace | supported | `id as ident` and `ids.id(...)` count. A sibling call does not. |
-| default export | not supported | Not the `--func` binding. |
+| default export | supported | A default-exported function must be imported as the default and called. A class or value default is not this binding. |
 | dynamic `import()` | not supported | The result is `ESObject`. |
 | `throw` / `try` | partial | A throw in `--func`, a same-file callee, a direct import, or up to three hops must be caught. A fourth hop is invisible. |
 | `@interface` annotation | not supported | Not a value. |

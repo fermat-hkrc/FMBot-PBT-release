@@ -55,8 +55,8 @@ history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中�
 #### Changed
 
 - pi 1.4.0 (`pi-coding-agent`, `pi-ai`); bundled `pi-btw` 0.8.0 and
-  `pi-subagents` 0.81.0. Bundled pi packages now track the pinned pi. (#553,
-  #565, #567, #591)
+  `pi-subagents` 0.82.1, whose `undici` 8.12.3 is outside GHSA-xjj6-f33q-929c.
+  Bundled pi packages now track the pinned pi. (#553, #565, #567, #591, #607)
 - Chinese typography is checked and fixed by AutoCorrect instead of zhlint;
   YAML/TOML front matter is left alone. (#585, #594)
 - Provider requests retry 429/5xx themselves and honor `Retry-After`; seeded
@@ -116,8 +116,8 @@ history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中�
 #### 变更
 
 - pi 升级到 1.4.0（`pi-coding-agent`、`pi-ai`），内置 `pi-btw` 升到 0.8.0、
-  `pi-subagents` 升到 0.81.0。内置的 pi 扩展包随 pi 版本一起升级。(#553、#565、
-  #567、#591)
+  `pi-subagents` 升到 0.82.1，其依赖的 `undici` 8.12.3 已修复 GHSA-xjj6-f33q-929c。
+  内置的 pi 扩展包随 pi 版本一起升级。(#553、#565、#567、#591、#607)
 - 中文排版改由 AutoCorrect 检查和修正，取代 zhlint；YAML/TOML front matter 不做
   改动。(#585、#594)
 - 服务商请求遇到 429/5xx 会自行重试并遵循 `Retry-After`；用户未改动过的重试默认值
