@@ -57,15 +57,15 @@ delegation. They can coexist.
 ## 3. Step 1: Install the pi-pbt engine
 
 Official release platforms are **Linux x64 / Linux arm64 / macOS arm64** —
-download the matching zip from your distribution channel (details in the
+download the matching archive from your distribution channel (details in the
 [installation guide](installation.md#2-download-and-install)). Each archive
 extracts to a same-named directory; run its installer so the executable and its
 bundled `fd`/`rg` tools are installed together:
 
 ```bash
 PLATFORM=linux-x64   # or linux-arm64 / macos-arm64
-sha256sum -c "pi-pbt-${PLATFORM}.zip.sha256"   # optional integrity check
-unzip "pi-pbt-${PLATFORM}.zip"
+sha256sum -c "pi-pbt-${PLATFORM}.tar.xz.sha256"   # optional integrity check
+tar -xJf "pi-pbt-${PLATFORM}.tar.xz"
 cd "pi-pbt-${PLATFORM}"
 ./install.sh
 ```
@@ -128,7 +128,7 @@ The skill's scripts resolve the engine in this order:
 
 Only when neither matches does the skill error out and point you at the install
 instructions. So the default needs **no configuration at all**; set `PI_PBT_BIN`
-explicitly only when the binary lives off PATH (e.g. a zip extracted into a
+explicitly only when the binary lives off PATH (e.g. an archive extracted into a
 custom directory):
 
 ```bash

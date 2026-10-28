@@ -75,6 +75,32 @@ hvigor 根就 retired。从该文件导入 `--func`,只复用用户 `--build-cmd
 `es2panda`/`ark`,或 `ohos_arkts_unittest`)。不要把 SUT 抄进另一个 HAP 的
 `ohosTest/ets/sut/`。`--lang` 是文案语言(`zh` / `en`),不是 C++ 还是 ArkTS。
 
+## 跑之前（前置条件）
+
+在 `pi-pbt build-run` **之前**做完下面每一步。漏一步，门禁必须点名失败
+（`BUILD FAILED — PBT not started`）。pi-pbt 不会发明 HAP、改写
+`compileSdkVersion` / `runtimeOS`、或创建 `ohosTest`。
+
+1. 当前用户**可写**的 DevEco SDK。`hvigor` 可能拒绝不可写的 `/opt/devecostudio/sdk`。
+   把 `local.properties` 的 `sdk.dir`（以及 `DEVECO_SDK_HOME`）指到你钉住的 API
+   真正所在的用户 SDK（例如 `26.0.0`）。
+2. HAP 或 HAR 根：`oh-package.json5` + `build-profile.json5`。`--repo` 与 `--workdir`
+   必须是**同一份 git** 检出。
+3. 工程的 `compileSdkVersion` / `compatibleSdkVersion` / `runtimeOS` / hvigor
+   `modelVersion` **对齐**该 SDK。自己改。装额外 SDK 或抬高工程版本号是操作者的事。
+4. 要测的模块已有 `src/ohosTest/module.json5`。示例里的 `module=entry@ohosTest`
+   假定这个目录存在。
+5. 在 `--workdir` 里 `ohpm install` 退出 0。必须能解析 `@ohos/hypium`。仓库里 404 的钉
+   （例如失效的 `@ohos/hamock` 版本）删掉或改钉。
+6. `--build-cmd` 在 `--workdir` 里**已经退出 0**：
+   - HAP（`hapTasks` / `type: hap`）：`hvigorw assembleHap --mode module -p module=<name>@ohosTest -p product=default --no-daemon`
+   - HAR（`harTasks` / `type: har`）：`hvigorw genOnDeviceTestHap --mode module -p module=<name>@ohosTest -p product=default --no-daemon`
+   纯 HAR 工程上没有 `assembleHap` 任务（hvigor 00306054）。
+7. 再传 `--scope path/to/file.ets --func ABC`，且 `--func` 在 `--scope` **后面**。
+   `--lang` 只有 `zh` / `en`（文案语言，不是 C++ 还是 ArkTS）。
+
+写完套件后，设备 `aa test` 仍需要 `hdc` 和可签名的 HAP。GN `*_abc` 不是这条 runner。
+
 `build-run` 碰到 HAP 根会为该进程设 `PBT_HAP=1`。不要把 `PBT_HAP` 写进
 shell profile：残留的 `1` 会把之后的 C++ campaign 也逼进 HAP 模式。树是
 ArkTS 但缺清单、又要用自由入口 `pi-pbt` / `-p` 时，只在**这一条命令**上设
@@ -95,6 +121,18 @@ pi-pbt build-run \
   --workdir /path/to/hap \
   --scope entry/src/main/ets/common/Utils.ets \
   --func deepCopyInter \
+  --lang zh
+```
+
+HAR 模块（库，`harTasks`）——不要用 `assembleHap`：
+
+```bash
+pi-pbt build-run \
+  --build-cmd "hvigorw genOnDeviceTestHap --mode module -p module=<har>@ohosTest -p product=default --no-daemon" \
+  --repo /path/to/component \
+  --workdir /path/to/component/.../the-har-project \
+  --scope path/from/repo/to/file.ets \
+  --func myFunc \
   --lang zh
 ```
 

@@ -154,12 +154,22 @@ agent 也可能写它。`pi-pbt coverage` 在找不到 `COVERAGE.md` 时会把�
 多少”，不是语句、行或分支执行覆盖率。只有当索引和登记表本身完整、路径匹配正确时，
 这些数字才适合作为 campaign 进度指标。
 
+计数口径（避免报告内部自相矛盾）：
+
+- 存在 `FUNCTION_INDEX.md` 时，`PBT candidates` 一律取索引自己的候选数，
+  `Tested (of PBT candidates)` 的分子是“索引候选中被台账标为 covered 的函数数”
+  （按函数名 + 路径后缀匹配连接索引、SCAN、COVERAGE 三处的不同写法），
+  分子分母同源，永不超过 100%；台账里出现索引外的函数不会抬高任何分母为索引数的指标。
+- 一行 COVERAGE.md 聚合多个函数（如 `Foo, Bar, Baz`）时，每个函数都计入 tested。
+- 空白 Module 会回填：优先取 SCAN 中同函数的模块名，否则取文件 dirname；
+  中文预言机名（往返/差分/幂等/状态机/不变量/负例…）会归类到对应英文类型。
+
 **示例输出：**
 ```
 # PBT Coverage Status
 
 > Last updated: 2026-07-23 16:52 | Files: 4/5 scanned (80%)
-> Functions: 10/17 total | PBT candidates: 10 | Tested: 8 (80%) | 7 pass, 1 fail
+> Functions: 17 total | PBT candidates: 10 | Tested: 8/10 (80%) | 7 pass, 1 fail
 
 ## Summary
 
@@ -250,8 +260,10 @@ agent 也可能写它。`pi-pbt coverage` 在找不到 `COVERAGE.md` 时会把�
   不同文件同名函数可能产生歧义。
 - 若没有识别出函数定义，则回退为改动文件中索引到的全部函数；此时报告会明确写
   `functions in changed files (function-level scope unavailable)`。
-- `Tested` 来自 `COVERAGE.md` / registry 中状态为 `covered` 的登记，不是运行时命中数。
-- `Test gaps` 是该启发式台账范围减去 covered 登记数。
+- `PBT candidates (changed)` / `Tested` / `Test gaps` 同口径：存在函数索引时，分子分母都是
+  范围内**索引候选**（函数名 + 路径后缀连接台账登记，聚合单元格逐函数展开）；
+  diff 新增且索引未收编的函数经 extraEntries 进入同一分母。无索引时双取 registry 登记行。
+  都不是运行时命中数。
 
 JSON 模式也支持 `--json --diff <sha>`：
 ```json

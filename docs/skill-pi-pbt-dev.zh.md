@@ -47,13 +47,13 @@ pi-pbt run manager 接管 campaign 进程，宿主 agent 可继续开发，之�
 ## 3. 第一步：安装 pi-pbt 引擎
 
 官方发行平台为 **Linux x64 / Linux arm64 / macOS arm64**，从你的分发渠道下载
-对应 zip（详情见[安装指南](installation.zh.md#2-下载与安装)）。每个压缩包都会解出一个
+对应压缩包（详情见[安装指南](installation.zh.md#2-下载与安装)）。每个压缩包都会解出一个
 同名目录；运行随包安装脚本，让主程序和内置 `fd`/`rg` 一起正确安装：
 
 ```bash
 PLATFORM=linux-x64   # 或 linux-arm64 / macos-arm64
-sha256sum -c "pi-pbt-${PLATFORM}.zip.sha256"   # 可选的完整性校验
-unzip "pi-pbt-${PLATFORM}.zip"
+sha256sum -c "pi-pbt-${PLATFORM}.tar.xz.sha256"   # 可选的完整性校验
+tar -xJf "pi-pbt-${PLATFORM}.tar.xz"
 cd "pi-pbt-${PLATFORM}"
 ./install.sh
 ```
@@ -110,7 +110,7 @@ skill 的脚本按以下顺序解析引擎位置：
 2. `PATH` 中的 `pi-pbt`（npm 全局安装或 release 二进制放入 PATH）
 
 前两种都不满足时才报错并引导安装。所以默认情况**不需要任何配置**；仅当二进制放在
-PATH 之外（例如 zip 解压到自定义目录）时，显式指定：
+PATH 之外（例如压缩包解压到自定义目录）时，显式指定：
 
 ```bash
 export PI_PBT_BIN=/path/to/pi-pbt      # Windows: set PI_PBT_BIN=C:\path\to\pi-pbt.exe

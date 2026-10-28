@@ -69,10 +69,13 @@ vendor 进测试脚手架**。这个顺序可以避免不必要的联网和重�
 
 | 平台 | 文件 | 下载体积 |
 |---|---|---|
-| Linux x64 | `pi-pbt-linux-x64.zip` | 约 42 MiB |
-| Linux arm64(aarch64) | `pi-pbt-linux-arm64.zip` | 约 42 MiB |
-| macOS Apple Silicon | `pi-pbt-macos-arm64.zip` | 约 31 MiB |
-| Windows x64（**实验性**） | `pi-pbt-windows-x64.zip` | 约 40 MiB |
+| Linux x64 | `pi-pbt-linux-x64.tar.xz` | 约 46 MiB |
+| Linux arm64(aarch64) | `pi-pbt-linux-arm64.tar.xz` | 约 42 MiB |
+| macOS Apple Silicon | `pi-pbt-macos-arm64.tar.xz` | 约 33 MiB |
+| Windows x64（**实验性**） | `pi-pbt-windows-x64.tar.xz` | 约 47 MiB |
+
+所有压缩包都是 `.tar.xz`。Linux 和 macOS 用 `tar -xJf` 解压（主流 Linux 发行版和 macOS
+都自带 `xz`）；Windows 见下节。
 
 不确定该拿哪个 Linux 版本?跑 `uname -m` —— 显示 `x86_64` 用 x64 那个,显示
 `aarch64` 用 arm64 那个。
@@ -84,8 +87,9 @@ vendor 进测试脚手架**。这个顺序可以避免不必要的联网和重�
 
 ### Windows（实验性）
 
-`pi-pbt-windows-x64.zip` 解出 `pi-pbt-windows-x64\`,里面是 `pi-pbt.exe` 和 `tools\fd.exe` / `tools\rg.exe`,
-没有安装脚本。把这个目录加进 `PATH`（或按路径调用 `pi-pbt.exe`）,在 PowerShell 或 cmd 里运行。配置在
+`pi-pbt-windows-x64.tar.xz` 解出 `pi-pbt-windows-x64\`,里面是 `pi-pbt.exe` 和 `tools\fd.exe` / `tools\rg.exe`,
+没有安装脚本。用 7-Zip、WinRAR 或 Windows 11 的文件资源管理器解压，也可以用支持 xz 的 `tar -xf`。
+Windows 10 和 Windows Server 2022 自带的 `tar.exe` 不支持 xz，会报格式不支持。把这个目录加进 `PATH`（或按路径调用 `pi-pbt.exe`）,在 PowerShell 或 cmd 里运行。配置在
 `%USERPROFILE%\.pi-pbt\agent\`（与 Linux 同一套文件）。能做与不能做的：
 
 | | Windows |
@@ -101,14 +105,18 @@ Windows 上的问题请提 issue——这个平台是实验性的。
 
 ```bash
 PLATFORM=linux-x64   # 或 linux-arm64 / macos-arm64（Windows 见下节,没有 install.sh）
-sha256sum -c "pi-pbt-${PLATFORM}.zip.sha256"   # 可选的完整性校验
-unzip "pi-pbt-${PLATFORM}.zip"
+sha256sum -c "pi-pbt-${PLATFORM}.tar.xz.sha256"   # 可选的完整性校验
+tar -xJf "pi-pbt-${PLATFORM}.tar.xz"            # 需要 xz；tar 报缺少时先安装 xz
 cd "pi-pbt-${PLATFORM}"
 ./install.sh
 ```
 
+**v0.2.0 替换构建（2026-10-28）：**v0.2.0 已原地重新构建，压缩包更小：所有平台改为
+`.tar.xz`，不再是 `.zip`；二进制只嵌入打包并压缩过的代码。此前下载的 v0.2.0 `.zip` 仍可
+使用；当前文件是上表的 `.tar.xz`，用各自的 `.sha256` 校验。
+
 **v0.1.18 替换构建（2026-09-16）：**当前发行包已包含上述安装修复。此前下载过
-v0.1.18 的用户，请重新下载 ZIP 和 `.sha256` 并运行 `./install.sh`。版本号未变，
+v0.1.18 的用户，请重新下载压缩包和 `.sha256` 并运行 `./install.sh`。版本号未变，
 请用当前发行包校验值区分新旧包。已安装宿主 agent skill 的，还须执行
 `pi-pbt skill-install --force` 刷新。
 
@@ -158,7 +166,7 @@ pi-pbt skill-uninstall               # 卸载（参数同上）
 
 ### 升级已有安装
 
-1. 停止正在运行的战役。重新下载新版 ZIP **和对应校验文件**，解压到新目录、校验，
+1. 停止正在运行的战役。重新下载新版压缩包 **和对应校验文件**，解压到新目录、校验，
    然后运行该包的 `./install.sh` 替换主程序。
 2. 如果给宿主 agent 安装过 `pi-pbt-dev`，替换二进制后**必须刷新复制出去的 skill**。
    内置战役技能随二进制更新，但宿主 agent 目录里的副本不会自动更新。
@@ -539,6 +547,17 @@ pi-pbt build-run \
 `build-profile.json5`）。这会自动设 `PBT_HAP=1`，选用 ohosTest 里的 Hypium + PandaCheck，
 再跑 `aa test`。不会选主机 `ark`。`hvigorw` 可以是项目包装、`PATH` 上的，或 DevEco 里的——见
 [HAP / ArkTS](#harmonyos-hap--arkts-应用)。若 `hvigorw` 只存在于 DevEco 安装目录里，`build-run` 会在本次运行中把它的目录加到 `PATH`（`DEVECO_SDK_HOME` 未设时一并设置），下面的裸 `hvigorw …` 命令因此可以直接用。
+
+把下面当作**安装前置条件**。做完则 `build-run` 应能启动。漏一步，门禁点名失败。完整清单见
+[ArkTS PBT — 跑之前](pbt/arkts.zh.md#跑之前前置条件)。
+
+- 可写的 DevEco SDK（`local.properties` 的 `sdk.dir` / `DEVECO_SDK_HOME`）。不可写的
+  `/opt/devecostudio/sdk` 会触发 hvigor 00308018。
+- `compileSdkVersion` 对齐该 SDK。自己改；pi-pbt 不改写。
+- `--build-cmd` 里的模块已有 `src/ohosTest/module.json5`。
+- `ohpm install` 成功（能解析 `@ohos/hypium`）。
+- HAP：`assembleHap … @ohosTest`。HAR（`harTasks`）：`genOnDeviceTestHap … @ohosTest`。
+  纯 HAR 工程没有 `assembleHap` 任务。
 
 新克隆的工程先执行 `ohpm install --all`。若 `signingConfigs` 指向本机没有的证书（开源 HAP
 常见），门禁会在编译成功后停在 `SignHap`，并打印一条 `HINT`：从所构建的 product 中去掉

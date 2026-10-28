@@ -84,18 +84,25 @@ Releases page, an internal mirror, or a direct handoff). Each ships with a
 
 | Platform | File | Download |
 |---|---|---|
-| Linux x64 | `pi-pbt-linux-x64.zip` | ~42 MiB |
-| Linux arm64 (aarch64) | `pi-pbt-linux-arm64.zip` | ~42 MiB |
-| macOS Apple Silicon | `pi-pbt-macos-arm64.zip` | ~31 MiB |
-| Windows x64 (**experimental**) | `pi-pbt-windows-x64.zip` | ~40 MiB |
+| Linux x64 | `pi-pbt-linux-x64.tar.xz` | ~46 MiB |
+| Linux arm64 (aarch64) | `pi-pbt-linux-arm64.tar.xz` | ~42 MiB |
+| macOS Apple Silicon | `pi-pbt-macos-arm64.tar.xz` | ~33 MiB |
+| Windows x64 (**experimental**) | `pi-pbt-windows-x64.tar.xz` | ~47 MiB |
+
+Every archive is a `.tar.xz`. On Linux and macOS extract it with `tar -xJf`
+(`xz` ships with every mainstream Linux distribution and macOS); on Windows see
+below.
 
 Not sure which Linux one you need? `uname -m` — `x86_64` takes the x64 file,
 `aarch64` the arm64 one.
 
 ### Windows (experimental)
 
-`pi-pbt-windows-x64.zip` extracts to `pi-pbt-windows-x64\` holding
-`pi-pbt.exe` and `tools\fd.exe` / `tools\rg.exe`; there is no installer. Put
+`pi-pbt-windows-x64.tar.xz` extracts to `pi-pbt-windows-x64\` holding
+`pi-pbt.exe` and `tools\fd.exe` / `tools\rg.exe`; there is no installer.
+Extract it with 7-Zip, WinRAR or Windows 11's File Explorer, or with `tar -xf`
+where that `tar` reads xz. The `tar.exe` built into Windows 10 and Windows
+Server 2022 does not: it stops with an unsupported-format error. Put
 that directory on `PATH` (or call `pi-pbt.exe` by path) and run it from
 PowerShell or cmd. Configuration lives in `%USERPROFILE%\.pi-pbt\agent\`
 (same files as on Linux). What works and what does not:
@@ -120,14 +127,20 @@ by default, or `$PI_CODING_AGENT_DIR/bin` when that override is explicitly set.
 
 ```bash
 PLATFORM=linux-x64   # or linux-arm64 / macos-arm64 (Windows: see above, no install.sh)
-sha256sum -c "pi-pbt-${PLATFORM}.zip.sha256"   # optional integrity check
-unzip "pi-pbt-${PLATFORM}.zip"
+sha256sum -c "pi-pbt-${PLATFORM}.tar.xz.sha256"   # optional integrity check
+tar -xJf "pi-pbt-${PLATFORM}.tar.xz"            # needs xz; install it if tar reports it missing
 cd "pi-pbt-${PLATFORM}"
 ./install.sh
 ```
 
+**v0.2.0 replacement build (2026-10-28):** v0.2.0 was rebuilt in place with
+smaller archives: every platform now ships `.tar.xz` instead of `.zip`, and the
+binary embeds only bundled, minified code. If you downloaded a v0.2.0 `.zip`
+earlier, it still works; the current files are the `.tar.xz` ones above,
+checked with their own `.sha256`.
+
 **v0.1.18 replacement build (2026-09-16):** the current archives include the
-installer correction above. If you downloaded v0.1.18 earlier, download the ZIP
+installer correction above. If you downloaded v0.1.18 earlier, download the archive
 and its `.sha256` again and rerun `./install.sh`. The version number is unchanged;
 use the current archive checksum to distinguish the replacement. Refresh any
 installed host-agent skill with `pi-pbt skill-install --force`.
@@ -660,6 +673,18 @@ the project wrapper, on `PATH`, or under DevEco — see
 When the only `hvigorw` is inside a DevEco install, `build-run` puts its
 directory on `PATH` for that run (and sets `DEVECO_SDK_HOME` if unset), so the
 bare `hvigorw …` command below works.
+
+Treat the following as **install prerequisites**. If they are done, `build-run`
+should start. If one is skipped, the gate fails naming that step. Full list:
+[ArkTS PBT — Before you run](pbt/arkts.md#before-you-run-prerequisites).
+
+- Writable DevEco SDK (`local.properties` `sdk.dir` / `DEVECO_SDK_HOME`). A
+  system `/opt/devecostudio/sdk` that is not writable will fail hvigor 00308018.
+- `compileSdkVersion` matches that SDK. Align by hand; pi-pbt does not rewrite it.
+- `src/ohosTest/module.json5` exists on the module in `--build-cmd`.
+- `ohpm install` succeeds (`@ohos/hypium` resolves).
+- HAP: `assembleHap … @ohosTest`. HAR (`harTasks`): `genOnDeviceTestHap … @ohosTest`.
+  `assembleHap` is not a task on a HAR-only project.
 
 On a fresh clone run `ohpm install --all` first. If `signingConfigs` points at
 certificates that are not on this machine (common in open-source HAPs), the

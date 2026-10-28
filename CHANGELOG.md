@@ -88,6 +88,15 @@ Everything since 0.1.26: this entry includes the changes first released in 0.1.2
 
 #### Changed
 
+- **Smaller release packages.** Every archive is now a `.tar.xz` (on Windows,
+  extract it with 7-Zip, WinRAR or Windows 11's File Explorer), and the binary
+  embeds only bundled, minified code: the
+  bundled pi packages' runtime entry points are re-bundled with their
+  dependencies inlined instead of shipping their `src/` and `node_modules/`, and
+  the Chinese word lists are stored compressed. Downloads, measured on this
+  release: Linux x64 64 → 46 MiB, Linux arm64 63 → 42 MiB, macOS arm64
+  53 → 33 MiB, Windows x64 66 → 47 MiB; the embedded application payload fell
+  from 42 to 24 MiB. Extract with `tar -xJf`.
 - A witness that no in-tree call passes is not a bug unless the entry is
   app-facing (`capi/`, `napi/`, `OH_*`, `napi_*`); such a bug report must cite
   `Caller evidence:` or a `Live producer:`. (#605)
@@ -185,6 +194,12 @@ Everything since 0.1.26: this entry includes the changes first released in 0.1.2
 
 #### 变更
 
+- **发布包更小。** 所有压缩包改为 `.tar.xz`（Windows 上用 7-Zip、WinRAR 或 Windows 11
+  的文件资源管理器解压），二进制只嵌入打包并压缩过的代码：内置 pi 扩展包的运行时入口连同依赖重新打包成单文件，不再
+  附带它们的 `src/` 和 `node_modules/`；中文词表改为压缩存储。按本版实测的下载体积：
+  Linux x64 由 64 MiB 降到 46 MiB，Linux arm64 由 63 MiB 降到 42 MiB，macOS arm64 由
+  53 MiB 降到 33 MiB，Windows x64 由 66 MiB 降到 47 MiB；嵌入的应用部分由 42 MiB 降到
+  24 MiB。用 `tar -xJf` 解压。
 - 仓库内没有任何调用会传入的反例不算缺陷，除非入口面向应用（`capi/`、`napi/`、
   `OH_*`、`napi_*`）；这类缺陷报告必须引用 `Caller evidence:` 或 `Live producer:`。
   (#605)

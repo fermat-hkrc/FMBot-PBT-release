@@ -18,18 +18,18 @@ includes an installer and search tools; tested projects need their own toolchain
 
 | Platform | Download | Checksum |
 |---|---|---|
-| Linux x64 | [`pi-pbt-linux-x64.zip`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-x64.zip) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-x64.zip.sha256) |
-| Linux arm64 (aarch64) | [`pi-pbt-linux-arm64.zip`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-arm64.zip) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-arm64.zip.sha256) |
-| macOS Apple Silicon | [`pi-pbt-macos-arm64.zip`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-macos-arm64.zip) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-macos-arm64.zip.sha256) |
-| Windows x64 (experimental) | [`pi-pbt-windows-x64.zip`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-windows-x64.zip) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-windows-x64.zip.sha256) |
+| Linux x64 | [`pi-pbt-linux-x64.tar.xz`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-x64.tar.xz) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-x64.tar.xz.sha256) |
+| Linux arm64 (aarch64) | [`pi-pbt-linux-arm64.tar.xz`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-arm64.tar.xz) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-linux-arm64.tar.xz.sha256) |
+| macOS Apple Silicon | [`pi-pbt-macos-arm64.tar.xz`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-macos-arm64.tar.xz) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-macos-arm64.tar.xz.sha256) |
+| Windows x64 (experimental) | [`pi-pbt-windows-x64.tar.xz`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-windows-x64.tar.xz) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-windows-x64.tar.xz.sha256) |
 
 Not sure which Linux build you need? `uname -m` — `x86_64` takes the x64 file,
 `aarch64` the arm64 one. Older versions are on the
 [releases page](https://github.com/fermat-hkrc/FMBot-PBT-release/releases).
 
 ```bash
-sha256sum -c pi-pbt-linux-x64.zip.sha256    # optional integrity check
-unzip pi-pbt-linux-x64.zip                  # yields pi-pbt-linux-x64/, already executable
+sha256sum -c pi-pbt-linux-x64.tar.xz.sha256 # optional integrity check
+tar -xJf pi-pbt-linux-x64.tar.xz             # yields pi-pbt-linux-x64/, already executable
 cd pi-pbt-linux-x64                         # holds pi-pbt, install.sh, and tools/
 ./install.sh
 pi-pbt --help
@@ -66,8 +66,8 @@ Python / Rust / Go / Java / C++ 仓库,它会读源码,推断出「这段代码�
 下载对应平台的压缩包(见上表),然后:
 
 ```bash
-sha256sum -c pi-pbt-linux-x64.zip.sha256    # 可选:校验完整性
-unzip pi-pbt-linux-x64.zip                  # 解出 pi-pbt-linux-x64/,已带可执行权限
+sha256sum -c pi-pbt-linux-x64.tar.xz.sha256 # 可选:校验完整性
+tar -xJf pi-pbt-linux-x64.tar.xz             # 解出 pi-pbt-linux-x64/,已带可执行权限
 cd pi-pbt-linux-x64                         # 里面是 pi-pbt、install.sh 和 tools/
 ./install.sh
 pi-pbt --help

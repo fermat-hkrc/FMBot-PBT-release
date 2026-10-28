@@ -61,7 +61,7 @@ provider/model 覆盖不只支持 `build-run`：自由 `pi-pbt`、`build-run`、
 | **跑战役** | `pi-pbt` | 交互式，在对话里说明目标。 |
 | | `pi-pbt -p "<prompt>"` | 无人值守跑一次。给脚本和自动产出用——**不是 CI 门禁**：进程退出码是 pi 的，不承载裁决，发现 bug 也不会让流水线变红。门禁用 `hook-run`。 |
 | | `pi-pbt build-run --build-cmd "<命令>"` | 你的构建命令是 preflight 闸：先跑它，非零退出就在任何 agent 工作之前停掉战役。成功后要读产物；这条命令不套用 `hook-run` 的裁决退出码。之后战役**就地运行**（不建 worktree）——大型组件无法在独立副本里构建。 |
-| | `pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"` | 同一道闸。`--repo`/`--workdir` 若是 HAP 根（`oh-package.json5` + `build-profile.json5`；只在 DevEco 安装里找到的 `hvigorw` 会在本次运行中加入 `PATH`），自动设 `PBT_HAP=1`：ohosTest 里的 Hypium + PandaCheck，再 `aa test`。不是主机 `ark`。见 [installation.zh.md](installation.zh.md#harmonyos-hap--arkts-应用)。 |
+| | `pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"` | 同一道闸。HAP 根（`oh-package.json5` + `build-profile.json5`）设 `PBT_HAP=1`：ohosTest 里的 Hypium + PandaCheck，再 `aa test`。不是主机 `ark`。`--build-cmd` 里的模块必须已有 `src/ohosTest`。HAR 用 `genOnDeviceTestHap`，不要用 `assembleHap`。前置条件：[arkts.zh.md — 跑之前](pbt/arkts.zh.md#跑之前前置条件)。见 [installation.zh.md](installation.zh.md#harmonyos-hap--arkts-应用)。 |
 | | `pi-pbt hook-run <sha>` | 单个 commit 的改动集。**退出码就是裁决**：`0` 干净、`1` 发现 bug、`2` 没有报告或报告不合 schema、`3` 构建失败。sha 只用来取 diff 和写进 prompt，**检出由调用方负责**。 |
 | | `pi-pbt watch` | 轮询分支，每个新 commit 跑一轮，从旧到新——**每次轮询最多 10 个**，更旧的会被丢弃（有日志）。 |
 | **让别的 agent 驱动** | `pi-pbt mcp` | stdio 上的 MCP server：六个工具，产物以 `pbt://` 资源暴露。 |

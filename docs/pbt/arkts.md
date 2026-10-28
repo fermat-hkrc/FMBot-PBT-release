@@ -86,6 +86,34 @@ file and rebuild only with the user `--build-cmd` (host `es2panda`/`ark`, or
 `ohos_arkts_unittest`). Do not copy the SUT into another HAP `ohosTest/ets/sut/`.
 `--lang` is the write-up language (`zh` / `en`), not C++ vs ArkTS.
 
+## Before you run (prerequisites)
+
+Follow this list **before** `pi-pbt build-run`. If a step is skipped, the gate
+must fail naming that step (`BUILD FAILED — PBT not started`). pi-pbt does not
+invent a HAP, rewrite `compileSdkVersion` / `runtimeOS`, or create `ohosTest`.
+
+1. A DevEco SDK **this user can write**. `hvigor` may refuse `/opt/devecostudio/sdk`
+   when it is not writable. Point `local.properties` `sdk.dir` (and `DEVECO_SDK_HOME`)
+   at a user-owned SDK that actually contains the API you pin (for example `26.0.0`).
+2. A HAP or HAR root: `oh-package.json5` + `build-profile.json5`. `--repo` and
+   `--workdir` are the **same git** checkout.
+3. The project's `compileSdkVersion` / `compatibleSdkVersion` / `runtimeOS` /
+   `hvigor` `modelVersion` **match** that SDK. Align by hand. An extra SDK, or
+   raising the project's numbers, is operator work.
+4. The module you will test has `src/ohosTest/module.json5`. The sample
+   `module=entry@ohosTest` assumes that folder exists.
+5. `ohpm install` in `--workdir` exits 0. `@ohos/hypium` must resolve. Drop or
+   repin registry-404 packages (for example a dead `@ohos/hamock` version).
+6. `--build-cmd` **already exits 0** in `--workdir`:
+   - HAP (`hapTasks` / `type: hap`): `hvigorw assembleHap --mode module -p module=<name>@ohosTest -p product=default --no-daemon`
+   - HAR (`harTasks` / `type: har`): `hvigorw genOnDeviceTestHap --mode module -p module=<name>@ohosTest -p product=default --no-daemon`
+   `assembleHap` is not a task on a HAR-only project (hvigor 00306054).
+7. Then pass `--scope path/to/file.ets --func ABC` with `--func` **after** `--scope`.
+   `--lang` is `zh` / `en` only (the write-up language, not C++ vs ArkTS).
+
+Device `aa test` still needs `hdc` and a signable HAP after the suite is written.
+A GN `*_abc` target is not this runner.
+
 `build-run` on a HAP root sets `PBT_HAP=1` for that process. Do not export
 `PBT_HAP` in a shell profile: a leftover `1` forces HAP mode on later C++
 campaigns. To force HAP mode on a free-form `pi-pbt` / `-p` run whose tree is
@@ -107,6 +135,18 @@ pi-pbt build-run \
   --workdir /path/to/hap \
   --scope entry/src/main/ets/common/Utils.ets \
   --func deepCopyInter \
+  --lang en
+```
+
+HAR module (library, `harTasks`) — not `assembleHap`:
+
+```bash
+pi-pbt build-run \
+  --build-cmd "hvigorw genOnDeviceTestHap --mode module -p module=<har>@ohosTest -p product=default --no-daemon" \
+  --repo /path/to/component \
+  --workdir /path/to/component/.../the-har-project \
+  --scope path/from/repo/to/file.ets \
+  --func myFunc \
   --lang en
 ```
 
