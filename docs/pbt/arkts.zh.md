@@ -22,7 +22,7 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 
 `let`、`const`、类型推断、`void`、运算符、`if` / `switch` / 循环和 `this` 是语法，不计入。性质不抽取它们。
 
-这份 34 行清单里，**14 项已支持，9 项部分支持，11 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
+这份 34 行清单里，**14 项已支持，11 项部分支持，9 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
 
 | 教程特性 | pi-pbt | 含义 |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 | 重载 | 部分支持 | 每个原语臂或每种元数都要调用。非原语臂 `retired`。 |
 | 带字段的 class 或 `struct` | 已支持 | 在 `--scope` 里声明时，用 `new` 或每个字段的 `record`。 |
 | `static` 字段或方法 | 部分支持 | 参数为 `number`、`string` 或 `boolean` 的 public static 方法必须写成 `Class.method(drawn)`。static 字段不在此门禁内。 |
-| getter / setter | 不支持 | 不是抽取值。 |
+| getter / setter | 部分支持 | `number`、`string` 或 `boolean` 的 public getter 或 setter 必须在构造出的实例上读取或赋值。setter 的参数要抽取。`Date` 的 getter 不在此门禁内。 |
 | 继承、`super`、抽象类 | 不支持 | 不构造。 |
 | `private` / `protected` 字段 | 不支持 | 套件不得改 `--scope` 来暴露它。 |
 | 对象字面量 | 部分支持 | 只限已知字段袋。`record()` 本身只有 `{w, h}`。 |
@@ -51,7 +51,7 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 | 泛型函数 | 已支持 | 调用必须是 `name<string>`、`name<number>` 或 `name<boolean>`。推断调用被拒绝。 |
 | 泛型约束 | 部分支持 | 约束到这三种能抽取。其他约束 `retired`。 |
 | 泛型类 | 不支持 | 不构造 `CustomStack<string>`。 |
-| 泛型默认值 | 不支持 | 不展开带默认值的类型参数。 |
+| 泛型默认值 | 部分支持 | 可抽取的默认值，如 `T = 'xs' \| 'sm'`，会展开并走既有门禁。`Date` 或 class 的默认值不展开。 |
 | nullish，`T` 或 `null` / `undefined` | 已支持 | `arkNullish`。调用不得用 `!` 或 `??` 丢掉该臂。 |
 | `--func` 的具名导入 | 已支持 | `passing` / `failing` 必须导入该文件并调用该符号。 |
 | 导入别名或命名空间 | 已支持 | `id as ident` 和 `ids.id(...)` 算。调用兄弟符号不算。 |
@@ -69,6 +69,11 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 **HAP 根**。项目内的 `hvigorw` 包装不是必需的：工具链取最先解析到的
 `hvigorw`（项目包装、`PATH`、或 DevEco 安装）。只在 `PATH` 上有 `hvigorw`
 不会把当前目录变成 HAP 根。
+
+OpenHarmony 组件上 `--scope` 以 `.ets` 结尾就是 ArkTS,即使没有 HAP。不要因为缺
+hvigor 根就 retired。从该文件导入 `--func`,只复用用户 `--build-cmd` 重建(主机
+`es2panda`/`ark`,或 `ohos_arkts_unittest`)。不要把 SUT 抄进另一个 HAP 的
+`ohosTest/ets/sut/`。`--lang` 是文案语言(`zh` / `en`),不是 C++ 还是 ArkTS。
 
 `build-run` 碰到 HAP 根会为该进程设 `PBT_HAP=1`。不要把 `PBT_HAP` 写进
 shell profile：残留的 `1` 会把之后的 C++ campaign 也逼进 HAP 模式。树是

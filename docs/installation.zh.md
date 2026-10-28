@@ -257,10 +257,11 @@ pi-pbt
 
 pi-pbt 还内置了 [pi-subagents](https://github.com/nicobailon/pi-subagents)，提供 `subagent`
 工具（独立上下文的子会话、并行分派、后台运行；`/subagents-doctor` 可检查配置）。交互式会话里连同它的
-技能和提示模板一起加载，`-p` 运行只加载扩展本身。战役自己只用它做一件事：**独立收尾复核**。战役在提交结果
+技能和提示模板一起加载，`-p` 运行只加载扩展本身。战役自己用它做两件事。**扫描子代理**：`scan_modules` 工具把 Scan 阶段的阅读分给只读子会话并行完成（全新上下文，只有 `read`、`grep`、`find`、`ls`）——改动类战役读改动的每个函数、它的调用方和被调用方，以及子代理报告的相关函数，每个都要读过或写明跳过原因才能写性质；范围类战役读范围内的源文件——并把每个子代理读了什么记到 `pbt-out/SCAN_COVERAGE.md`。另一件是**独立收尾复核**。战役在提交结果
 之前，必须先跑一个只读复核子会话（全新上下文，只有 `read`、`grep`、`find`、`ls`），
-检查 `PROPERTIES.md`、每个 `bug_reports/*.md` 及其引用的源码行：每个已提交 bug 的契约证据是否
-真的成立，每个通过的性质的判定是否被削弱。pi-pbt 把结论写到 `pbt-out/REVIEW.md`；其中每条意见
+检查 `PROPERTIES.md`、每个 `bug_reports/*.md`、REPORT.md 的 Design Caveats 及其引用的源码行：
+每个已提交 bug 的契约证据是否真的成立，每个通过的性质的判定是否被削弱，每条 caveat（以及凭引用退役的
+性质）所依据的那一行，逐字引出后是否真的排除了该行为。pi-pbt 把结论写到 `pbt-out/REVIEW.md`；其中每条意见
 都得到回应之前，结果文件会被拒绝。复核默认用与战役相同的模型，可通过 pi-subagents 的
 `agentOverrides.pbt-closeout-reviewer` 配置改用别的模型（见它的配置文档）。设置
 `PBT_CLOSEOUT_REVIEW=off` 可跳过复核，代价是少了这道独立检查。没有经过独立复核的结果
@@ -864,7 +865,9 @@ claude --dangerously-load-development-channels server:pi-pbt
 | `PBT_TEST_JOBS=8` | 测试和构建跑多宽(见[并行度](#跑多宽并行度));填数字、`max` 或 `auto`(默认:机器空闲核心数)。`PBT_TEST_JOBS=1` 强制串行 —— 把失败判定为 bug 之前的串行复核必须用它 |
 | `PBT_CODE_COVERAGE=0` | 关掉原生代码覆盖率的插桩与报表(见[代码覆盖率报表](#代码覆盖率报表));默认开启,工具链缺失时静默降级 |
 | `PBT_CLOSEOUT_REVIEW=off` | 跳过独立收尾复核（`pbt-out/REVIEW.md`）。默认开启：战役必须先经内置的 pi-subagents 完成复核，才能写 `report.json`；也接受 `0` / `false`。此时结果记录 `"review": {"status": "not-reviewed", "reason": "disabled"}` |
-| `PBT_CLOSEOUT_REVIEW_TIMEOUT=<分钟>` | 收尾复核中每个复核子代理的时限（默认 20）。复核以并行子代理执行：每份 bug 报告一个，通过的性质每 3 个一批；失败或超时的子代理在下次调用 `closeout_review` 时单独重跑。同时运行的个数自适应：每成功一个加一，失败一次减半，子代理一报告限流退避（pi-subagents 的 provider 诊断）也立即减半。复核是增量的：再次调用时只复核内容有变化（或其引用的测试、源码、文档有变化）的 bug 报告和通过的性质，其余沿用上一轮的结论、意见和回应 |
+| `PBT_CLOSEOUT_REVIEW_TIMEOUT=<分钟>` | 收尾复核中每个复核子代理的时限（默认 20）。复核以并行子代理执行：每份 bug 报告一个，通过的性质每 3 个一批，caveat 每 3 条一批；失败或超时的子代理在下次调用 `closeout_review` 时单独重跑。同时运行的个数自适应：每成功一个加一，失败一次减半，子代理一报告限流退避（pi-subagents 的 provider 诊断）也立即减半。复核是增量的：再次调用时只复核内容有变化（或其引用的测试、源码、文档有变化）的 bug 报告、通过的性质和 caveat，其余沿用上一轮的结论、意见和回应 |
+| `PBT_SCAN_DELEGATION=off` | Scan 留在主 agent 自己做，不交给 `scan_modules` 的只读扫描子代理（内置 pi-subagents）：不写 `pbt-out/SCAN.json` / `SCAN_COVERAGE.md`，改动类战役也不再要求读完改动面上的每个函数。默认开启；也接受 `0` / `false` |
+| `PBT_SCAN_TIMEOUT=<分钟>` | 每个扫描子代理第一次尝试的时限（默认 10，重试时加倍）。并发窗口与收尾复核相同；重试后仍没读到的单元再补一轮，改动类战役同一轮里还会读子代理报告的相关函数 |
 | `PBT_VERDICTS=off` | 不记录各性质的结论（因此也不沿用）。一次战役交付（本次写出、有效且通过交付检查的 `report.json`）后，pi-pbt 会为每个性质记下结论、所测提交、强度档位、失败用例的种子、台账条目、收尾复核结论，以及台账条目、测试文件、被测源文件和条目引用文件的指纹，存在 `~/.pi-pbt/verdicts/<仓库>/` 下（可用 `PI_PBT_VERDICTS_DIR` 改位置）。也接受 `0` / `false` |
 | `PBT_CARRY=off` | 所有性质都重新运行。默认情况下，一次没有 `PROPERTIES.md` 的完整战役开始时，会沿用以前战役在相同或更高强度档位验证通过、且所依赖内容逐字节未变（条目、测试文件、被测源文件、所有引用文件、被测文件所在的整个模块——最近一个含构建文件的目录，不含测试和文档——以及其 import 所及的每个模块、直到仓库根目录的构建配置和锁文件；工具链版本不在其内），且测试目标和构建命令相同（`build-run` 换了 `--build-cmd` 就不沿用）、条目语言与本次输出语言一致的性质：它们带 `- Carried over:` 行写入台账，沿用收尾复核结论，不再运行，并在 `report.json` 中标 `carriedOver`、在 `REPORT.md` 中写 `**Carried over:**`、在 HTML 报告中注明。写在仓库之外的测试——`hook-run` 的隔离工作目录、托管运行的工作目录，或 `build-run` 在模块之上的 workdir——同样绑定，另加它 import 的内容，以及它在工作目录中所在模块的其余文件（构建文件和链接进来的源码，不含其他测试）；这些文件按内容存入结论库（`blobs/`），下一次战役检查前放回其工作目录，不沿用时再删掉。硬性 `--scope` 下不沿用。也接受 `0` / `false` |
 | `PBT_CARRY_SAMPLE=<比例>` | 沿用结论的抽查（默认 `0.1`；`0` 关闭）：每个本可沿用的标题以这个概率改为重跑，在台账中为 `approved`。重跑结果不再是通过，说明指纹在该仓库漏掉了某些东西：此后该仓库停止沿用，直到一次不沿用任何结论的战役重新验证这些记录 |

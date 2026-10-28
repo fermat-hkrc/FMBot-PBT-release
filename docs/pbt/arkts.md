@@ -26,7 +26,7 @@ types, call shapes, and modules. It is not a percent of ArkTS.
 `let`, `const`, inference, `void`, operators, `if` / `switch` / loops, and
 `this` are syntax. They are not in the count. A property does not draw them.
 
-**14 supported, 9 partial, 11 not supported** on this 34-row checklist.
+**14 supported, 11 partial, 9 not supported** on this 34-row checklist.
 Supported means a passing or failing property can use that form, and a
 close-out gate requires it. Partial means only some forms of that tutorial
 heading are drawn or caught. Not supported means we do not draw it, or the
@@ -50,7 +50,7 @@ honest close is `retired`.
 | overload | partial | Every primitive arm, or every arity, must be called. A non-primitive arm is `retired`. |
 | class or `struct` with fields | supported | `new` or `record` of every field, when declared in `--scope`. |
 | `static` field or method | partial | A public static method with a `number`, `string`, or `boolean` parameter must be called as `Class.method(drawn)`. A static field stays outside. |
-| getter / setter | not supported | Not a drawn value. |
+| getter / setter | partial | A public getter or setter of `number`, `string`, or `boolean` must be read or assigned on a constructed instance. A setter argument is drawn. A getter of `Date` stays outside. |
 | inheritance, `super`, abstract class | not supported | Not constructed. |
 | `private` / `protected` field | not supported | The suite must not edit `--scope` to expose it. |
 | object literal | partial | Only a known field bag. `record()` itself is `{w, h}`. |
@@ -59,7 +59,7 @@ honest close is `retired`.
 | generic function | supported | The call must be `name<string>`, `name<number>`, or `name<boolean>`. An inferred call is rejected. |
 | generic constraint | partial | A constraint of those three is drawn. Any other constraint is `retired`. |
 | generic class | not supported | `CustomStack<string>` is not constructed. |
-| generic default | not supported | A defaulted type parameter is not expanded. |
+| generic default | partial | A drawable default such as `T = 'xs' \| 'sm'` is expanded and the existing gate applies. A default of `Date` or a class is not expanded. |
 | nullish `T` or `null` / `undefined` | supported | `arkNullish`. The call must not use `!` or `??` to drop the arm. |
 | named import of `--func` | supported | A passing or failing property must import the file and call that symbol. |
 | import alias or namespace | supported | `id as ident` and `ids.id(...)` count. A sibling call does not. |
@@ -79,6 +79,12 @@ A directory is a **HAP root** when it contains `oh-package.json5` and
 wrapper is optional: the toolchain is whichever `hvigorw` resolves first
 (project wrapper, `PATH`, or a DevEco install). `hvigorw` only on `PATH` does
 not make the current directory a HAP root.
+
+An OpenHarmony component `--scope` that ends in `.ets` is ArkTS even when there
+is no HAP. Do not retire for a missing hvigor root. Import `--func` from that
+file and rebuild only with the user `--build-cmd` (host `es2panda`/`ark`, or
+`ohos_arkts_unittest`). Do not copy the SUT into another HAP `ohosTest/ets/sut/`.
+`--lang` is the write-up language (`zh` / `en`), not C++ vs ArkTS.
 
 `build-run` on a HAP root sets `PBT_HAP=1` for that process. Do not export
 `PBT_HAP` in a shell profile: a leftover `1` forces HAP mode on later C++

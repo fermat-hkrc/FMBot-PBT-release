@@ -11,7 +11,7 @@ pi-pbt 有两类不同的“覆盖率”，不能混为一谈：
    [安装指南的代码覆盖率章节](installation.zh.md#代码覆盖率报表)。
 
 本页主要解释第一类台账及其命令。命令总览见
-[`scan` / `test-all` / `coverage`](subcommands.zh.md#scan--test-all--coverage)。
+[`scan` / `coverage`](subcommands.zh.md#scan--coverage)。
 
 ---
 
@@ -33,26 +33,12 @@ internal/trivial（内部或简单包装）模式后的启发式分类，不表�
 
 自动语言探测只用 `find -maxdepth 2` 看 `--dir` 下两层；源码更深时应把 `--dir`
 直接指向源码子树，或用 `--lang c/c++|python|rust|typescript|go`。这与
-[子命令文档的说明](subcommands.zh.md#scan--test-all--coverage)一致。
+[子命令文档的说明](subcommands.zh.md#scan--coverage)一致。
 
-`test-all` 在索引缺失时会自动扫描。`hook-run` 也会尝试预扫描，但当前实现把索引写到
+`hook-run` 也会尝试预扫描，但当前实现把索引写到
 `<out>/../pbt-out/FUNCTION_INDEX.md`，不一定是 campaign 最终写产物的根目录；扫描失败时
-只打印 `auto-scan skipped` 并继续。显式 `scan --out <dir>` 适合独立检查索引，但要让
-`test-all` 复用它，`--out` 必须是同一个目录；`hook-run` 会清空自己的 `--out`，不能
-把事先生成的同目录索引当作持久输入。
-
-### `pi-pbt test-all`
-
-读取 `<out>/FUNCTION_INDEX.md`，把其中标为 PBT candidate 的函数清单放进一次
-campaign 的 prompt，要求 agent 逐个处理。它会真实调用模型；“清单进入 prompt”不等于
-工具本身已经证明每个函数都成功构建、执行或覆盖，最终应检查 `report.json`、
-`REPORT.md`、测试日志和代码覆盖执行证据。
-
-```bash
-pi-pbt test-all --dir . --out ./pbt-out --provider <provider> --model <model>
-```
-
-若索引不存在，`test-all` 会先用与 `scan` 相同的启发式逻辑生成它；无法生成时退出。
+只打印 `auto-scan skipped` 并继续。显式 `scan --out <dir>` 适合独立检查索引；`hook-run`
+会清空自己的 `--out`，不能把事先生成的同目录索引当作持久输入。
 
 ### `pi-pbt hook-run <sha>`
 
@@ -96,7 +82,7 @@ pi-pbt coverage --diff <sha> --project-dir .
 
 ## campaign 结束时会自动追加什么
 
-`hook-run`、`build-run`、`test-all` 以及普通 print mode（命令行打印后退出）campaign 结束时，入口会在
+`hook-run`、`build-run` 以及普通 print mode（命令行打印后退出）campaign 结束时，入口会在
 找到台账数据后：
 
 1. 把 PBT 覆盖登记摘要打印到 stderr；
@@ -104,9 +90,6 @@ pi-pbt coverage --diff <sha> --project-dir .
 3. 对 `hook-run`、`build-run` 和普通 print mode，若原生插桩确实产出了可收集的数据，再追加单独的
    `## Code coverage (execution evidence)` 执行证据节，并生成
    `code-coverage/index.html`。
-
-`test-all` 的专用收尾路径当前只执行前两项，不会自动生成原生 HTML 或追加执行证据节；
-不能把它的登记表摘要当作完整原生覆盖率报告。
 
 对 `hook-run`，stderr 可能额外打印按提交计算的 diff 摘要；当前自动追加进
 `REPORT.md` 的 `Coverage Report` 本身是全量台账报告，并不会自动带上
@@ -289,9 +272,9 @@ JSON 模式也支持 `--json --diff <sha>`：
 # 1. 先确认启发式索引是否符合目标范围
 pi-pbt scan --dir /path/to/project/src --out /path/to/project/pbt-out
 
-# 2. 对索引中的候选发起 campaign
-pi-pbt test-all --dir /path/to/project --out /path/to/project/pbt-out \
-  --provider <provider> --model <model>
+# 2. 对目标范围发起 campaign
+cd /path/to/project
+pi-pbt -p "对 src 做性质测试（PBT）" --provider <provider> --model <model>
 
 # 3. 查看 PBT 覆盖登记（在包含 pbt-out/ 的目录运行）
 cd /path/to/project

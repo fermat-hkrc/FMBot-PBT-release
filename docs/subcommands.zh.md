@@ -19,7 +19,6 @@
 | 监视新提交（尽力而为） | `pi-pbt watch` |
 | 模拟开发者（不做 PBT） | `pi-pbt replay --pr <n>` |
 | 列函数，不调 LLM | `pi-pbt scan` |
-| 对扫描出的候选全部做 PBT | `pi-pbt test-all` |
 | 根据 `pbt-out/` 打覆盖率 | `pi-pbt coverage` |
 | Findings dashboard | `pi-pbt dashboard` |
 | 给 Claude Code / Codex 的 MCP | `pi-pbt mcp` |
@@ -27,7 +26,7 @@
 | 版本 | `pi-pbt --version` |
 
 provider/model 覆盖不只支持 `build-run`：自由 `pi-pbt`、`build-run`、
-`hook-run`、`watch`、`test-all` 都接受 `--provider` 与 `--model`；MCP 的
+`hook-run`、`watch` 都接受 `--provider` 与 `--model`；MCP 的
 `pbt_start` / `pbt_watch_start` 有对应的 `provider`、`model` 字段。
 `replay` 只接受 `--model`；Kea 从 `kea.config.yml` 读取 `provider` 和
 `model`。不传覆盖值时使用 `~/.pi-pbt/agent/` 的配置。
@@ -46,7 +45,7 @@ provider/model 覆盖不只支持 `build-run`：自由 `pi-pbt`、`build-run`、
 - **产物目录**保存人读结果 `REPORT.md`、经校验的机读结果 `report.json`、
   `bug_reports/` 下的逐 bug 文件，以及 `PLAN.md`、`PROPERTIES.md`、
   `COVERAGE.md` 等 campaign 草稿。
-- 自由运行、`scan`、`test-all`、`coverage` 默认使用 `<cwd>/pbt-out`；
+- 自由运行、`scan`、`coverage` 默认使用 `<cwd>/pbt-out`；
   `build-run` 默认使用 `<repo>/pbt-out`；`hook-run` 刻意默认写到仓库外的
   `<parent>/pbt-out-hook`。接受 `--out` 的命令以它为准。campaign 可能把文件直接写在
   该目录，也可能再套一层 `pbt-out/`；pi-pbt 在收尾报告和覆盖率时会解析这两种布局。
@@ -65,7 +64,6 @@ provider/model 覆盖不只支持 `build-run`：自由 `pi-pbt`、`build-run`、
 | | `pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"` | 同一道闸。`--repo`/`--workdir` 若是 HAP 根（`oh-package.json5` + `build-profile.json5`；只在 DevEco 安装里找到的 `hvigorw` 会在本次运行中加入 `PATH`），自动设 `PBT_HAP=1`：ohosTest 里的 Hypium + PandaCheck，再 `aa test`。不是主机 `ark`。见 [installation.zh.md](installation.zh.md#harmonyos-hap--arkts-应用)。 |
 | | `pi-pbt hook-run <sha>` | 单个 commit 的改动集。**退出码就是裁决**：`0` 干净、`1` 发现 bug、`2` 没有报告或报告不合 schema、`3` 构建失败。sha 只用来取 diff 和写进 prompt，**检出由调用方负责**。 |
 | | `pi-pbt watch` | 轮询分支，每个新 commit 跑一轮，从旧到新——**每次轮询最多 10 个**，更旧的会被丢弃（有日志）。 |
-| | `pi-pbt test-all` | 读 `pbt-out/FUNCTION_INDEX.md`，对其中每个候选函数跑。 |
 | **让别的 agent 驱动** | `pi-pbt mcp` | stdio 上的 MCP server：六个工具，产物以 `pbt://` 资源暴露。 |
 | | `pi-pbt skill-install` / `skill-uninstall` | 把随包的 `pi-pbt-dev` skill 装进宿主 agent 的 skill 目录。 |
 | **纯本地，不调模型** | `pi-pbt scan` | ripgrep 扫函数 → `FUNCTION_INDEX.md`。无 LLM、不起 agent。 |
@@ -91,7 +89,7 @@ provider/model 覆盖不只支持 `build-run`：自由 `pi-pbt`、`build-run`、
 
 | | 是什么 | 怎么得到 | 怎么调用 |
 |---|---|---|---|
-| **1. 随包内置 skill** | 16 份驱动战役本身的 SOP——`pbt-workflow`（四个相位）、`pbt-oracles`、`pbt-patterns`、`openharmony-build-run`、`arkts-build-run` 等 | **在二进制里**，并以 `dist/skills/` 放在它旁边。你不需要安装。 | agent 自动加载。其中几个也可以在 `pi-pbt` 会话里按名调用：`/skill:pbt-workflow`、`/skill:pbt-build-run`、`/skill:pbt-watch`、`/skill:kea-harmony-app`。 |
+| **1. 随包内置 skill** | 驱动战役本身的各份 SOP——`pbt-workflow`（四个相位）、`pbt-oracles`、`pbt-patterns`、`openharmony-build-run`、`arkts-build-run` 等 | **在二进制里**，并以 `dist/skills/` 放在它旁边。你不需要安装。 | agent 自动加载。其中几个也可以在 `pi-pbt` 会话里按名调用：`/skill:pbt-workflow`、`/skill:pbt-build-run`、`/skill:pbt-watch`、`/skill:kea-harmony-app`。 |
 | **2. `pi-pbt-dev` skill** | 教**你日常用的 coding agent**（Claude Code、Codex、opencode、codeagent、chrys）通过调用 `pi-pbt` 二进制来跑 PBT。 | `pi-pbt skill-install`——从发行包里拷进宿主 agent 的 skill 目录。 | 宿主 agent 自己会加载；用自然语言说就行（"给这次改动跑一轮 PBT"）。Codex 需要显式点名 `$pi-pbt-dev`。 |
 | **3. MCP 工具** | 根本不是 skill——六个工具加 `pbt://` 资源。想让战役跑在**独立进程**里时，用它替代第 2 种。 | `claude mcp add --transport stdio pi-pbt -- pi-pbt mcp` | 宿主 agent 调 `pbt_start` / `pbt_status` / `pbt_report`。 |
 
@@ -522,13 +520,12 @@ pi-pbt replay --pr 8721 --lang zh --scan-root /path/to/workspace
 
 ---
 
-## `scan` / `test-all` / `coverage`
+## `scan` / `coverage`
 
 `scan` / `coverage` 不调 LLM。
 
 ```text
 pi-pbt scan [--dir <path>] [--out <dir>] [--lang <id>] [--module <name>]
-pi-pbt test-all [--dir <path>] [--out <dir>] [--provider <p>] [--model <m>]
 pi-pbt coverage [--list | --json] [--module <name>]
   [--diff <sha>] [--project-dir <path>]
 ```
@@ -542,7 +539,7 @@ cd /path/to/telephony_core_service
 pi-pbt scan --dir utils/codec --out ./pbt-out
 ```
 
-`test-all` 对该索引里每个候选开 campaign（没有索引就先 scan）。`coverage` 始终读取
+`coverage` 始终读取
 `<cwd>/pbt-out`；`--project-dir` 只改变 `--diff` 计算使用的仓库，不改变产物目录。
 `--list` 与 `--json` 互斥。覆盖率语义与产物格式详见
 [coverage-tracking.md](coverage-tracking.md)。

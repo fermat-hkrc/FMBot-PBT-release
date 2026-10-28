@@ -21,7 +21,6 @@ directory, described below.
 | Monitor new commits (best effort) | `pi-pbt watch` |
 | Simulate a developer (no PBT) | `pi-pbt replay --pr <n>` |
 | List functions, no LLM | `pi-pbt scan` |
-| PBT every scan candidate | `pi-pbt test-all` |
 | Print coverage from `pbt-out/` | `pi-pbt coverage` |
 | Findings dashboard | `pi-pbt dashboard` |
 | MCP for Claude Code / Codex | `pi-pbt mcp` |
@@ -29,8 +28,8 @@ directory, described below.
 | Version | `pi-pbt --version` |
 
 Provider/model selection is not limited to `build-run`: `--provider` and
-`--model` are accepted by free-form `pi-pbt`, `build-run`, `hook-run`, `watch`,
-and `test-all`; MCP `pbt_start` / `pbt_watch_start` expose matching `provider`
+`--model` are accepted by free-form `pi-pbt`, `build-run`, `hook-run` and
+`watch`; MCP `pbt_start` / `pbt_watch_start` expose matching `provider`
 and `model` fields. `replay` accepts `--model` only. Kea reads `provider` and
 `model` from `kea.config.yml`. Omit overrides to use `~/.pi-pbt/agent/`.
 
@@ -50,7 +49,7 @@ Terms used below:
 - Its **artifact directory** holds the human result `REPORT.md`, the validated
   machine result `report.json`, per-bug files under `bug_reports/`, and campaign
   scratch such as `PLAN.md`, `PROPERTIES.md`, and `COVERAGE.md`.
-- A free-form run, `scan`, `test-all`, and `coverage` use `<cwd>/pbt-out` by
+- A free-form run, `scan`, and `coverage` use `<cwd>/pbt-out` by
   default. `build-run` defaults to `<repo>/pbt-out`. `hook-run` deliberately
   defaults outside the repository at `<parent>/pbt-out-hook`. Commands that
   accept `--out` use that instead. A campaign may put its files directly in
@@ -72,7 +71,6 @@ of each are below.
 | | `pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"` | Same gate. If `--repo`/`--workdir` is a HAP root (`oh-package.json5` + `build-profile.json5`; a `hvigorw` found only in a DevEco install is put on `PATH` for the run), sets `PBT_HAP=1`: Hypium + PandaCheck in ohosTest, then `aa test`. Not host `ark`. See [installation.md](installation.md#harmonyos-hap--arkts-apps). |
 | | `pi-pbt hook-run <sha>` | One commit's change set. **The exit code is the verdict**: `0` clean, `1` bugs found, `2` no report or a report that fails the schema, `3` the build failed. The sha selects the diff and the prompt — **the caller checks the tree out**. |
 | | `pi-pbt watch` | Polls a branch and runs one campaign per new commit, oldest first — **newest 10 per poll**, older ones dropped (and logged). |
-| | `pi-pbt test-all` | Reads `pbt-out/FUNCTION_INDEX.md` and campaigns over every candidate function in it. |
 | **Let another agent drive** | `pi-pbt mcp` | MCP server on stdio: six tools, plus the artifacts as `pbt://` resources. |
 | | `pi-pbt skill-install` / `skill-uninstall` | Installs the bundled `pi-pbt-dev` skill into a host agent's skill directory. |
 | **Local only, no model calls** | `pi-pbt scan` | Ripgrep function scan → `FUNCTION_INDEX.md`. No LLM, no agent. |
@@ -103,7 +101,7 @@ Two that are easy to confuse:
 
 | | What | How you get it | How it is invoked |
 |---|---|---|---|
-| **1. Bundled skills** | 16 SOP documents that drive the campaign itself — `pbt-workflow` (the four phases), `pbt-oracles`, `pbt-patterns`, `openharmony-build-run`, `arkts-build-run`, … | Ship **inside the binary**, next to it as `dist/skills/`. You never install them. | The agent loads them automatically. A few are also callable by name in a `pi-pbt` session: `/skill:pbt-workflow`, `/skill:pbt-build-run`, `/skill:pbt-watch`, `/skill:kea-harmony-app`. |
+| **1. Bundled skills** | The SOP documents that drive the campaign itself — `pbt-workflow` (the four phases), `pbt-oracles`, `pbt-patterns`, `openharmony-build-run`, `arkts-build-run`, … | Ship **inside the binary**, next to it as `dist/skills/`. You never install them. | The agent loads them automatically. A few are also callable by name in a `pi-pbt` session: `/skill:pbt-workflow`, `/skill:pbt-build-run`, `/skill:pbt-watch`, `/skill:kea-harmony-app`. |
 | **2. The `pi-pbt-dev` skill** | Teaches **your everyday coding agent** (Claude Code, Codex, opencode, codeagent, chrys) to run PBT by calling the `pi-pbt` binary. | `pi-pbt skill-install` — copies it out of the distribution into the host agent's skill directory. | Your host agent picks it up; ask it in plain language ("run PBT on this change"). Codex needs `$pi-pbt-dev` named explicitly. |
 | **3. MCP tools** | Not a skill at all — six tools plus `pbt://` resources. The alternative to 2 when you want the campaign in a **separate process**. | `claude mcp add --transport stdio pi-pbt -- pi-pbt mcp` | The host agent calls `pbt_start` / `pbt_status` / `pbt_report`. |
 
@@ -598,13 +596,12 @@ pi-pbt replay --pr 8721 --lang zh --scan-root /path/to/workspace
 
 ---
 
-## `scan` / `test-all` / `coverage`
+## `scan` / `coverage`
 
 No LLM for `scan` / `coverage`.
 
 ```text
 pi-pbt scan [--dir <path>] [--out <dir>] [--lang <id>] [--module <name>]
-pi-pbt test-all [--dir <path>] [--out <dir>] [--provider <p>] [--model <m>]
 pi-pbt coverage [--list | --json] [--module <name>]
   [--diff <sha>] [--project-dir <path>]
 ```
@@ -618,7 +615,6 @@ cd /path/to/telephony_core_service
 pi-pbt scan --dir utils/codec --out ./pbt-out
 ```
 
-`test-all` PBT-campaigns every candidate in that index (scans first if missing).
 `coverage` always reads `<cwd>/pbt-out`; `--project-dir` changes only the
 repository used to compute `--diff`, not the artifact directory. `--list` and
 `--json` are mutually exclusive. Full coverage semantics and artifact formats:
