@@ -120,6 +120,10 @@ Everything since 0.1.26: this entry includes the changes first released in 0.1.2
 
 #### Fixed
 
+- **First start no longer takes about a minute.** In the single binary the
+  bundled pi-subagents now imports natively instead of being transpiled into a
+  fresh temporary directory on every first run: on a slow host, a fresh
+  `--help` went from 55–76 s to about 13 s. (#632)
 - The MCP run manager no longer crashes when a campaign keeps writing output
   after its run directory was removed. (#622)
 - ArkTS: a passing property is rejected when it does not really exercise
@@ -219,6 +223,9 @@ Everything since 0.1.26: this entry includes the changes first released in 0.1.2
 
 #### 修复
 
+- **首次启动不再需要约一分钟。** 单文件二进制中内置的 pi-subagents 改为原生导入，
+  不再在每次首次运行时于新的临时目录里重新转译：在较慢的主机上，全新环境下的
+  `--help` 从 55–76 秒降到约 13 秒。(#632)
 - 战役在运行目录被删除后仍继续写输出时，MCP 运行管理器不再崩溃。(#622)
 - ArkTS：没有真正覆盖 `--func` 的通过性质会被拒绝，包括漏掉联合、空值、枚举、字面量
   或重载分支，强转枚举或结构体，依赖泛型推断，跳过回调，放过异常（包括最多隔三层

@@ -31,7 +31,7 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 | `boolean` | 已支持 | `boolean()`。 |
 | `string` | 已支持 | `string()`。 |
 | `Object` | 不支持 | 不是能构造的字段袋。 |
-| `number` / `string` / `boolean` 的数组 | 已支持 | `array(integer())`、`array(string())` 或 `array(boolean())`。只抽元素会被拒绝。 |
+| `number` / `string` / `boolean` 的数组 | 已支持 | `array(integer())`、`array(string())` 或 `array(boolean())`。只抽元素会被拒绝。SDK 品牌类型的空 `T[]`（`ImageItem[]`）只能传 `[]` / `constant([])`；非空品牌数组仍 `retired`。 |
 | `enum` | 已支持 | 同文件，或相对导入一跳，用每个成员的 `constantFrom`。第二跳看不见。 |
 | 联合 | 部分支持 | 原语、字符串字面量、数字字面量、混合字面量，以及字面量加开放原语，能抽取。不可抽的臂 `retired`。 |
 | 类型别名 | 部分支持 | 可抽取的别名，如 `type Mode = 'xs' \| 'sm'`，会展开并走既有门禁。`Date` 或 class 的别名不展开。 |
@@ -178,6 +178,7 @@ pi-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor 钉�
 | HAR 原语与 `--scope` 里具名字段袋的联合：`oneof` 抽出每一臂，不用 `as` | 只抽一臂 |
 | Sendable 参数（`@Sendable` 类、`SendableMap` / `ISendable`、`collections.Array`）：**retired** | `integer()`，或本线程上的 `new Box(n)` |
 | 品牌 SDK 类型（`Length`、`Resource`、未在 `--scope` 声明的 `@kit.*` / `@ohos.*` 导入）：**retired** | `integer()`，或 `as Length` |
+| 一维品牌 `T[]` / `Array<T>`（`ImageItem[]`）：该实参只传 `[]` 或 `constant([])`，不用 `as` | 构造 `ImageItem`、非空品牌数组，或仅因元素是品牌类型就对该 `--func` retired |
 | 含不可抽臂的联合（`string | Date`）：**retired** | 只抽可抽的那一臂 |
 | 臂不是 HAR 原语且元数相同的重载：**retired** | 一次 JS 调用，或对一臂 `as Length` |
 | `--func` 调用 `getStringByNameSync`：`constantFrom` 该模块 `string.json` 里的每个 name，并断言 `n === n` | `string()`，或加前缀以致不可能存在的名字 |
@@ -238,7 +239,8 @@ pi-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor 钉�
   （[#539](https://github.com/fermat-hkrc/FMBot-PBT/issues/539)）。这些臂的混合联合必须抽出每一臂
   （[#541](https://github.com/fermat-hkrc/FMBot-PBT/issues/541)）。Sendable 参数必须 retired——本线程上的 `new Box(n)` 不是 Sendable
   （[#543](https://github.com/fermat-hkrc/FMBot-PBT/issues/543)）。品牌 SDK 类型（`Length`、`Resource`）必须 retired——`as Length` 不是该类型
-  （[#545](https://github.com/fermat-hkrc/FMBot-PBT/issues/545)）。含不可抽臂的联合必须 retired——只抽 `string()` 不是 `string | Date`
+  （[#545](https://github.com/fermat-hkrc/FMBot-PBT/issues/545)）。品牌 `T[]`（`ImageItem[]`）用 `[]` 或 `constant([])`，不要构造元素
+  （[#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)）。含不可抽臂的联合必须 retired——只抽 `string()` 不是 `string | Date`
   （[#547](https://github.com/fermat-hkrc/FMBot-PBT/issues/547)）。臂不是 HAR 原语的重载必须 retired——一次 JS 调用不是该集合
   （[#549](https://github.com/fermat-hkrc/FMBot-PBT/issues/549)）。同文件被调函数里的 throw 必须在性质里捕获
   （[#551](https://github.com/fermat-hkrc/FMBot-PBT/issues/551)）。
@@ -278,7 +280,7 @@ HAR 是转换后的 JS（对 npm fast-check 做 `ohpm convert`）。它生成 JS
 | `@Sendable` / 并发类型 | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。本线程上的 `new Box(n)` 不是 Sendable。 | 能构造 Sendable 值的 runner。不要硬撑 HAR。 |
 | 未导出 `class` / `private` 字段 | 不改 `--scope` 就无法 `import` 或 `new`。 | 不改写 SUT 也能编/导，或 retired。 |
 | 不支持类型的联合 | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。只抽 `string()` 不是 `string \| Date`。 | 为每一臂写具名 `.ets` 适配器。不要硬撑 HAR。 |
-| 品牌/不透明 SDK 类型 | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。`as Length` 不是该类型。 | 类型化构造。不要硬撑 HAR。 |
+| 品牌/不透明 SDK 类型 | 裸 `Length` / `Resource`：`passing` / `failing` 被拒绝。诚实收尾是 `retired`。`as Length` 不是该类型。一维品牌 `T[]` 可以是 `[]` / `constant([])`（[#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)）。 | 非空品牌值的类型化构造。不要硬撑 HAR。 |
 | 臂不是 HAR 原语的重载 | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。一次 JS 调用不是该集合。 | 其余每个签名一条性质。不要硬撑 HAR。 |
 | 被调函数里的 `throw` | 同文件被调函数、直接相对导入，以及最多三跳，必须捕获或对该 `--func` retired。第四跳仍然看不见。 | 在套件实际调用处捕获，或 retired。 |
 | `getStringByNameSync` | 未抽出 `string.json` 里每个 name 时，`passing` / `failing` 被拒绝。`string()` 只打到 throw 路径。 | 对这些 name 用 `constantFrom`。断言有限。`NaN` 是失败结果，不是成功的 number。 |
@@ -296,7 +298,7 @@ HAR 是转换后的 JS（对 npm fast-check 做 `ohpm convert`）。它生成 JS
    它的文件。
 3. Koala / Panda：文档化的非 HAP runner，或继续对 koala `--scope` retired。
 4. **ArkTS SUT 类型：** 不要在 `.ets` 里硬撑 TS fast-check。nullish 用套件里的
-   `arkNullish`，不 fork fast-check。`--scope` 里的 enum 用成员的 `constantFrom`。`--scope` 里的 struct 用字段的 `record` 或 `new StructName`。函数型参数用具名 `.ets` 函数或箭头。用 `;` 声明的重载每个签名都要调用。这些臂的混合联合用每一臂的 `oneof`。Sendable 参数应 retired（[#543](https://github.com/fermat-hkrc/FMBot-PBT/issues/543)）。品牌 SDK 类型（`Length`、`Resource`）应 retired（[#545](https://github.com/fermat-hkrc/FMBot-PBT/issues/545)）。含不可抽臂的联合应 retired（[#547](https://github.com/fermat-hkrc/FMBot-PBT/issues/547)）。臂不是 HAR 原语的重载应 retired（[#549](https://github.com/fermat-hkrc/FMBot-PBT/issues/549)）。同文件被调函数里的 throw 应捕获（[#551](https://github.com/fermat-hkrc/FMBot-PBT/issues/551)）。约束到不支持类型的泛型应 retired。`name<string>` 不是 `T extends SomeStruct`。`Function` 或 `ESObject` 回调应 retired。具名 stub 只适用于 `(...) =>`。`passing` / `failing` 必须导入并调用 `--func`。只导入文件再调用兄弟符号不是该符号。字符串字面量联合、数字字面量联合，以及二者混合，用每个字面量的 `constantFrom` 或 `oneof(constant(...))`。`string()` / `integer()` 不是该联合。`[number, number]` 用 `property2` 构造 `[x, y]`，不要传入 `Pair`。字面量与开放原语的联合用 `oneof(constant(...), integer()/string())`。三跳之外的 throw 应捕获或 retired。第四跳仍然看不见。缺失的 `hvigorw` / SDK 已经推迟构建门。长期：同
+   `arkNullish`，不 fork fast-check。`--scope` 里的 enum 用成员的 `constantFrom`。`--scope` 里的 struct 用字段的 `record` 或 `new StructName`。函数型参数用具名 `.ets` 函数或箭头。用 `;` 声明的重载每个签名都要调用。这些臂的混合联合用每一臂的 `oneof`。Sendable 参数应 retired（[#543](https://github.com/fermat-hkrc/FMBot-PBT/issues/543)）。品牌 SDK 类型（`Length`、`Resource`）应 retired（[#545](https://github.com/fermat-hkrc/FMBot-PBT/issues/545)）。品牌 `T[]`（`ImageItem[]`）用 `[]` 或 `constant([])`（[#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)）。含不可抽臂的联合应 retired（[#547](https://github.com/fermat-hkrc/FMBot-PBT/issues/547)）。臂不是 HAR 原语的重载应 retired（[#549](https://github.com/fermat-hkrc/FMBot-PBT/issues/549)）。同文件被调函数里的 throw 应捕获（[#551](https://github.com/fermat-hkrc/FMBot-PBT/issues/551)）。约束到不支持类型的泛型应 retired。`name<string>` 不是 `T extends SomeStruct`。`Function` 或 `ESObject` 回调应 retired。具名 stub 只适用于 `(...) =>`。`passing` / `failing` 必须导入并调用 `--func`。只导入文件再调用兄弟符号不是该符号。字符串字面量联合、数字字面量联合，以及二者混合，用每个字面量的 `constantFrom` 或 `oneof(constant(...))`。`string()` / `integer()` 不是该联合。`[number, number]` 用 `property2` 构造 `[x, y]`，不要传入 `Pair`。字面量与开放原语的联合用 `oneof(constant(...), integer()/string())`。三跳之外的 throw 应捕获或 retired。第四跳仍然看不见。缺失的 `hvigorw` / SDK 已经推迟构建门。长期：同
    `check`/`property` 形态的 ArkTS PBT 库，无 `any`、无 `<const T>`。扫描 scoped
    签名，只允许匹配的 arbitrary。
 

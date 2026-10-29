@@ -39,7 +39,7 @@ honest close is `retired`.
 | `boolean` | supported | `boolean()`. |
 | `string` | supported | `string()`. |
 | `Object` | not supported | Not a field bag we can construct. |
-| array of `number` / `string` / `boolean` | supported | `array(integer())`, `array(string())`, or `array(boolean())`. A bare element is rejected. |
+| array of `number` / `string` / `boolean` | supported | `array(integer())`, `array(string())`, or `array(boolean())`. A bare element is rejected. Empty `T[]` when `T` is SDK branded (`ImageItem[]`) may only be `[]` / `constant([])`; a non-empty branded array stays retired. |
 | `enum` | supported | `constantFrom` of every member in the same file, or one relative import. A second hop is invisible. |
 | union | partial | Primitive, string-literal, numeric-literal, mixed-literal, and literal-plus-primitive unions are drawn. An undrawable arm is `retired`. |
 | type alias | partial | A drawable alias such as `type Mode = 'xs' \| 'sm'` is expanded and the existing gate applies. An alias of `Date` or a class is not expanded. |
@@ -198,6 +198,7 @@ The suite is `src/ohosTest/ets/test/*.test.ets`, registered in `List.test.ets`.
 | For a union of HAR primitives and a named field bag in `--scope`: `oneof` of every arm, no `as` | Drawing only one arm |
 | For a Sendable parameter (`@Sendable` class, `SendableMap` / `ISendable`, `collections.Array`): **retire** | `integer()`, or `new Box(n)` on this thread |
 | For a branded SDK type (`Length`, `Resource`, a `@kit.*` / `@ohos.*` import not declared in `--scope`): **retire** | `integer()`, or `as Length` |
+| For a one-dimensional branded `T[]` / `Array<T>` (`ImageItem[]`): `[]` or `constant([])` at that argument, no `as` | Constructing `ImageItem`, a non-empty branded array, or retiring `--func` only because the element is branded |
 | For a union with an undrawable arm (`string | Date`): **retire** | Drawing only the drawable arm |
 | For overloads whose arms are not HAR primitives and not distinct arities: **retire** | One JS call, or `as Length` on one arm |
 | If `--func` calls `getStringByNameSync`: `constantFrom` of every name in that module's `string.json`, and assert `n === n` | `string()`, or a prefixed name that cannot exist |
@@ -268,7 +269,9 @@ This is the HAP ohosTest path with PandaCheck instead of fast-check. Open issue:
   parameter must retire — `new Box(n)` on this thread is not Sendable
   ([#543](https://github.com/fermat-hkrc/FMBot-PBT/issues/543)); a branded SDK type
   (`Length`, `Resource`) must retire — `as Length` is not that type
-  ([#545](https://github.com/fermat-hkrc/FMBot-PBT/issues/545)); a union with an
+  ([#545](https://github.com/fermat-hkrc/FMBot-PBT/issues/545)); a branded `T[]`
+  (`ImageItem[]`) is `[]` or `constant([])`, not a constructed element
+  ([#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)); a union with an
   undrawable arm must retire — drawing only `string()` is not `string | Date`
   ([#547](https://github.com/fermat-hkrc/FMBot-PBT/issues/547)); an overload whose
   arm is not a HAR primitive must retire — one JS call is not that set
@@ -290,7 +293,9 @@ This is the HAP ohosTest path with PandaCheck instead of fast-check. Open issue:
   function or an arrow, and overloads via a call per semicolon signature, and a
   mixed union of those arms via `oneof` of every arm. A Sendable parameter is
   not drawable: retire that `--func`. A branded SDK type (`Length`, `Resource`)
-  is not drawable: retire that `--func`. A union with an undrawable arm
+  is not drawable: retire that `--func`. A one-dimensional branded `T[]`
+  (`ImageItem[]`) is drawable only as `[]` or `constant([])`
+  ([#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)). A union with an undrawable arm
   is not drawable: retire that `--func`. An overload whose arm is not a HAR
   primitive is not drawable: retire that `--func`. A `passing`
   or `failing` property must pass that value with no `as`. Example:
@@ -328,7 +333,7 @@ function with those values.
 | `@Sendable` / concurrent types | `passing` / `failing` is rejected. `retired` is the honest close. `new Box(n)` on this thread is not Sendable. | A runner that can construct a Sendable value. Do not stretch HAR. |
 | Unexported `class` / `private` fields | Cannot `import` or `new` without editing `--scope`. | Compile/import without rewriting the SUT, or retire. |
 | Union of unsupported types | `passing` / `failing` is rejected. `retired` is the honest close. Drawing only `string()` is not `string \| Date`. | A named `.ets` adapter for every arm. Do not stretch HAR. |
-| branded/opaque SDK types | `passing` / `failing` is rejected. `retired` is the honest close. `as Length` is not that type. | Typed constructors. Do not stretch HAR. |
+| branded/opaque SDK types | Bare `Length` / `Resource`: `passing` / `failing` is rejected. `retired` is the honest close. `as Length` is not that type. One-dimensional branded `T[]` may be `[]` / `constant([])` ([#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)). | Typed constructors for non-empty branded values. Do not stretch HAR. |
 | Overloads whose arms are not HAR primitives | `passing` / `failing` is rejected. `retired` is the honest close. One JS call is not that set. | One property per remaining signature. Do not stretch HAR. |
 | `throw` outside the scoped function body | A same-file callee, a direct import, and up to three hops must be caught or the `--func` retired. A fourth hop is still invisible. | Catch at the call the suite actually makes, or retire. |
 | `getStringByNameSync` | `passing` / `failing` is rejected unless every `string.json` name is drawn. `string()` only hits the throw path. | `constantFrom` of those names. Assert finite. `NaN` is a failing result, not a successful number. |
@@ -356,6 +361,7 @@ function with those values.
    signature. A mixed union of those arms is `oneof` of every arm. A Sendable
    parameter is retired ([#543](https://github.com/fermat-hkrc/FMBot-PBT/issues/543)).
    A branded SDK type (`Length`, `Resource`) is retired ([#545](https://github.com/fermat-hkrc/FMBot-PBT/issues/545)).
+   A branded `T[]` (`ImageItem[]`) is `[]` or `constant([])` ([#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)).
    A union with an undrawable arm is retired ([#547](https://github.com/fermat-hkrc/FMBot-PBT/issues/547)).
    An overload whose arm is not a HAR primitive is retired ([#549](https://github.com/fermat-hkrc/FMBot-PBT/issues/549)).
    A throw in a same-file callee is caught ([#551](https://github.com/fermat-hkrc/FMBot-PBT/issues/551)).
