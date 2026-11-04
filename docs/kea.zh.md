@@ -54,8 +54,8 @@ pi-pbt kea --config other.yml --lang zh
 | `stamp_runs` | `true` | 每次运行单独一个带时间戳的目录；`false` 则平铺写进 `out` |
 | `provider`、`model`、`lang` | —— | 模型服务商、模型 ID 与产物/过程语言；命令行 `--lang` 覆盖配置里的 `lang` |
 
-depth 和安装指南里的 [effort 档位](installation.zh.md#挖多深effort-档位)是同一个
-“挖多深”的旋钮，不重复设：配置里的 `depth:` 优先级最高，其次
+depth 和安装指南里的 [effort 档位](subcommands.zh.md#测试深度)是同一个
+控制测试深度的设置，不重复设：配置里的 `depth:` 优先级最高，其次
 `PBT_KEA_DEPTH`，最后是档位（`quick` → `fast`，`standard`/`thorough` →
 `deep`）。
 
@@ -74,7 +74,7 @@ pbt-out/
     REPORT.md        给人阅读的 Kea 结论，含 crash/ANR 与 infra-flake/tarpit 说明
 ```
 
-`LAST_RUN.json` 是 Kea 模式的机读执行摘要。另一套源码 PBT campaign 会写
+`LAST_RUN.json` 是 Kea 模式的机读执行摘要。另一套源码 PBT 测试任务会写
 `report.json`：它用受校验的 schema 关联源码性质、bug、构建证据与精确复现命令，
 `hook-run` 还会据此做 CI 门禁。Kea 的工作流**未要求**产出这份源码报告。
 **当前实验性限制：**CLI 收尾却仍共用 hook-run 的报告门禁，所以即使已有 GUI 结果，

@@ -1,680 +1,184 @@
-# pi-pbt subcommands
+# Reference
 
-[中文版](subcommands.zh.md)
+[中文](subcommands.zh.md) · The two modes step by step: [usage guide](usage.md)
 
-Every campaign launches through the **`pi-pbt` binary**. A bare
-`pi-pbt -p "…"` is one free-form headless run; it is not a CI verdict. Use
-`hook-run` when the process exit code must decide a job, and use `watch` only as
-a best-effort resident monitor.
+## Commands
 
-Where supported, `--repo` defaults to the current directory. `build-run` also
-defaults `--workdir` there; `hook-run` instead uses a clean sibling work
-directory, described below.
-
-| I want to… | Command |
+| Command | Purpose |
 |---|---|
-| Interactive campaign | `pi-pbt` |
-| One headless run (script / nohup, not a gate) | `pi-pbt -p "…"` |
-| Run a known build before a campaign | `pi-pbt build-run --build-cmd "…"` |
-| PBT a HarmonyOS HAP (fast-check / ohosTest) | `pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"` |
-| Gate **one git commit** (hook / CI) | `pi-pbt hook-run <sha>` |
-| Monitor new commits (best effort) | `pi-pbt watch` |
-| Simulate a developer (no PBT) | `pi-pbt replay --pr <n>` |
-| List functions, no LLM | `pi-pbt scan` |
-| Print coverage from `pbt-out/` | `pi-pbt coverage` |
-| Findings dashboard | `pi-pbt dashboard` |
-| MCP for Claude Code / Codex | `pi-pbt mcp` |
-| Continue an interrupted campaign | `pi-pbt resume` |
-| Version | `pi-pbt --version` |
+| `pi-pbt` | interactive session; ask for a test in plain language |
+| `pi-pbt -p "<request>"` | one unattended run; the exit code is not a verdict |
+| `pi-pbt mcp` | MCP server for Claude Code and Codex (mode 1) |
+| `pi-pbt hook-run <sha>` | test one commit or one merge request; the exit code is the verdict (mode 2) |
+| `pi-pbt build-run --build-cmd "<command>"` | run your build command first, then test |
+| `pi-pbt watch` | watch a branch and test each new commit |
+| `pi-pbt resume` | continue an interrupted run |
+| `pi-pbt finalize` | validate and render existing results without a model call |
+| `pi-pbt scan` / `pi-pbt coverage` | list functions / summarize test progress, no model call |
+| `pi-pbt dashboard` | local web dashboard |
+| `pi-pbt skill-install` | install the `pi-pbt-dev` skill for a coding agent |
+| `pi-pbt kea` | HarmonyOS on-device UI testing (experimental); see the [Kea guide](kea.md) |
 
-Provider/model selection is not limited to `build-run`: `--provider` and
-`--model` are accepted by free-form `pi-pbt`, `build-run`, `hook-run` and
-`watch`; MCP `pbt_start` / `pbt_watch_start` expose matching `provider`
-and `model` fields. `replay` accepts `--model` only. Kea reads `provider` and
-`model` from `kea.config.yml`. Omit overrides to use `~/.pi-pbt/agent/`.
+Common flags: `--lang zh` for Chinese output; `--effort quick|standard|thorough` for depth; `--provider`, `--model`,
+`--thinking` to choose the model; `--scope <path>` to limit the target; `--out <dir>` for the output directory.
 
-`build-run`, `hook-run` and `watch` also accept `--thinking off|minimal|low|medium|high|xhigh|max`
-(validated before any request). Some providers reject a level — a GLM endpoint
-that always thinks rejects `medium` with error 1210. The campaign then stops
-with exit `2` and `interruption.json` says what to change: pass an accepted
-level, or map it once in `models.json` with pi's `thinkingLevelMap`
-(for example `{"medium": "high"}`).
-
-`kea` is **experimental** GUI testing on a HarmonyOS phone; see the
-[Kea guide](kea.md) for prerequisites, configuration and commands.
-
-Terms used below:
-
-- A **campaign** is one PBT run through Scan → Plan → Test → Review.
-- Its **artifact directory** holds the human result `REPORT.md`, the validated
-  machine result `report.json`, per-bug files under `bug_reports/`, and campaign
-  scratch such as `PLAN.md`, `PROPERTIES.md`, and `COVERAGE.md`.
-- A free-form run, `scan`, and `coverage` use `<cwd>/pbt-out` by
-  default. `build-run` defaults to `<repo>/pbt-out`. `hook-run` deliberately
-  defaults outside the repository at `<parent>/pbt-out-hook`. Commands that
-  accept `--out` use that instead. A campaign may put its files directly in
-  that directory or one `pbt-out/` level below; pi-pbt resolves both layouts
-  when finalizing reports and coverage.
-
----
-
-## Every way to run it
-
-One binary, several entry points. Pick by what you want to happen; the details
-of each are below.
-
-| | Command | What it does |
-|---|---|---|
-| **Run a campaign** | `pi-pbt` | Interactive. Describe the target in chat. |
-| | `pi-pbt -p "<prompt>"` | One campaign, headless. For scripts and unattended generation — **not a CI gate**: the process exit code is pi's, not a verdict, so bugs found do not fail the job. Use `hook-run` for that. |
-| | `pi-pbt build-run --build-cmd "<cmd>"` | Your build command is the preflight gate: it runs first, and a non-zero exit stops the campaign before any agent work. After it succeeds, read the artifacts; this command does not apply the `hook-run` verdict exit codes. The campaign runs **in place** — no worktree — because large components cannot build from a detached copy. |
-| | `pi-pbt build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"` | Same gate. HAP root (`oh-package.json5` + `build-profile.json5`) sets `PBT_HAP=1`: Hypium + PandaCheck in ohosTest, then `aa test`. Not host `ark`. The module in `--build-cmd` must already have `src/ohosTest`. A HAR uses `genOnDeviceTestHap`, not `assembleHap`. Prerequisites: [arkts.md — Before you run](pbt/arkts.md#before-you-run-prerequisites). See [installation.md](installation.md#harmonyos-hap--arkts-apps). |
-| | `pi-pbt hook-run <sha>` | One commit's change set. **The exit code is the verdict**: `0` clean, `1` bugs found, `2` no report or a report that fails the schema, `3` the build failed. The sha selects the diff and the prompt — **the caller checks the tree out**. |
-| | `pi-pbt watch` | Polls a branch and runs one campaign per new commit, oldest first — **newest 10 per poll**, older ones dropped (and logged). |
-| **Let another agent drive** | `pi-pbt mcp` | MCP server on stdio: six tools, plus the artifacts as `pbt://` resources. |
-| | `pi-pbt skill-install` / `skill-uninstall` | Installs the bundled `pi-pbt-dev` skill into a host agent's skill directory. |
-| **Local only, no model calls** | `pi-pbt scan` | Ripgrep function scan → `FUNCTION_INDEX.md`. No LLM, no agent. |
-| | `pi-pbt coverage` | Prints the coverage report from existing `pbt-out/` artifacts. Never starts an agent. |
-| | `pi-pbt dashboard` | Web dashboard for runs on this machine. |
-| **GUI PBT (experimental)** | `pi-pbt kea --config kea.config.yml` | HarmonyOS real-device GUI PBT via Kea2 — properties over app UI state on a phone, not source-level properties. Demo slice today. |
-| **Not PBT** | `pi-pbt replay --pr <n>` | Simulates a developer implementing one sub-requirement and committing it. Hard-isolated: emits no PBT artifact. |
-
-Two that are easy to confuse:
-
-- **`build-run` vs `hook-run`.** `build-run` is for a target whose build you
-  already know: the command must succeed before the agent starts. Its exit code
-  is **not** the campaign verdict, however; after a successful preflight it is
-  the ordinary pi process exit, so found bugs do not map to `1` and a missing
-  report does not map to `2`. `hook-run` is the CI check whose exit code carries
-  the artifact verdict. The two do **not** compose in one invocation:
-  `hook-run` takes no `--build-cmd`. If a repository needs a specific build,
-  run that build in the CI step before `hook-run`; the campaign can reuse the
-  warm tree. Either one carries over a verdict whose test it wrote outside the
-  repository: `hook-run` wipes its workdir each run, so pi-pbt restores such a
-  test (and the workdir files it is bound to) from the verdict store first;
-  `build-run`'s workdir keeps them, and they are restored only if lost.
-- **`-p` vs `mcp`.** `-p` runs the campaign in this process and blocks.
-  `mcp` hands the campaign to a separate process and returns a run id
-  immediately, so the caller keeps working while it runs.
-
-## Skills: three different things share the word
-
-| | What | How you get it | How it is invoked |
-|---|---|---|---|
-| **1. Bundled skills** | The SOP documents that drive the campaign itself — `pbt-workflow` (the four phases), `pbt-oracles`, `pbt-patterns`, `openharmony-build-run`, `arkts-build-run`, … | Ship **inside the binary**, next to it as `dist/skills/`. You never install them. | The agent loads them automatically. A few are also callable by name in a `pi-pbt` session: `/skill:pbt-workflow`, `/skill:pbt-build-run`, `/skill:pbt-watch`, `/skill:kea-harmony-app`. |
-| **2. The `pi-pbt-dev` skill** | Teaches **your everyday coding agent** (Claude Code, Codex, opencode, codeagent, chrys) to run PBT by calling the `pi-pbt` binary. | `pi-pbt skill-install` — copies it out of the distribution into the host agent's skill directory. | Your host agent picks it up; ask it in plain language ("run PBT on this change"). Codex needs `$pi-pbt-dev` named explicitly. |
-| **3. MCP tools** | Not a skill at all — six tools plus `pbt://` resources. The alternative to 2 when you want the campaign in a **separate process**. | `claude mcp add --transport stdio pi-pbt -- pi-pbt mcp` | The host agent calls `pbt_start` / `pbt_status` / `pbt_report`. |
-
-**Which of 2 and 3 do I want?** The skill makes your agent run the campaign and
-wait for it. MCP hands the campaign to a separate process and returns a run id
-immediately, so you keep working while it runs. They do not conflict — install
-both if you like.
-
-**You do not install the bundled skills.** They are versioned with the binary,
-and a mismatched hand-copied `SKILL.md` on a host is the classic way a campaign
-starts behaving differently from what the code enforces.
-
-Full detail: [skill-pi-pbt-dev.md](skill-pi-pbt-dev.md) for the host-agent
-skill, [installation.md](installation.md) for MCP registration.
-
-## Which mode at which stage
-
-A campaign is not fast — measured on one ArkUI ace_engine module at the `quick`
-tier it takes 20–30 minutes. That single fact decides most of this table.
-
-### While developing, next to another coding agent
-
-You are writing code in Claude Code / Codex / opencode and want the change
-tested. A campaign takes 20–30 minutes, so the question is whether you can keep
-typing while it runs. **That depends on one flag**, not on which tool you use:
-
-| Mode | Where the campaign runs | Can you keep editing? |
-|---|---|---|
-| `pbt_start` **without** `build_cmd` | a detached `git worktree` on an immutable commit | **Yes** |
-| `pbt_start` **with** `build_cmd` | **in your checkout, in place** | **No** — the run emits `do not edit the tree until this run finishes` |
-| `pi-pbt-dev` skill (in-session) | your agent's own session, blocking | No — you are waiting on it |
-
-In-place is not a flaw: a large component resolves paths, generated headers and
-ccache state against the real checkout and cannot build from a detached copy.
-But it means "delegate and keep coding" is only true in worktree mode. With a
-build command, delegate and go do something else — or work in a second checkout.
-
-#### The concrete flow in Claude Code
-
-Register once:
-
-```bash
-claude mcp add --transport stdio pi-pbt -- pi-pbt mcp
-```
-
-Then, in the session, ask in plain language; the agent calls the tool:
-
-```
-Start a pi-pbt run on /path/to/repo, scope src/parser, include_uncommitted true
-```
-
-`pbt_start` returns immediately with a `run_id`. **Pass
-`include_uncommitted: true` while developing** — the default is `HEAD`, so
-without it you test the code you have not changed. It freezes the working tree
-into a snapshot commit; your index, `HEAD`, refs and files are untouched.
-
-Keep coding. Later:
-
-```
-Check that pbt run          →  pbt_status  (phase, status, queue position)
-Read the result             →  pbt_report  (verdict, REPORT.md snippet, bug URIs)
-```
-
-#### What to do with the result
-
-`pbt_report` returns the verdict, a `REPORT.md` snippet, a compact
-`report.json` summary, bug-report URIs, and whether a patch exists. Read the
-full artifacts through these MCP **resources**:
-
-| Resource | For |
-|---|---|
-| `pbt://runs/<id>/run.json` | run metadata, including `revision` / `baseRevision` |
-| `pbt://runs/<id>/REPORT.md` | the full human report |
-| `pbt://runs/<id>/report.json` | the full machine-readable result |
-| `pbt://runs/<id>/bug_reports/<file>.md` | one file per bug |
-| `pbt://runs/<id>/changes.patch` | **the generated repository changes** (normally tests and build wiring) |
-
-`changes.patch` is the part people miss. In worktree mode the campaign wrote
-repository changes inside a worktree that is **deleted when the run ends**, so
-the generated tests and their build registration are never in your checkout —
-the patch is how they get there. It is a resource, and also a file on disk under
-the run directory:
-
-```bash
-# ~/.pi-pbt/runs/<run_id>/changes.patch  (PI_PBT_RUNS_DIR overrides the root)
-cd /path/to/repo
-git apply --stat ~/.pi-pbt/runs/<run_id>/changes.patch   # what it touches
-git apply        ~/.pi-pbt/runs/<run_id>/changes.patch   # then review and commit
-```
-
-Apply it to the revision in the MCP run record (`pbt_status` / `pbt_report`
-field `revision`, also stored in `pbt://runs/<id>/run.json`). The patch is a
-binary diff against that exact snapshot commit. For an `include_uncommitted`
-run, `base_revision` is only the HEAD on which the snapshot was created; it is
-**not** the patch base. The campaign's `report.json` should carry the same tested
-revision, but the run record is the source of truth for applying this patch.
-Ask the agent in plain language if you prefer — "apply the changes.patch from
-that run to my checkout" — it can read the resources and write the files.
-
-In-place runs (`build_cmd` set) produce no patch — the tests are already in your
-checkout.
-
-#### Using `build-run` from another agent
-
-Three routes, none of which need the skill:
-
-- **MCP**: `pbt_start` with `build_cmd` (and `build_workdir` when the build runs
-  above the module, e.g. an OS source root while the scope is one component).
-- **The `pi-pbt-dev` skill**: tell the agent the build command; the skill routes
-  it to `pi-pbt build-run`.
-- **Directly**: it is a CLI — any agent that can run a shell command can run
-  `pi-pbt build-run --build-cmd "<cmd>"`.
-
-Two things that keep the loop tight: scope the campaign (`scope` / `--scope`, or
-a function-scoped prompt) instead of pointing it at a whole repository, and keep
-`INVARIANTS.md` from the previous campaign around — the next one reads it and
-does not rediscover what you already confirmed.
-
-### In an MR / CI pipeline
-
-| Situation | Use | Why |
-|---|---|---|
-| The gate on a merge request | **`hook-run <sha>`** | Built for exactly this, and **the exit code is the verdict** — `0` clean, `1` bugs found, `2` no report or a report that fails the schema, `3` the build failed. Nothing else to interpret. Check the commit out first: the sha selects the diff and the prompt, not the tree (below). |
-| The repository needs a specific build command | **Build it in the step before** | `hook-run` has no `--build-cmd`; the campaign compiles the SUT itself and can reuse a warm build tree. Run your CI's own build first, then `hook-run`. Do not substitute `build-run` as the verdict gate: it gates only the preflight build. |
-| Machine-readable result for a bot or dashboard | **`report.json` in the selected artifact directory** | Schema-validated, with every bug linked to the property that found it and pasteable reproduction commands. A plain run normally uses `pbt-out/report.json`; `--out <dir>` redirects it, and managed MCP runs expose it as `pbt://runs/<id>/report.json`. See [report-schema.md](report-schema.md). |
-| What to attach to the MR | `REPORT.md` + `report.json` from that same directory | Not the whole artifact directory — it is campaign scratch. See [reproducing.md](reproducing.md). |
-
-Do **not** put these in a pipeline: `watch` (long-lived by design), `dashboard`
-(a UI), the interactive mode, and `replay` (a developer simulation, not PBT).
-
-### After the campaign, whichever stage
-
-The tests it wrote are ordinary tests in the project's own harness. Commit them
-and their build-file registration, and from then on they run in CI with
-everything else — no pi-pbt involved. [reproducing.md](reproducing.md) covers
-what to commit, what not to, and how to replay a reported failure.
-
-## `pi-pbt` / `pi-pbt -p`
-
-Interactive TUI, or headless one-shot. The agent **chooses** how to compile
-unless you use `build-run`.
-
-```bash
-cd /path/to/repo
-pi-pbt -p "Run property-based testing; write results to pbt-out/."
-```
-
-Pin the SOP:
-
-```bash
-pi-pbt -p "/skill:pbt-workflow 对当前仓库做性质测试,产物写到 pbt-out/。"
-```
-
----
-
-## Machine-readable SDK event stream
-
-`build-run` and `hook-run` accept `--mode text|json|json-full`; `text` is the
-default. Both JSON modes stream SDK events through stdout for automation. Neither
-changes campaign behavior or exit codes: `hook-run` still returns its report gate
-verdict, and `build-run` still returns `3` for a failed preflight and otherwise
-uses the ordinary pi exit behavior.
-
-`--mode json` is a **compact event log**: one line per thing the agent did —
-what it said (`message_end`, with its tool calls, stop reason and token usage),
-which tool started with which arguments (`tool_execution_start`), what came back
-(`tool_execution_end`), and the retry, compaction and settle transitions around
-them. The token-level deltas pi streams (`text_delta`, `thinking_delta`,
-`toolcall_delta`), the partial tool output (`tool_execution_update`,
-`bash_execution_update`) and the duplicated full snapshots (`turn_end` and
-`agent_end` re-send messages already emitted) are dropped, and long strings
-inside tool arguments and results are clamped so a single file write cannot bury
-the log. Thinking blocks are replaced by a `thinkingChars` count.
-
-`--mode json-full` is pi's raw session stream with none of that filtering — every
-delta and every full-message snapshot. Use it when you are consuming the complete
-SDK protocol rather than reading a log; expect one line per streamed token.
-
-In either JSON mode, preflight output, scan diagnostics, and other operational messages
-go to stderr so stdout remains machine-readable. `build-run` also preserves the
-complete preflight output in `<out>/build.log`. Capture the channels separately:
-
-```bash
-set -o pipefail
-pi-pbt hook-run <sha> --repo /path/to/repo --mode json \
-  2>stderr.log | tee events.jsonl
-
-pi-pbt build-run --repo /path/to/repo --workdir /path/to/repo \
-  --build-cmd "cmake --build build" --mode json \
-  2>build-stderr.log | tee build-events.jsonl
-```
-
-Do not use `2>&1`; it corrupts the stdout JSON stream with diagnostics. The SDK
-events may include prompts, model output, and tool inputs/results, including
-sensitive repository content. Treat the capture as sensitive. This live stream
-is separate from the validated campaign result `report.json` and from pi's
-on-disk session files under `~/.pi-pbt/agent/sessions/`.
-
-Either JSON mode and an explicit `--tui` are rejected together — both own
-stdout. An explicit JSON mode also takes priority over inherited
-`PBT_HOOK_TUI=1`; unset the variable or use text mode when an interactive
-interface is intended.
-
----
-
-## `build-run` — preflight with your build command
+## `hook-run`
 
 ```text
-pi-pbt build-run --build-cmd "<command>"
-  [--diff <file> | --commit <sha>]
-  [--workdir <dir>] [--repo <path>] [--out <dir>]
-  [--scope <path>] [--func <name>]
-  [--prompt <text>|-p <text>|--prompt-file <path>]
-  [--lang zh] [--scan-root <dir>]
-  [--effort quick|standard|thorough]
-  [--provider <p>] [--model <m>] [--thinking <level>]
-  [--mode text|json|json-full] [--tui]
+pi-pbt hook-run <sha> [--base <rev>] [--spec <file>]... [--repo <path>] [--out <dir>] [--workdir <dir>]
+  [--scope <path>] [--effort …] [--lang zh] [--prompt <text> | --prompt-file <path>]
+  [--provider <p>] [--model <m>] [--thinking <level>] [--mode text|json|json-full] [--no-coverage]
 ```
 
-### build-run live JSON logs
+| Input | Flag | Meaning |
+|---|---|---|
+| Documents (optional) | `--spec <file>` | a requirement document whose explicit statements decide the verdict; repeatable; without it the intent is inferred from the code |
+| Code | `<sha>` | the commit under test; a merge commit is compared with its first parent |
+| | `--base <rev>` | the merge request's base commit; tests every change from it to `<sha>` instead |
+| | `--repo <path>` | the working tree with `<sha>` checked out, default the current directory; use `fetch-depth: 0` in CI |
+| | `--scope <path>` | test only this file or directory |
+| Build command | — | build with the project's own command in CI first; pi-pbt reuses the build output |
 
-**Requires pi-pbt v0.1.19 or newer**; check `pi-pbt --version` first. Add
-**`--mode json`** to `build-run`; it already implies headless output, so no print
-flag is needed (`-p` here is the extra-context flag described above, not pi's
-print switch). After the build
-passes, model updates and tool-call/results stream as JSONL (one JSON event per
-line), without waiting for the final answer or tailing session files. The default
-`--mode text` is not a complete live tool log.
+| Output | Meaning |
+|---|---|
+| `<out>/REPORT.md`, `REPORT.html` | the test report; `--out` defaults to `pbt-out-hook` next to `--repo` |
+| `<out>/report.json` | the result for programs |
+| `<out>/bug_reports/` | one report per bug |
+| exit code `0` / `1` / `2` / `3` | no bug / bugs found / report missing or change set not computable / build failed |
 
-This example reuses this section's OH `host_product` build. Replace the workspace
-path and configure a model first, then run in Bash or zsh. For other projects,
-keep their own `--build-cmd` instead of copying the OH build:
+## `build-run`
+
+```text
+pi-pbt build-run --build-cmd "<command>" [--spec <file>]... [--workdir <dir>] [--repo <path>] [--out <dir>]
+  [--scope <path>] [--func <name>] [--diff <file> | --commit <sha>] [--isolate]
+  [--effort …] [--lang zh] [--prompt <text> | --prompt-file <path>]
+  [--provider <p>] [--model <m>] [--thinking <level>] [--mode text|json|json-full] [--no-coverage]
+```
+
+Runs your build command first and tests only if it succeeds; the run builds with that command only.
+
+| Input | Flag | Meaning |
+|---|---|---|
+| Documents (optional) | `--spec <file>` | a requirement document whose explicit statements decide the verdict; repeatable; without it the intent is inferred from the code |
+| Code | `--repo <path>` | the repository under test, default the current directory |
+| | `--scope <path>`, `--func <name>` | test only this file or directory, and one function in it |
+| | `--diff <file>`, `--commit <sha>` | the change: a patch file or a commit; without them the run tests `--scope` |
+| Build command | `--build-cmd "<command>"` | required, naming a target that already exists and builds |
+| | `--workdir <dir>` | where the build command runs, default the current directory |
+
+| Output | Meaning |
+|---|---|
+| `<out>/build.log` | the build log; `--out` defaults to `<repo>/pbt-out` |
+| `<out>/REPORT.md`, `report.json`, `bug_reports/` | the test results, as for `hook-run` |
+| new tests in the project's test tree | registered in an existing test target; after generation the same command can build that target |
+| exit code | `3` means the build failed; after a successful build the result is in `report.json` |
+
+For OpenHarmony components prefer the native `host_product`; output is in `out/host/host_product`. Use a device product
+only when the component has no host target and a runner is configured for that device product.
+There is no single `--build-cmd` for the whole OpenHarmony tree: point `--repo` at this component and build an
+existing unittest of it. Example:
 
 ```bash
-set -o pipefail
 export PBT_OH_WORKSPACE=/path/to/openharmony
-LOG_DIR=$(mktemp -d)
-printf 'Logs: %s\n' "$LOG_DIR"
-
 pi-pbt build-run \
-  --workdir "$PBT_OH_WORKSPACE" \
-  --repo "$PBT_OH_WORKSPACE/foundation/arkui/ace_engine" \
-  --build-cmd "./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product --build-target base_unittest --ccache --no-prebuilt-sdk" \
-  --scope frameworks/base/geometry \
-  --lang en \
-  --mode json \
-  2>"$LOG_DIR/stderr.log" | tee "$LOG_DIR/events.jsonl"
-```
-
-- JSON events appear in the terminal and are saved to `$LOG_DIR/events.jsonl`.
-- Preflight build output and operational diagnostics go to `$LOG_DIR/stderr.log`.
-  To watch the build in another terminal, use `tail -f <printed-log-directory>/stderr.log`.
-- The full preflight log also remains in `<out>/build.log`. With no `--out` in
-  this example, it is `$PBT_OH_WORKSPACE/foundation/arkui/ace_engine/pbt-out/build.log`.
-- Do not add `2>&1` to the pipeline: it mixes plain diagnostics into JSON.
-  Events can contain source code and tool arguments/results; review sensitive
-  content before publishing. `events.jsonl` is **not** the final `report.json`.
-- `set -o pipefail` prevents `tee` from hiding failure; JSON mode does not change
-  build-run's exit semantics. Explicit `--tui` conflicts with JSON; inherited
-  `PBT_HOOK_TUI=1` is overridden by JSON mode.
-
-### Preflight and scope
-
-1. Runs `--build-cmd` in `--workdir`. The log is `<out>/build.log`;
-   `--out` defaults to `<repo>/pbt-out`.
-2. Non-zero → **exit 3**, PBT never starts.
-3. Zero → campaign in `--repo`. Rebuilds may **only reuse that command**
-   (replacing its existing target with the generated test target when needed).
-   No build-system switch and no derived alternative build.
-
-That `3` describes only the preflight failure. Once the campaign starts,
-`build-run` has ordinary pi exit behavior: it does not inspect `REPORT.md` /
-`report.json` and does not translate bugs, missing reports, or a build failure
-recorded later in `report.json` into the `hook-run` `1` / `2` / `3` verdicts.
-Use the artifacts to read the result, or use `hook-run` when CI needs a verdict.
-
-`--scope` is a **path** (file or directory). `--func` is one **symbol**; it
-**requires `--scope` and must appear after `--scope`**. Without `--func`, every
-PBT-worthy function in `--scope` is in play, and the close-out holds `FUNCTION_INDEX.md`
-to every implementation file under that path (a file the campaign declines needs its own
-line under PLAN.md `- **Skipped modules:**`) — the repository's latest commit is never
-read as the change surface unless you name it. Without `--diff`/`--commit`, `--func`
-is the change surface — not `git HEAD` of `--repo`.
-
-`--workdir` = where the build runs. `--repo` = module under test (`pbt-out/`,
-`--scope`). Same directory (typical CMake): `cd` there and omit both.
-
-**Your own context: `--prompt` / `-p` / `--prompt-file`.** The generated prompt
-carries the build contract, the scope, and the SOP entry — but it cannot know the
-domain facts only you have: which of two similar helpers is the real entry point,
-which directory is legacy, what invariant should hold. Pass them as extra prompt
-text:
-
-```bash
-pi-pbt build-run --build-cmd "./build.sh …" \
-  -p "the decoder path is what matters; the deprecated fast path is out of scope"
-
-# repeatable; --prompt-file reads long context from a file
-pi-pbt build-run --build-cmd "./build.sh …" \
-  --prompt-file ./pbt-context.md -p "and ignore third_party/legacy"
-```
-
-`-p` is the short form of `--prompt`; values merge in command-line order, and
-`--prompt-file` is for text too long for a comfortable shell argument. The block
-is **appended** to the generated prompt (the first token stays the `/skill:`
-invocation that loads the SOP body) and is labeled caller-authored context that
-narrows scope and adds oracles; it cannot override the build contract or the SOP
-flow. In these subcommands `-p` is *not* pi's print switch — they already run
-headless, and `-p` with no value is a usage error.
-
-**OpenHarmony: `host_product` first.** This real ArkUI `ace_engine` preflight
-builds the existing `base_unittest` group before the campaign writes tests:
-
-```bash
-export PBT_OH_WORKSPACE=/path/to/openharmony
-pi-pbt build-run --provider xai --model grok-4.6 --lang en \
   --workdir "$PBT_OH_WORKSPACE" \
   --repo "$PBT_OH_WORKSPACE/foundation/arkui/ace_engine" \
   --build-cmd "./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product --build-target base_unittest --ccache --no-prebuilt-sdk" \
   --scope frameworks/base/geometry
 ```
 
-The host output is `out/host/host_product`, not `out/host_product`. The initial
-preflight must use a target that already exists; only after the campaign has
-generated and registered its tests may the command switch to the new `pbt`
-target. `host_product` is not universal: use a device product only when the
-component has no host target and the workspace already has a runner configured
-for the resulting artifact.
-
-There is no single `--build-cmd` for the whole OpenHarmony tree. Reuse this
-**shape**: `--workdir` the workspace, `--repo` **this** component, an **existing**
-unittest of **this** part. Do not paste `ace_engine` / `base_unittest` into another
-component. After `out/` is warm, an unchanged-gn rebuild is `build.sh --fast-rebuild`, not bare `ninja -C out/<product>`.
-
-**Speeding up repeated OH builds.** `--ccache` is already hb's default, so it
-only states the intent. The parameter that measurably helps is `--fast-rebuild`,
-which skips the prepare/preloader/loader/gn phases and starts at ninja: the same
-no-op incremental `base_unittest` build measured **27 s** without it and **13 s**
-with it.
-
-Keep it out of the preflight above. OH's own help restricts it to runs with "no
-change for gn related script", and a campaign changes exactly those files when it
-adds `test/pbt/<subpath>/BUILD.gn` and registers the target in `bundle.json`
-`build.test`. Use it only for a rebuild whose gn inputs are unchanged, and drop
-it again for the first rebuild after the campaign generates its test target.
-The campaign itself is held to this: once one `build.sh` has reached ninja, a
-repeat `build.sh --build-target …` with no `BUILD.gn` / `.gn(i)` / `bundle.json`
-written since is rejected until it carries `--fast-rebuild`. Do not substitute
-bare `ninja -C out/<product>`: its `gn --regeneration` rule can truncate `build.ninja`.
-`ninja -C out/host/host_product` is the host incremental line and is not that rule.
-Measured on a live os_account campaign, four `.cpp`-only rebuilds cost
-3.5–5 min each without it:
+A plain CMake project:
 
 ```bash
-./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product \
-  --build-target base_unittest --ccache --no-prebuilt-sdk --fast-rebuild
+pi-pbt build-run --build-cmd "cmake -S . -B build && cmake --build build --target calc_test" --scope src/calc.cpp
 ```
 
-Two parameters to leave alone: `--jobs` is deprecated in hb, and
-`--load-test-config` (default on) is what reads `bundle.json`'s `test` field,
-so disabling it hides the generated PBT target.
-`--gn-args enable_notice_collection=false`, which OH lists as a speed-up, is
-aimed at full image builds; on this unittest preflight it measured 26 s against
-the 27 s baseline and forces a gn regen, so it is not worth adding.
+HarmonyOS apps: see the [ArkTS guide](pbt/arkts.md).
 
-For a HarmonyOS tree driven by `build_system.sh` rather than `build.sh`, check
-`--help` on that script before reusing these flags: the parameter set is not
-verified here, and an unsupported flag fails the preflight instead of speeding
-it up.
-
-**Ordinary CMake project.** This is a separate example of `build-run`'s general
-build support, not an OpenHarmony-equivalent path. If the existing
-`CMakeLists.txt` defines `calc_test`, gate on it:
+Keeping the JSON event log (stdout carries only events, diagnostics go to stderr; the result is still `report.json`):
 
 ```bash
-cd /path/to/cmake-project
-pi-pbt build-run --provider xai --model grok-4.6 --lang en \
-  --build-cmd "cmake -S . -B build && cmake --build build --target calc_test -j$(nproc)" \
-  --scope src/calc.cpp
+set -o pipefail
+LOG_DIR=/tmp/pbt-logs && mkdir -p "$LOG_DIR"
+pi-pbt build-run --mode json \
+  --build-cmd "./build.sh --product-name host_product --build-target base_unittest" \
+  2>"$LOG_DIR/stderr.log" | tee "$LOG_DIR/events.jsonl"
 ```
 
-If the project has other broken default targets, explicitly naming the known-good
-existing target keeps the preflight bounded. After test generation, the campaign
-may replace `calc_test` with the registered PBT target while preserving the same
-CMake command structure.
+## `mcp`
 
-Details: [installation.md](installation.md#build-first-then-test-build-run-bring-your-own-build-command).
-
----
-
-## `hook-run` — one commit (CI / git hook)
-
-```text
-pi-pbt hook-run <sha>
-  [--repo <path>] [--out <dir>] [--workdir <dir>] [--spec <file>]
-  [--prompt <text>|-p <text>|--prompt-file <path>]
-  [--lang zh] [--scan-root <dir>]
-  [--effort quick|standard|thorough]
-  [--provider <p>] [--model <m>] [--thinking <level>]
-  [--scope <path>] [--run-id <id>]
-  [--mode text|json|json-full] [--tui]
+```bash
+claude mcp add --transport stdio pi-pbt -- pi-pbt mcp
+codex mcp add pi-pbt -- pi-pbt mcp
 ```
 
-Deletes and recreates `--workdir` and `--out`, then scans and runs PBT on that
-commit's change set. Defaults are sibling directories of `--repo`:
-`<parent>/pbt-hook-work` and `<parent>/pbt-out-hook`. With `--scan-root <root>`,
-they instead default to **children** `<root>/pbt-hook-work` and
-`<root>/pbt-out-hook`, not siblings of that root or `<repo>/pbt-out`. Default effort **quick**.
-
-Exit codes — this is the whole interface for a CI job:
-
-| | Meaning |
+| Tool | Purpose |
 |---|---|
-| `0` | Clean: a report that satisfies the schema, and no bugs. |
-| `1` | Bugs found (`bug_reports/`, or `totals.bugs > 0`). |
-| `2` | No `REPORT.md`, no `report.json`, or a `report.json` that fails the schema — the campaign died or attested to nothing. |
-| `3` | The recorded build failed: nothing was tested. |
+| `pbt_start` | start a test; returns a `run_id` at once |
+| `pbt_status` | progress |
+| `pbt_report` | verdict, report summary and bug reports |
+| `pbt_cancel` | cancel a test |
+| `pbt_watch_start` / `pbt_watch_stop` | watch a branch and test each new commit |
 
-**The sha does not check anything out.** It selects the change set
-(`git diff-tree <sha>`) and goes into the prompt (`git show <sha>`); the code
-the campaign compiles and tests is whatever is in `--repo`'s working tree. So
-the caller is responsible for putting the tree on that commit — in CI, the
-checkout step already has:
+`pbt_start` parameters:
 
-```bash
-# From a post-commit hook: nothing extra — the new commit IS the working tree.
-pi-pbt hook-run <sha> --repo /path/to/repo --lang zh
-
-# In CI: check it out into the disposable workspace, with its PARENT present
-# (fetch-depth: 2 or 0 — a depth-1 clone makes `git diff-tree <sha>` empty).
-git -C /path/to/worktree checkout --detach <sha>
-pi-pbt hook-run <sha> --repo /path/to/worktree
-```
-
-Running it against a tree at a different revision is not an error and will not
-warn — it will faithfully test the code that is there, against the diff of a
-commit that is not.
-
-If the repo is an OpenHarmony module, set `PBT_OH_WORKSPACE` or sit inside a
-tree with `.repo/` + `out/` (auto-detect).
-
-`--prompt` / `-p` / `--prompt-file` work exactly as in `build-run` above: your
-own context, appended to the generated prompt.
-
----
-
-## `watch` — every new commit
-
-```text
-pi-pbt watch
-  [--repo <path>] [--interval <sec>] [--fetch] [--branch <name>]
-  [--out <dir>] [--workdir <dir>] [--spec <file>]
-  [--prompt <text>|--prompt-file <path>]
-  [--lang zh] [--scan-root <dir>]
-  [--cov-mode incremental|full] [--effort …]
-  [--provider <p>] [--model <m>] [--thinking <level>] [--tui]
-```
-
-Spawns `hook-run` per new commit, oldest first. Default effort **quick**.
-`--prompt` / `--prompt-file` are forwarded to every campaign, so each gets the
-same caller context.
-
-The baseline is the head at startup: commits that already existed are not
-tested. A poll that finds more than **10** new commits — a burst, a rebase, or
-a queue that built up while the previous 20–30 minute campaign ran — tests the
-**newest 10** and drops the older ones, logging what it dropped. So `watch` is
-a monitor for a branch that moves at a human pace; it is not a guarantee that
-every commit was tested. When that guarantee is what you need, call `hook-run`
-per commit from the hook or the pipeline, where nothing is dropped.
-
-```bash
-pi-pbt watch --repo /path/to/repo --lang zh --interval 30
-pi-pbt watch --repo /path/to/repo --fetch --branch master --interval 60
-```
-
----
-
-## `replay` — fake a developer (not PBT)
-
-```text
-pi-pbt replay (--pr <n> | --commit <sha>)
-  [--repo <path>] [--project owner/repo]
-  [--lang zh] [--scan-root <dir>] [--model <name>]
-```
-
-Implements a change only. Sets `PBT_REPLAY=1` so **no** PBT campaign, no
-PLAN/REPORT. PBT belongs on `hook-run` of the resulting commit.
-
-```bash
-pi-pbt replay --pr 8721 --lang zh --scan-root /path/to/workspace
-```
-
----
-
-## `scan` / `coverage`
-
-No LLM for `scan` / `coverage`.
-
-```text
-pi-pbt scan [--dir <path>] [--out <dir>] [--lang <id>] [--module <name>]
-pi-pbt coverage [--list | --json] [--module <name>]
-  [--diff <sha>] [--project-dir <path>]
-```
-
-`scan` writes `pbt-out/FUNCTION_INDEX.md`. Language detection only looks two
-directory levels down; on a large OpenHarmony module `pi-pbt scan` at the repo
-root can print `no functions found`. Point `--dir` at the source subtree:
-
-```bash
-cd /path/to/telephony_core_service
-pi-pbt scan --dir utils/codec --out ./pbt-out
-```
-
-`coverage` always reads `<cwd>/pbt-out`; `--project-dir` changes only the
-repository used to compute `--diff`, not the artifact directory. `--list` and
-`--json` are mutually exclusive. Full coverage semantics and artifact formats:
-[coverage-tracking.md](coverage-tracking.md).
-
----
-
-## `dashboard` / `mcp` / `skill-install`
-
-```text
-pi-pbt dashboard [install] [--port 8000]
-pi-pbt mcp
-pi-pbt skill-install [--host claude|opencode|codex|codeagent|chrys|project] [--dir <path>] [--force]
-pi-pbt skill-uninstall [--host claude|opencode|codex|codeagent|chrys|project] [--dir <path>]
-```
-
-MCP: [installation.md](installation.md#delegation-from-another-coding-agent-mcp).
-Dashboard: [installation guide](installation.md#5-dashboard-watch-it-work-live).
-
----
-
-## Env (also CLI on some commands)
-
-| Env | Meaning |
+| Parameter | Meaning |
 |---|---|
-| `PBT_LANG` | Output language (`zh` / `en`); also `--lang` |
-| `PBT_OH_WORKSPACE` | Full OH tree (`.repo/` + `out/`) used by official `host_product` or configured device-product builds. Unrelated ordinary CMake projects do not set it. |
-| `PBT_EFFORT` | `quick` / `standard` / `thorough` |
-| `PBT_SCAN_ROOT` | Scan directory; also `--scan-root` |
-| `PBT_HOOK_TUI=1` | TUI for `hook-run` / `watch`; an explicit JSON mode overrides it |
+| `repo` | repository under test (required) |
+| `spec` | requirement documents (optional), one path or a list; without them the intent is inferred from the code |
+| `include_uncommitted` | include uncommitted changes |
+| `revision` | commit to test, default `HEAD` |
+| `base` | base commit; tests every change from it to `revision`; not with `build_cmd` |
+| `scope` | limit the target |
+| `effort`, `lang`, `provider`, `model` | as on the command line |
+| `prompt` | extra instructions for the run |
+| `build_cmd`, `build_workdir` | a build command and its directory; the test then runs in the original checkout, so do not edit it until the run ends |
 
-Hook-run: [CI / git-hook integration](installation.md#ci--git-hook-integration). Coverage:
-[coverage-tracking.md](coverage-tracking.md).
+Without `build_cmd` the test runs in a separate git worktree. Results are kept in `~/.pi-pbt/runs/<run_id>/`; the
+generated tests are in its `changes.patch`.
 
+## `watch`
 
-## `finalize`
+```text
+pi-pbt watch [--repo <path>] [--base <rev>] [--spec <file>]... [--interval <sec>] [--fetch] [--branch <name>] [--out <dir>] [--lang zh] [--effort …]
+```
 
-`pi-pbt finalize [--out <dir>] [--lang en|zh]` deterministically validates and
-renders an existing campaign from the SUT repository root, without a model
-request. It checks schema, source/regression/Gradle evidence and demotion
-contradictions before generating HTML and updating the owned coverage footer.
-It does not edit report.json or author/run tests. Exit `0`: validated delivery,
-including a bugs-found report. Exit `2`: incomplete/invalid evidence or rendering
-failure. This complements, rather than replaces, `hook-run`'s check verdict.
+Runs `hook-run` for each new commit. When one poll finds more than 10 new commits only the newest 10 are tested; use
+`hook-run` when every commit must be tested.
 
-## `resume`
+## Other commands
 
-`pi-pbt resume [--out <dir>] [--thinking <level>] [--force] [--attempts <n>] [--wait <seconds>]`
-continues a campaign that stopped with exit `2` and `interruption.json`
-(default `--out`: `$PBT_OUT_DIR`, else `./pbt-out`; a nested `<out>/pbt-out/`
-record is found too). It relaunches the saved session through the same binary
-with the recorded provider, model, thinking level, working directory and
-allow-listed `PBT_*` settings; variables set by the caller win, except
-`PBT_OUT_DIR`, which stays pinned to the record's directory. The recorded
-source root, function-scoped target, prose scope and campaign start are restored
-as `PBT_SOURCE_ROOT`, `PBT_FUNCTION_TARGET`, `PBT_RESUME_SCOPE` and
-`PBT_RESUME_STARTED_AT` (set by `resume` only); the resolved language and change
-source as `PBT_LANG` and `PBT_CHANGE_SOURCE`. A configuration interruption is refused unless
-`--thinking` or `--force` is given. `--attempts` (default `1`) retries only
-quota, rate-limit and provider interruptions, sleeping `--wait` seconds (default
-`0`) between attempts, and stops as soon as a run ends without a new
-interruption. Exit: the last resumed run's code, or `2` when there is nothing to
-resume. The continuation is a headless `-p` run, not a new `hook-run` gate.
+| Command | Meaning |
+|---|---|
+| `pi-pbt resume [--out <dir>] [--attempts <n>] [--wait <sec>]` | continue an interrupted run |
+| `pi-pbt finalize [--out <dir>] [--lang zh]` | validate and render existing results; `0` valid, `2` invalid |
+| `pi-pbt scan [--dir <path>] [--out <dir>]` | list functions into `FUNCTION_INDEX.md`; see [coverage tracking](coverage-tracking.md) |
+| `pi-pbt coverage [--list \| --json]` | summarize test progress in `pbt-out/` |
+| `pi-pbt dashboard [--port 8000]` | local web dashboard |
+| `pi-pbt skill-install [--host <agent>] [--dir <path>] [--force]` | install the `pi-pbt-dev` skill; see the [skill guide](skill-pi-pbt-dev.md) |
+
+## Depth
+
+| | `quick` | `standard` | `thorough` |
+|---|---|---|---|
+| Time budget | about 10 minutes | about 30 minutes | unlimited |
+| Properties per target | 3–5 | 5–8 | as needed |
+| Inputs per property | about 100 | ≥ 1000 | ≥ 10000 |
+
+`hook-run` and `watch` default to `quick`, other entries to `standard`.
+
+## Environment variables
+
+| Variable | Meaning |
+|---|---|
+| `PBT_LANG` | `zh` or `en`, output language |
+| `PBT_EFFORT` | default depth |
+| `PBT_TEST_JOBS` | test and build parallelism: a number, `max`, or `auto` (default, idle cores) |
+| `PBT_CODE_COVERAGE=0` | turn native code coverage off |
+| `PBT_CLOSEOUT_REVIEW=off` | skip the independent review (run by the bundled pi-subagents); the report says it was not reviewed |
+| `PBT_SCAN_DELEGATION=off` | do not use parallel scan subagents |
+| `PBT_VERDICTS=off` / `PBT_CARRY=off` | do not record / do not reuse earlier verdicts |
+| `PBT_OH_WORKSPACE` | the OpenHarmony source tree; detected automatically when run inside it |
+| `PBT_PHASE_MODELS` | a model per phase, e.g. `{"plan":"anthropic/claude-opus-5-5"}` |
+| `PBT_MCP_MAX_CONCURRENT` | MCP tests running at once, default 1 |
+| `PI_PBT_RUNS_DIR` | MCP results directory, default `~/.pi-pbt/runs` |

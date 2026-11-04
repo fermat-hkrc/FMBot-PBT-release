@@ -6,7 +6,7 @@
 ## 1. 这个 skill 是什么
 
 `pi-pbt-dev` 是把 pi-pbt 接入你日常 code agent 的入口。装好后，你可以对 agent 说
-"测一下刚才的修改"，agent 就会自动对改动范围跑一轮 PBT 战役，并把发现的问题呈现给你。
+"测一下刚才的修改"，agent 就会自动对改动范围跑一轮 PBT 测试任务，并把发现的问题呈现给你。
 
 两种模式，由 agent 根据你的意图选择：
 
@@ -23,15 +23,15 @@
 本教程讲的是**安装 skill** 这条路径。宿主 agent 启动
 `scripts/run-pbt.mjs`，脚本再启动一个 `pi-pbt -p` 子进程，并等待它退出后读取结果。
 进度行会把等待过程显示出来，但契约仍是同步的：这不是后台委派，同一个 agent turn
-不会在 campaign 运行时继续编辑代码。
+不会在测试任务运行时继续编辑代码。
 
 MCP 是另一套无需安装 skill 的委派接口。`pbt_start` 会立即返回 `run_id`，独立的
-pi-pbt run manager 接管 campaign 进程，宿主 agent 可继续开发，之后再调用
+pi-pbt run manager 接管测试任务进程，宿主 agent 可继续开发，之后再调用
 `pbt_status` / `pbt_report`。普通 MCP run 在 detached worktree 中测试不可变 commit；
 `include_uncommitted: true` 会先把当前改动冻结成快照；传入 `build_cmd` 则是有意的
 就地运行例外。这里先介绍 MCP，是为了让后文出现的 `pbt_report` 和 `pbt://...`
 结果资源都有上下文。配置方式和隔离规则见
-[让别的 coding agent 委派测试](installation.zh.md#让别的-coding-agent-委派测试mcp)。
+[让别的 coding agent 委派测试](subcommands.zh.md#mcp)。
 想按下文同步执行就装 skill；明确要异步委派时再配 MCP。两者可以共存。
 
 ## 2. 前置条件
@@ -42,7 +42,7 @@ pi-pbt run manager 接管 campaign 进程，宿主 agent 可继续开发，之�
 | `pi-pbt` 二进制 | 已安装 | 见[第一步](#3-第一步安装-pi-pbt-引擎) |
 | git | 推荐 | git 项目增量测试有"客观范围层"（自动列出改动文件）；非 git 也能用，范围由 agent 从对话记忆给出并请你确认 |
 | 被测语言的工具链 | 按需 | Python 要 `python3`+`pip`，C/C++ 要 `cmake`+编译器，Rust 要 `cargo`…（pi-pbt 会真实编译运行它写的测试） |
-| LLM API | 已配置 | 战役由大模型驱动，见[第一步](#3-第一步安装-pi-pbt-引擎) |
+| LLM API | 已配置 | 测试任务由大模型驱动，见[第一步](#3-第一步安装-pi-pbt-引擎) |
 
 ## 3. 第一步：安装 pi-pbt 引擎
 
@@ -192,7 +192,7 @@ agent: （加载 pi-pbt-dev skill，判定为全量模式）
        5. 向你呈现：发现 N 个 bug / 全部通过
 ```
 
-> 战役等待期间 agent 会报告阶段进展（`[pbt-progress]` 行），不会长时间无反馈。
+> 测试任务等待期间 agent 会报告阶段进展（`[pbt-progress]` 行），不会长时间无反馈。
 
 ### 场景 2 — git 项目增量测试
 
@@ -219,22 +219,22 @@ agent: （判定为增量模式；diff-scope 报非 git 仓库 → 走会话记�
        3. 呈现结果
 ```
 
-> **范围确认门禁**：增量范围（尤其非 git 的记忆清单）必须经你确认后才会执行战役。
+> **范围确认门禁**：增量范围（尤其非 git 的记忆清单）必须经你确认后才会执行测试任务。
 > 这是防漏测/误测的设计，不是多余的步骤。
 
 ## 7. 读懂结果
 
-skill 会为每轮战役选择一个新目录（如 `pbt-out/2026-09-16T10-30-00/`），并把它
-作为 `--out-dir` 传入。campaign 运行时先写仓库顶层 `pbt-out/`；结束后
+skill 会为每轮测试任务选择一个新目录（如 `pbt-out/2026-09-16T10-30-00/`），并把它
+作为 `--out-dir` 传入。测试任务运行时先写仓库顶层 `pbt-out/`；结束后
 `run-pbt.mjs` 再把规范产物移入该轮次目录，随后 `summarize.mjs` 从那里读取。
 
 | 文件 | 内容 |
 |---|---|
 | `REPORT.md` | 给人阅读的总结：测了哪些模块、发现哪些 bug、如何复现 |
-| `PROPERTIES.md` | 性质台账：每个被测性质的形式化陈述与状态（passing / failing / retired） |
+| `PROPERTIES.md` | 性质性质清单：每个被测性质的形式化陈述与状态（passing / failing / retired） |
 | `bug_reports/bug_001_*.md` | 每个 bug 一份：Law、最小输入、期望/实际、根因、回归测试位置 |
 
-源码 campaign 契约还会生成 `report.json`，它是同一组事实的机读视图：schema 版本、
+源码测试任务契约还会生成 `report.json`，它是同一组事实的机读视图：schema 版本、
 被测 revision 与档位、构建证据、每条性质和 bug、每个 bug 的精确复现命令，以及重新
 核算的 totals。脚本、CI、dashboard 或 MCP client 需要稳定字段而不是解析 Markdown
 时，应读取它。
@@ -274,16 +274,16 @@ agent 呈现给你的摘要形如：
 |---|---|
 | `pi-pbt: command not found` | 按[第一步](#3-第一步安装-pi-pbt-引擎)重装引擎，确认在 PATH |
 | `pi-pbt --list-models` 为空 / 报 401 | 按[第一步](#3-第一步安装-pi-pbt-引擎)检查 API key 与 models.json |
-| 战役超时（`run-pbt` 退出码 3） | 按档位使用对应上限：quick 900 秒、standard 1800 秒、thorough 3600 秒；改测更小范围，或有意调大 `--timeout-sec` |
-| 摘要显示"未完成"（无 REPORT.md） | 战役 agent 未产出人读报告；看 `<out-dir>.log` 定位原因后重试。对 `hook-run`/MCP 还要检查 `report.json` 是否存在且符合 schema |
-| agent 不自动触发 | 确认 AGENTS.md 片段已加；显式说"测一下刚才的修改"一定可用 |
+| 测试任务超时（`run-pbt` 退出码 3） | 按档位使用对应上限：quick 900 秒、standard 1800 秒、thorough 3600 秒；改测更小范围，或有意调大 `--timeout-sec` |
+| 摘要显示"未完成"（无 REPORT.md） | 测试任务 agent 未产出人读报告；看 `<out-dir>.log` 定位原因后重试。对 `hook-run`/MCP 还要检查 `report.json` 是否存在且符合 schema |
+| agent 不自动触发 | 确认 AGENTS.md 片段已加；明确说出“测一下刚才的修改”即可触发 |
 
 ## 9. 成本与建议
 
-- 每轮战役是一次完整的 LLM 会话（分钟级、有 token 成本）。改动很小（一两次编辑）或仅文档时，
+- 每轮测试任务是一次完整的 LLM 会话（分钟级、有 token 成本）。改动很小（一两次编辑）或仅文档时，
   可以要求跳过——agent 的模式判定会尊重你的选择。
 - 增量测试聚焦改动面，比全量便宜；建议日常用增量，定期（如发版前）跑一次全量。
-- 每轮都要选新的 `--out-dir`（如 `pbt-out/2026-09-16T10-30-00/`）。辅助脚本不会
+- 每轮都要使用新的 `--out-dir`（如 `pbt-out/2026-09-16T10-30-00/`）。辅助脚本不会
   自动生成这个名字；复用非空目录会被拒绝且旧内容保留。请选择新目录，避免新旧结果混在一起。
 
 ## 10. 升级
@@ -292,4 +292,4 @@ agent 呈现给你的摘要形如：
 `pi-pbt skill-install --force`；项目/自定义安装应复用原来的 `--host project` 或
 `--dir`，并加 `--force`。先备份手工改过的 skill，再刷新并重载宿主 agent。
 最后用 `pi-pbt --version`、`pi-pbt --list-models` 检查。
-完整步骤见[升级已有安装](installation.zh.md#升级已有安装)。
+完整步骤见[升级已有安装](installation.zh.md#5-升级)。

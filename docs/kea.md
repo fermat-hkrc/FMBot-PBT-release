@@ -59,7 +59,7 @@ flags; everything else is configured in the file:
 | `provider`, `model`, `lang` | — | model provider, model ID, and artifact/narration language; CLI `--lang` overrides `lang` |
 
 Depth is the same "how deep do we dig" knob as the
-[effort tiers](installation.md#how-deep-it-digs-effort-tiers), so it is not set
+[effort tiers](subcommands.md#depth), so it is not set
 twice: `depth:` in the config wins, then `PBT_KEA_DEPTH`, then the tier
 (`quick` → `fast`, `standard`/`thorough` → `deep`).
 

@@ -1,20 +1,12 @@
-# pi-pbt — releases
+# pi-pbt
 
-[中文](#中文) · [Changelog / 更新日志](CHANGELOG.md) · [Installation guide](docs/installation.md) · [安装指南](docs/installation.zh.md)
+[中文](#中文) · [Changelog / 更新日志](CHANGELOG.md) · [Usage guide](docs/usage.md) · [使用指南](docs/usage.zh.md)
 
-pi-pbt is an AI agent that runs **property-based testing** campaigns on a
-codebase. Point it at a Python, Rust, Go, Java, or C++ repository and it reads
-the source, works out what must always be true of it, writes and runs tests that
-check those rules against large numbers of generated inputs, and reports the bugs
-it finds with a minimal reproducer for each.
-
-**This repository distributes the released binaries.** The source lives in a
-separate repository; here you get the executables and the installation guide.
+pi-pbt is an agent for **property-based testing**: it extracts the properties code must satisfy from its documented
+contracts, checks them against large numbers of generated inputs, and reports the bugs it finds with minimal
+reproducers. This repository distributes the released binaries.
 
 ## Download
-
-A self-contained main executable — no Node.js or Bun runtime. The archive also
-includes an installer and search tools; tested projects need their own toolchain.
 
 | Platform | Download | Checksum |
 |---|---|---|
@@ -23,32 +15,20 @@ includes an installer and search tools; tested projects need their own toolchain
 | macOS Apple Silicon | [`pi-pbt-macos-arm64.tar.xz`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-macos-arm64.tar.xz) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-macos-arm64.tar.xz.sha256) |
 | Windows x64 (experimental) | [`pi-pbt-windows-x64.tar.xz`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-windows-x64.tar.xz) | [`.sha256`](https://github.com/fermat-hkrc/FMBot-PBT-release/releases/latest/download/pi-pbt-windows-x64.tar.xz.sha256) |
 
-Not sure which Linux build you need? `uname -m` — `x86_64` takes the x64 file,
-`aarch64` the arm64 one. Older versions are on the
-[releases page](https://github.com/fermat-hkrc/FMBot-PBT-release/releases).
-
 ```bash
-sha256sum -c pi-pbt-linux-x64.tar.xz.sha256 # optional integrity check
-tar -xJf pi-pbt-linux-x64.tar.xz             # yields pi-pbt-linux-x64/, already executable
-cd pi-pbt-linux-x64                         # holds pi-pbt, install.sh, and tools/
-./install.sh
-pi-pbt --help
+tar -xJf pi-pbt-linux-x64.tar.xz && cd pi-pbt-linux-x64 && ./install.sh
 ```
 
-The archive also carries the two search tools the agent uses (`fd`, `rg`), so it
-works on a machine that has neither; the installation guide shows where to put
-them.
+Then configure a model: [installation guide](docs/installation.md).
 
-Then configure a model and start a run — see the
-**[installation guide](docs/installation.md)**, which also covers the toolchains
-the language under test needs, CI and git-hook integration, and the live
-dashboard.
+## Two modes
 
-A completed source campaign writes `REPORT.md` for people and **`report.json`**
-for CI/integrations, plus detailed bug reports. Start with the
-[results guide](docs/installation.md#read-the-results); use the
-[CLI reference](docs/subcommands.md) to choose a mode and the
-[reproduction guide](docs/reproducing.md) to keep the generated tests.
+- **While you develop:** invoke `/skill:pbt-build-run` with documents, scope, build command and effort; see the [usage guide](docs/usage.md).
+- **Merge-request gate:** `pi-pbt hook-run <MR head commit> --base <base commit>` in the pipeline; the exit code
+  passes or fails it. Configurations: [CI examples](docs/ci-examples.md).
+
+Inputs (documents, optional; code; build command, optional) and outputs: [usage guide](docs/usage.md#inputs-and-outputs).
+Step by step: [usage guide](docs/usage.md). Every command and flag: [reference](docs/subcommands.md).
 
 Found a problem? Open an [issue](https://github.com/fermat-hkrc/FMBot-PBT-release/issues).
 
@@ -56,35 +36,23 @@ Found a problem? Open an [issue](https://github.com/fermat-hkrc/FMBot-PBT-releas
 
 ## 中文
 
-pi-pbt 是一个做**性质测试**(property-based testing)的 AI agent。把它指向一个
-Python / Rust / Go / Java / C++ 仓库,它会读源码,推断出「这段代码无论输入什么都
-必须成立的规律」,据此写测试并用大量自动生成的输入去跑,最后把找到的 bug 连同
-最小复现一起报出来。
+pi-pbt 是做**性质测试**的智能体：从文档契约中提取代码必须满足的性质，用大量自动生成的输入检查这些性质，
+报告找到的缺陷和最小复现。本仓库发布可执行文件。
 
-**本仓库只发布构建产物**:源码在另一个仓库,这里提供可执行文件和安装文档。
-
-下载对应平台的压缩包(见上表),然后:
+下载上表中对应平台的压缩包，然后：
 
 ```bash
-sha256sum -c pi-pbt-linux-x64.tar.xz.sha256 # 可选:校验完整性
-tar -xJf pi-pbt-linux-x64.tar.xz             # 解出 pi-pbt-linux-x64/,已带可执行权限
-cd pi-pbt-linux-x64                         # 里面是 pi-pbt、install.sh 和 tools/
-./install.sh
-pi-pbt --help
+tar -xJf pi-pbt-linux-x64.tar.xz && cd pi-pbt-linux-x64 && ./install.sh
 ```
 
-压缩包里还带了 agent 用到的两个搜索工具(`fd`、`rg`),所以在没装它们的机器上也
-能用;放置位置见安装指南。
+接着配置模型，见[安装指南](docs/installation.zh.md)。
 
-主程序是自包含二进制，不需要 Node.js/Bun；发行包另带安装脚本和搜索工具，
-被测项目仍需自己的工具链。不确定该下哪个
-Linux 版本就看 `uname -m`:`x86_64` 用 x64,`aarch64` 用 arm64。
+两种用法：
 
-接下来配置模型、跑第一次测试,见 **[安装指南](docs/installation.zh.md)** —— 里面
-还写了被测语言需要的工具链、CI 与 git hook 接入方式,以及实时看板。
+- **边开发边用：**显式调用 `/skill:pbt-build-run`，给出文档、代码范围、构建命令和 effort，见[使用指南](docs/usage.zh.md)。
+- **MR 门禁：**在流水线里运行 `pi-pbt hook-run <MR 头提交> --base <基准提交>`，退出码决定流水线是否通过。
+  配置见 [CI 配置示例](docs/ci-examples.zh.md)。
 
-完成源码测试后，`REPORT.md` 给人看，**`report.json`** 给 CI/程序读取，另有逐个问题的
-详细报告。先看[运行后看什么](docs/installation.zh.md#运行后看什么)，选运行方式看
-[子命令参考](docs/subcommands.zh.md)，固化生成用例看[复现与回归](docs/reproducing.md)。
+输入（文档可选、代码、编译命令可选）与输出见[使用指南](docs/usage.zh.md#输入与输出)，分步说明见[使用指南](docs/usage.zh.md)，全部命令与参数见[参考手册](docs/subcommands.zh.md)。
 
 有问题请提 [issue](https://github.com/fermat-hkrc/FMBot-PBT-release/issues)。

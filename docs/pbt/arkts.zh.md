@@ -2,17 +2,19 @@
 
 [English version](arkts.md)
 
-[返回安装说明](../installation.zh.md#harmonyos-hap--arkts-应用) ·
+[返回安装说明](../subcommands.zh.md#build-run) ·
 [子命令](../subcommands.zh.md)
 
 pi-pbt 支持的 ArkTS 路径是 **HarmonyOS HAP ohosTest**。性质测试是 Hypium +
 PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
-（`import { check, property, integer, string, boolean } from 'PandaCheck'`），
-用 `hvigorw` 组装，以 `hdc shell aa test` 跑。裁决看 `OHOS_REPORT_RESULT`。
-用 `make-pandacheck-har.sh` 装到 `libs/PandaCheck`。不要 `ohpm install fast-check`。
+（`import { check, property, integer, string, boolean, bigint } from 'PandaCheck'`），
+用 `hvigorw` 组装，以 `hdc shell aa test` 跑。判定结果看 `OHOS_REPORT_RESULT`。
+用 `make-pandacheck-har.sh` 装到 `libs/PandaCheck.har`。模块 `oh-package.json5` 依赖写 `"PandaCheck": "file:../libs/PandaCheck.har"`。不要把 `Index.ets` 放进 `libs/`。不要 `ohpm install fast-check`。
 
 这不是 Kea。这不是 OpenHarmony GN C++。主机 `es2panda`/`ark`（`PBT_PANDA=1`）
 是**另一条** runner，不要和 ohosTest 混用。
+
+`--isolate`（配合 `--scope file.ets --func Name`）生成**迷你 HAP**，把真实 `--scope` 文件及其相对 import 用符号链接进去。用来测大应用里的函数（如 Photos），不必编整个 APK。import 图必须是公开 kit。系统 API 或整仓 HAR **STOP**。不改 HARD `--scope`，不把函数体复制到 `ohosTest/ets/sut/`。测试任务工作目录是 `<out>/isolate-hap`。从 `entry/src/main/ets` 的符号链接导入（提示里写了 specifier）。`entry/src/common` 或 `ohosTest` 里的拷贝不是 `--scope`。`--build-cmd` 换成该 HAP 里 `ohpm install` 之后的 `assembleHap … entry@ohosTest`。隔离 STOP 和 `ohpm install` 失败的退出码是 3。
 
 ## 特性清单
 
@@ -22,16 +24,16 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 
 `let`、`const`、类型推断、`void`、运算符、`if` / `switch` / 循环和 `this` 是语法，不计入。性质不抽取它们。
 
-这份 34 行清单里，**14 项已支持，11 项部分支持，9 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
+这份 34 行清单里，**18 项已支持，9 项部分支持，7 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
 
 | 教程特性 | pi-pbt | 含义 |
 | --- | --- | --- |
 | `number` | 已支持 | `integer()` / `double()`。 |
-| `bigint` | 不支持 | 没有生成器。 |
+| `bigint` | 已支持 | `bigint()`。`integer()` 不是 `bigint`。 |
 | `boolean` | 已支持 | `boolean()`。 |
 | `string` | 已支持 | `string()`。 |
 | `Object` | 不支持 | 不是能构造的字段袋。 |
-| `number` / `string` / `boolean` 的数组 | 已支持 | `array(integer())`、`array(string())` 或 `array(boolean())`。只抽元素会被拒绝。SDK 品牌类型的空 `T[]`（`ImageItem[]`）只能传 `[]` / `constant([])`；非空品牌数组仍 `retired`。 |
+| `number` / `string` / `boolean` 的数组 | 已支持 | `array(integer())`、`array(string())` 或 `array(boolean())`。只抽元素会被拒绝。原语字段袋的非空数组，包括 SDK `FingerInfo[]`，用 `array(recordOf(fn, show), { minLength: 1 })`。品牌 `ImageItem[]` / `Length[]` 仍只能传 `[]`。 |
 | `enum` | 已支持 | 同文件，或相对导入一跳，用每个成员的 `constantFrom`。第二跳看不见。 |
 | 联合 | 部分支持 | 原语、字符串字面量、数字字面量、混合字面量，以及字面量加开放原语，能抽取。不可抽的臂 `retired`。 |
 | 类型别名 | 部分支持 | 可抽取的别名，如 `type Mode = 'xs' \| 'sm'`，会展开并走既有门禁。`Date` 或 class 的别名不展开。 |
@@ -41,23 +43,23 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 | 函数类型 | 部分支持 | 真正的 `(...) =>` 用具名函数或箭头。`Function` 和 `ESObject` `retired`。 |
 | 重载 | 部分支持 | 每个原语臂或每种元数都要调用。非原语臂 `retired`。 |
 | 带字段的 class 或 `struct` | 已支持 | 在 `--scope` 里声明时，用 `new` 或每个字段的 `record`。 |
-| `static` 字段或方法 | 部分支持 | 参数为 `number`、`string` 或 `boolean` 的 public static 方法必须写成 `Class.method(drawn)`。static 字段不在此门禁内。 |
+| `static` 字段或方法 | 已支持 | 参数为 `number`、`string` 或 `boolean` 的 public static 方法必须写成 `Class.method(drawn)`。这些类型的 public static 字段，包括未标注的 `= 0`、`= 'albumType'`、`= true`，要在同一 property 回调里 `Class.field = drawn` 再读取 `Class.field`。readonly 字段只读取。private、protected、非精确类型和 `Date` 字段不在此门禁内。 |
 | getter / setter | 部分支持 | `number`、`string` 或 `boolean` 的 public getter 或 setter 必须在构造出的实例上读取或赋值。setter 的参数要抽取。`Date` 的 getter 不在此门禁内。 |
 | 继承、`super`、抽象类 | 不支持 | 不构造。 |
 | `private` / `protected` 字段 | 不支持 | 套件不得改 `--scope` 来暴露它。 |
-| 对象字面量 | 部分支持 | 只限已知字段袋。`record()` 本身只有 `{w, h}`。 |
+| 对象字面量 | 部分支持 | `record()` 是 `{ w, h }`、`{ x, y }` 或 `{ left, top, right, bottom }`。其它 `number`/`string`/`boolean` 字段袋用 `recordOf`。可选字段用 `optional(integer())`、`optional(string())` 或 `optional(boolean())`。`[number, number]` 字段用 `numberPair`。可选数对用 `optional(numberPair(x, y))`，不是始终有值的字面量。同文件里另一个 interface 字段袋用 `record().generate` 或 `recordOf().generate`，一层，结果上需要 `as Name`。`number[]`、`string[]`、`boolean[]` 字段用 `array().generate`。可选数组字段用 `optional(array(integer())).generate`。`[]` 不是该字段。`number[][]`、class、ArkUI `struct`、`@Sendable` class、`Date` 和其它元组仍不支持。 |
 | `Record<K, V>` | 不支持 | 不是通用映射。 |
 | interface | 部分支持 | `--scope` 里的字段袋可以构造。只有方法的契约不是值。 |
 | 泛型函数 | 已支持 | 调用必须是 `name<string>`、`name<number>` 或 `name<boolean>`。推断调用被拒绝。 |
 | 泛型约束 | 部分支持 | 约束到这三种能抽取。其他约束 `retired`。 |
-| 泛型类 | 不支持 | 不构造 `CustomStack<string>`。 |
+| 泛型类 | 已支持 | `new CustomStack<string>()`、`<number>` 或 `<boolean>`，再在该实例上以该类型的抽取值调用方法。推断的 `new CustomStack()` 会被拒绝。这三种以外的约束应 retired。 |
 | 泛型默认值 | 部分支持 | 可抽取的默认值，如 `T = 'xs' \| 'sm'`，会展开并走既有门禁。`Date` 或 class 的默认值不展开。 |
 | nullish，`T` 或 `null` / `undefined` | 已支持 | `arkNullish`。调用不得用 `!` 或 `??` 丢掉该臂。 |
 | `--func` 的具名导入 | 已支持 | `passing` / `failing` 必须导入该文件并调用该符号。 |
 | 导入别名或命名空间 | 已支持 | `id as ident` 和 `ids.id(...)` 算。调用兄弟符号不算。 |
 | 默认导出 | 已支持 | 默认导出的函数必须按默认导入并调用。class 或值的默认导出不是这个绑定。 |
 | 动态 `import()` | 不支持 | 结果是 `ESObject`。 |
-| `throw` / `try` | 部分支持 | `--func`、同文件被调、直接导入，以及最多三跳的 throw 必须捕获。第四跳看不见。 |
+| `throw` / `try` | 已支持 | `--func`、同文件被调、直接导入，以及最多四跳的 throw 必须捕获。第五跳看不见。 |
 | `@interface` 注解 | 不支持 | 不是值。 |
 | ArkUI | 不支持 | 声明式 UI 不是这条 runner。 |
 
@@ -70,10 +72,10 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 `hvigorw`（项目包装、`PATH`、或 DevEco 安装）。只在 `PATH` 上有 `hvigorw`
 不会把当前目录变成 HAP 根。
 
-OpenHarmony 组件上 `--scope` 以 `.ets` 结尾就是 ArkTS,即使没有 HAP。不要因为缺
-hvigor 根就 retired。从该文件导入 `--func`,只复用用户 `--build-cmd` 重建(主机
-`es2panda`/`ark`,或 `ohos_arkts_unittest`)。不要把 SUT 抄进另一个 HAP 的
-`ohosTest/ets/sut/`。`--lang` 是文案语言(`zh` / `en`),不是 C++ 还是 ArkTS。
+OpenHarmony 组件上 `--scope` 以 `.ets` 结尾就是 ArkTS，即使没有 HAP。不要因为缺
+hvigor 根就 retired。从该文件导入 `--func`，只复用用户 `--build-cmd` 重建(主机
+`es2panda`/`ark`，或 `ohos_arkts_unittest`)。不要把 SUT 抄进另一个 HAP 的
+`ohosTest/ets/sut/`。`--lang` 是文案语言(`zh` / `en`)，不是 C++ 还是 ArkTS。
 
 ## 跑之前（前置条件）
 
@@ -102,7 +104,7 @@ hvigor 根就 retired。从该文件导入 `--func`,只复用用户 `--build-cmd
 写完套件后，设备 `aa test` 仍需要 `hdc` 和可签名的 HAP。GN `*_abc` 不是这条 runner。
 
 `build-run` 碰到 HAP 根会为该进程设 `PBT_HAP=1`。不要把 `PBT_HAP` 写进
-shell profile：残留的 `1` 会把之后的 C++ campaign 也逼进 HAP 模式。树是
+shell profile：残留的 `1` 会把之后的 C++ 测试任务也逼进 HAP 模式。树是
 ArkTS 但缺清单、又要用自由入口 `pi-pbt` / `-p` 时，只在**这一条命令**上设
 `PBT_HAP=1`。
 
@@ -152,13 +154,13 @@ pi-pbt build-run \
 `--func` 必须带 `--scope`，且写在 `--scope` **后面**。`--out` 可选（默认
 `<repo>/pbt-out`）。自定义 `--out` 目录可以放 `REPORT.md`。
 
-`--build-cmd` 是操作者输入。失败则战役不启动（`BUILD FAILED — PBT not started`）。
-`true` 这类空操作不能证明 `passing` / `failing`。HAP 战役不要加 `--prompt`，
+`--build-cmd` 是操作者输入。失败则测试任务不启动（`BUILD FAILED — PBT not started`）。
+`true` 这类空操作不能证明 `passing` / `failing`。HAP 测试任务不要加 `--prompt`，
 除非有 SOP 不知道的领域事实。
 
 工具链、SDK 对齐、PandaCheck HAR、签名、`aa test` 见 `arkts-build-run` 技能卡。
 pi-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor 钉。自己对齐，
-或让战役大声失败。
+或让测试任务大声失败。
 
 ## `passing` / `failing` 性质必须满足什么
 
@@ -172,13 +174,14 @@ pi-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor 钉�
 | 签名含 `| null`、`| undefined` 或可选参数时：用 `oneof` + `constant(null)` / `constant(undefined)` 抽出该臂，并原样传入，不用 `as`、`!`、`??` | 丢掉该臂，或用 `as` / `ESObject` 收窄 |
 | `--scope` 里声明的 `enum`：`constantFrom` 列出每个成员，回调类型为该 enum，不用 `as` | 用 `integer()` / `string()` 再 `as` 成 enum，或漏掉一个成员 |
 | `string \| number` 以及其他 `string` / `number` / `boolean` 联合：`oneof` 抽出每一臂，不用 `as` | 只抽一臂，或 `as` 成其中一臂 |
-| `--scope` 里声明的 `struct`：`record` 列出每个字段（或 `new StructName`），回调类型为该 struct，不用 `as` | 对普通对象 `as Rect` / `ESObject`，或 `record` 漏字段 |
+| `--scope` 里声明的 `struct`：`record({ w, h })`、`record({ x, y })`、LTRB `record`，或其它 `number`/`string`/`boolean` 字段袋用 `recordOf(fn, show)`，可选字段用 `optional()`（或 `new StructName`）。嵌套的 interface 字段用 `record().generate` 或 `recordOf().generate`，只在该结果上 `as Name`。`number[]` / `string[]` / `boolean[]` 字段用 `array().generate`。回调类型为该 struct，此外不用 `as` | 对普通对象 `as Rect` / `ESObject`，漏字段，内层袋里的 `optional()` 冒充可选嵌套字段，把 class / ArkUI `struct` / `@Sendable` 字段当成嵌套袋，用 `[]` 冒充 `number[]` 字段，或对 `[number, number]` 以外的元组 / `number[][]` / 其它非原语字段用 `recordOf`，或可选字段没用 `optional()`，或 `recordOf` 只有一个参数 |
 | 函数型参数：传入具名 `.ets` 函数或箭头，不用 `as` | 丢掉回调，或 `as ESObject` / `as (x) =>` |
 | `--scope` 里用 `;` 声明的重载：每个签名都要调用（每一原语臂或每一元数），不用 `as` | 只抽第一个重载 |
 | HAR 原语与 `--scope` 里具名字段袋的联合：`oneof` 抽出每一臂，不用 `as` | 只抽一臂 |
 | Sendable 参数（`@Sendable` 类、`SendableMap` / `ISendable`、`collections.Array`）：**retired** | `integer()`，或本线程上的 `new Box(n)` |
 | 品牌 SDK 类型（`Length`、`Resource`、未在 `--scope` 声明的 `@kit.*` / `@ohos.*` 导入）：**retired** | `integer()`，或 `as Length` |
 | 一维品牌 `T[]` / `Array<T>`（`ImageItem[]`）：该实参只传 `[]` 或 `constant([])`，不用 `as` | 构造 `ImageItem`、非空品牌数组，或仅因元素是品牌类型就对该 `--func` retired |
+| 原语字段袋的 `Name[]`，包括 SDK `FingerInfo[]`：`array(recordOf(fn, show), { minLength: 1 })`；`{ x, y }` / `{ w, h }` / LTRB 也可用 `record()`。回调类型为 `Name[]`，把该值传给 `--func`，不用 `as` | `[]`、画出了却没传入、没有 `minLength: 1` 的 `array()`，或 `{ id: 0 } as FingerInfo` |
 | 含不可抽臂的联合（`string | Date`）：**retired** | 只抽可抽的那一臂 |
 | 臂不是 HAR 原语且元数相同的重载：**retired** | 一次 JS 调用，或对一臂 `as Length` |
 | `--func` 调用 `getStringByNameSync`：`constantFrom` 该模块 `string.json` 里的每个 name，并断言 `n === n` | `string()`，或加前缀以致不可能存在的名字 |
@@ -200,7 +203,7 @@ pi-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor 钉�
 |---|---|
 | koala / `arkoala-arkts` / `#generated` | `@koalaui/*`。那边的测试是 Panda `make`，不是 `aa test`。 |
 | `state_mgmt` 的 `utils.ts` 等未导出框架 TS | unittest HAP 按现状编不进该文件。既有 UT 对镜像全局 `declare class`；那不是 `--scope`。 |
-| `test/component_test` 与许多 `examples/` HAP | 常钉在本机没有的 SDK。门禁失败。不要在 pi-pbt 里改靶。 |
+| `test/component_test` 与许多 `examples/` HAP | 常钉在本机没有的 SDK。门禁失败。不要在 pi-pbt 里更换测试目标。 |
 | OpenHarmony GN `build.sh` / `ohos_unittest` | C++ 产品路径。`.ets` 的 `--scope` 不是那条路。 |
 
 ## 证据
@@ -232,7 +235,7 @@ pi-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor 钉�
 - 若本 HAP 无法按现状导入 `--scope`，**retired**。真实 `hvigorw` 成功后全
   `retired` 的 `report.json` 可通过校验
   （[#533](https://github.com/fermat-hkrc/FMBot-PBT/issues/533)）。`--scope` 里声明的
-  `struct` 必须用每个字段的 `record` 或 `new StructName` 构造
+  `struct` 必须用 `record({ w, h })`、`record({ x, y })`、LTRB `record`、其它 `number`/`string`/`boolean` 字段袋的 `recordOf(fn, show)`，可选字段用 `optional()`，或 `new StructName` 构造。嵌套的 interface 字段用 `record().generate` 或 `recordOf().generate`，只在该结果上 `as Name`。class、ArkUI `struct`、`@Sendable` 字段不是这个画法。原语字段袋的 `Name[]`，包括 `FingerInfo[]`，用 `array(recordOf(fn, show), { minLength: 1 })` 传给 `--func`。带嵌套字段的袋不是这个数组。`ImageItem[]` 仍是 `[]`
   （[#535](https://github.com/fermat-hkrc/FMBot-PBT/issues/535)）。函数型参数必须传入具名
   `.ets` 函数或箭头
   （[#537](https://github.com/fermat-hkrc/FMBot-PBT/issues/537)）。用 `;` 声明的重载必须全部调用
@@ -247,7 +250,7 @@ pi-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor 钉�
 - **PandaCheck 能驱动的 SUT 类型：** 已导出的 `number` / `string` / `boolean` /
   其数组，可写成 `.ets` 字面量的普通对象，以及经套件 `arkNullish` 的
   `T | null` / `T | undefined` / 可选参数。`passing` / `failing` 必须抽出该臂并无 `as`、`!`、`??` 传入。例如
-  `export function add(a: number, b: number): number`。相对导入一跳的 enum 用该文件每个成员的 `constantFrom`。第二跳仍然看不见。字符串字面量联合（`'xs' | 'sm'`）、数字字面量联合（`0 | 1 | 2`），以及二者混合（`'xs' | 1`），用每个字面量的 `constantFrom` 或 `oneof(constant(...))`。`string()` / `integer()` 不是该联合。`[number, number]` 用 `property2` 构造 `[x, y]`。不要传入 `tuple()` 的 `Pair`。字面量与开放原语的联合（`'xs' | number`）用 `oneof(constant('xs'), integer())`。
+  `export function add(a: number, b: number): number`。相对导入一跳的 enum 用该文件每个成员的 `constantFrom`。第二跳仍然看不见。字符串字面量联合（`'xs' | 'sm'`）、数字字面量联合（`0 | 1 | 2`），以及二者混合（`'xs' | 1`），用每个字面量的 `constantFrom` 或 `oneof(constant(...))`。`string()` / `integer()` 不是该联合。`[number, number]` 一个参数用 `property2` 构造 `[x, y]`。每个更多的数对用不同的 `numberPair`，传给同一个 `property()`。不要传入 `tuple()` 的 `Pair`。字面量与开放原语的联合（`'xs' | number`）用 `oneof(constant('xs'), integer())`。
 
 ### 不支持
 
@@ -259,7 +262,7 @@ pi-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor 钉�
 | 缺口 | 现在会怎样 | 要改进什么 |
 |---|---|---|
 | koala / `@koalaui` / `#generated` | 诚实收尾是全 `retired`；`report.json` 可通过校验。编不进 ohosTest。 | koala/Panda runner，或完整 OH 镜像路径，不是 HAP ohosTest。 |
-| 未导出框架 `.ts`（如 `state_mgmt` `utils.ts`） | ohosTest 导不进该类。既有 UT 对镜像全局 `declare class`。诚实收尾是全 `retired`；`report.json` 可通过校验。 | 继续 retired（当前诚实结果），或在**不改文件**的前提下编进它。 |
+| 未导出框架 `.ts`（如 `state_mgmt` `utils.ts`） | ohosTest 导不进该类。既有 UT 对镜像全局 `declare class`。诚实收尾是全 `retired`；`report.json` 可通过校验。 | 继续 retired（当前诚实结果），或在**不改文件**的前提下把它编译进来。 |
 | SDK / hvigor / `runtimeOS` 不匹配 | 门禁失败，或工具链被推迟。pi-pbt 不改清单。 | 大声报出期望的 SDK 字段。操作者预检，不要静默改靶。 |
 | `test/component_test` 与许多 `examples/` HAP | 常是 API 12 / HarmonyOS 5.x；本机 SDK 26 树装不了。 | 同上：大声失败。不要改写 `compatibleSdkVersion`。 |
 | OpenHarmony GN `build.sh` | 独立的 C++ 产品路径。`.ets` 的 `--scope` 不是那条路。 | 保持拆分。ArkTS `--scope` 不要起 GN。 |
@@ -282,7 +285,7 @@ HAR 是转换后的 JS（对 npm fast-check 做 `ohpm convert`）。它生成 JS
 | 不支持类型的联合 | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。只抽 `string()` 不是 `string \| Date`。 | 为每一臂写具名 `.ets` 适配器。不要硬撑 HAR。 |
 | 品牌/不透明 SDK 类型 | 裸 `Length` / `Resource`：`passing` / `failing` 被拒绝。诚实收尾是 `retired`。`as Length` 不是该类型。一维品牌 `T[]` 可以是 `[]` / `constant([])`（[#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)）。 | 非空品牌值的类型化构造。不要硬撑 HAR。 |
 | 臂不是 HAR 原语的重载 | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。一次 JS 调用不是该集合。 | 其余每个签名一条性质。不要硬撑 HAR。 |
-| 被调函数里的 `throw` | 同文件被调函数、直接相对导入，以及最多三跳，必须捕获或对该 `--func` retired。第四跳仍然看不见。 | 在套件实际调用处捕获，或 retired。 |
+| 被调函数里的 `throw` | 同文件被调函数、直接相对导入，以及最多四跳，必须捕获或对该 `--func` retired。第五跳仍然看不见。 | 在套件实际调用处捕获，或 retired。 |
 | `getStringByNameSync` | 未抽出 `string.json` 里每个 name 时，`passing` / `failing` 被拒绝。`string()` 只打到 throw 路径。 | 对这些 name 用 `constantFrom`。断言有限。`NaN` 是失败结果，不是成功的 number。 |
 | 约束到不支持类型的泛型 | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。`name<string>` 不是 `T extends SomeStruct`。 | 对该 `--func` retired。 |
 | 类型不是函数的回调（`Function`、`ESObject`） | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。具名 stub 不是 `Function` 或 `ESObject`。 | 对该 `--func` retired。 |
@@ -298,14 +301,14 @@ HAR 是转换后的 JS（对 npm fast-check 做 `ohpm convert`）。它生成 JS
    它的文件。
 3. Koala / Panda：文档化的非 HAP runner，或继续对 koala `--scope` retired。
 4. **ArkTS SUT 类型：** 不要在 `.ets` 里硬撑 TS fast-check。nullish 用套件里的
-   `arkNullish`，不 fork fast-check。`--scope` 里的 enum 用成员的 `constantFrom`。`--scope` 里的 struct 用字段的 `record` 或 `new StructName`。函数型参数用具名 `.ets` 函数或箭头。用 `;` 声明的重载每个签名都要调用。这些臂的混合联合用每一臂的 `oneof`。Sendable 参数应 retired（[#543](https://github.com/fermat-hkrc/FMBot-PBT/issues/543)）。品牌 SDK 类型（`Length`、`Resource`）应 retired（[#545](https://github.com/fermat-hkrc/FMBot-PBT/issues/545)）。品牌 `T[]`（`ImageItem[]`）用 `[]` 或 `constant([])`（[#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)）。含不可抽臂的联合应 retired（[#547](https://github.com/fermat-hkrc/FMBot-PBT/issues/547)）。臂不是 HAR 原语的重载应 retired（[#549](https://github.com/fermat-hkrc/FMBot-PBT/issues/549)）。同文件被调函数里的 throw 应捕获（[#551](https://github.com/fermat-hkrc/FMBot-PBT/issues/551)）。约束到不支持类型的泛型应 retired。`name<string>` 不是 `T extends SomeStruct`。`Function` 或 `ESObject` 回调应 retired。具名 stub 只适用于 `(...) =>`。`passing` / `failing` 必须导入并调用 `--func`。只导入文件再调用兄弟符号不是该符号。字符串字面量联合、数字字面量联合，以及二者混合，用每个字面量的 `constantFrom` 或 `oneof(constant(...))`。`string()` / `integer()` 不是该联合。`[number, number]` 用 `property2` 构造 `[x, y]`，不要传入 `Pair`。字面量与开放原语的联合用 `oneof(constant(...), integer()/string())`。三跳之外的 throw 应捕获或 retired。第四跳仍然看不见。缺失的 `hvigorw` / SDK 已经推迟构建门。长期：同
+   `arkNullish`，不 fork fast-check。`--scope` 里的 enum 用成员的 `constantFrom`。`--scope` 里的 struct 用 `record({ w, h })`、`record({ x, y })`、LTRB `record`、其它 `number`/`string`/`boolean` 字段袋的 `recordOf(fn, show)`，或 `new StructName`。可选原语字段用 `optional()`。这种字段袋的 `Name[]`，包括 `FingerInfo[]`，用 `array(recordOf(fn, show), { minLength: 1 })` 传给 `--func`。`ImageItem[]` 仍是 `[]`。`[number, number]` 字段用 `numberPair`。可选数对用 `optional(numberPair(x, y))`。嵌套的 interface 字段用 `record().generate` 或 `recordOf().generate`，只在该结果上 `as Name`。class、ArkUI `struct`、`@Sendable` 字段不是这个画法。带嵌套字段的袋不是 `Name[]`。`number[]` / `string[]` / `boolean[]` 字段用 `array().generate`。`number[][]` 不是。其它元组和非原语字段不是 `recordOf`。函数型参数用具名 `.ets` 函数或箭头。用 `;` 声明的重载每个签名都要调用。这些臂的混合联合用每一臂的 `oneof`。Sendable 参数应 retired（[#543](https://github.com/fermat-hkrc/FMBot-PBT/issues/543)）。品牌 SDK 类型（`Length`、`Resource`）应 retired（[#545](https://github.com/fermat-hkrc/FMBot-PBT/issues/545)）。品牌 `T[]`（`ImageItem[]`）用 `[]` 或 `constant([])`（[#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)）。含不可抽臂的联合应 retired（[#547](https://github.com/fermat-hkrc/FMBot-PBT/issues/547)）。臂不是 HAR 原语的重载应 retired（[#549](https://github.com/fermat-hkrc/FMBot-PBT/issues/549)）。同文件被调函数里的 throw 应捕获（[#551](https://github.com/fermat-hkrc/FMBot-PBT/issues/551)）。约束到不支持类型的泛型应 retired。`name<string>` 不是 `T extends SomeStruct`。泛型类方法是 `new CustomStack<string>()` 再在该实例上 `stack.push(drawn)`。`Function` 或 `ESObject` 回调应 retired。具名 stub 只适用于 `(...) =>`。`passing` / `failing` 必须导入并调用 `--func`。只导入文件再调用兄弟符号不是该符号。字符串字面量联合、数字字面量联合，以及二者混合，用每个字面量的 `constantFrom` 或 `oneof(constant(...))`。`string()` / `integer()` 不是该联合。`[number, number]` 一个参数用 `property2` 构造 `[x, y]`，更多的数对用不同的 `numberPair`。不要传入 `Pair`。字面量与开放原语的联合用 `oneof(constant(...), integer()/string())`。四跳之外的 throw 应捕获或 retired。第五跳仍然看不见。缺失的 `hvigorw` / SDK 已经推迟构建门。长期：同
    `check`/`property` 形态的 ArkTS PBT 库，无 `any`、无 `<const T>`。扫描 scoped
    签名，只允许匹配的 arbitrary。
 
 ## 相关
 
-- [安装：HAP / ArkTS 应用](../installation.zh.md#harmonyos-hap--arkts-应用)
-  （[English](../installation.md#harmonyos-hap--arkts-apps)）
+- [安装：HAP / ArkTS 应用](../subcommands.zh.md#build-run)
+  （[English](../subcommands.md#build-run)）
 - [英文 ArkTS 页](arkts.md)
 - [子命令](../subcommands.zh.md) — `build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"`
 - [Kea GUI 测试](../kea.zh.md) — 真机黑盒 UI，不是源码级 ArkTS

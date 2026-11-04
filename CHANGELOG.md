@@ -10,6 +10,68 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.2.1 - 2026-11-04
+
+### English
+
+Everything since 0.2.0.
+
+#### Added
+
+- **PandaCheck installs as a built HAR.** `make-pandacheck-har.sh` runs `assembleHar` with the campaign SDK and writes `libs/PandaCheck.har`. A module depends on `file:../libs/PandaCheck.har`. A source directory in `libs/` is not the package. The helper uses the DevEco `tools/bin` wrapper and that install's Node, then runs `ohpm install` when it rewrites an old specifier. (#657, #655)
+- **`bigint()` draws a `bigint` parameter.** `integer()` is a `number`, not that value. (#654)
+- **A generic class is constructed, then called.** `new CustomStack<string>()` and `stack.push(drawn)` on that instance. (#645)
+- **A public static primitive field is drawn.** `Class.field = drawn`, then a read of `Class.field` inside the property. (#643)
+- **A throw four hops away must be caught.** (#644)
+- **A `number[]`, `string[]`, or `boolean[]` field is `array().generate`.** (#642)
+- **One nested interface bag is `record().generate` or `recordOf().generate`, then `as Name`.** (#641)
+- **A `[number, number]` field is `numberPair`.** (#640)
+- **A non-empty array of a primitive bag, including SDK `FingerInfo[]`, is `array(recordOf(...), { minLength: 1 })`.** (#639)
+- **An optional primitive field is `optional()`.** (#638)
+- **A primitive bag `record()` cannot name is `recordOf(fn, show)`.** (#637)
+- **`--isolate` builds a mini HAP** for one `--func` and its import graph. (#635)
+- **`--spec` is repeatable** on `build-run`, MCP, and `watch`.
+
+#### Changed
+
+- pi is 1.5.0. pi-subagents is 0.84.0.
+- Custom providers are the documented model setup. GLM examples use GLM-5.3.
+
+#### Fixed
+
+- A template `${...}` no longer hides a later static method. (#653)
+- `--isolate` is scored against the symlink, not a copied stub.
+
+### 中文
+
+0.2.0 之后的全部改动。
+
+#### 新增
+
+- **PandaCheck 以构建好的 HAR 安装。** `make-pandacheck-har.sh` 用战役的 SDK 跑 `assembleHar`，写入 `libs/PandaCheck.har`。模块依赖是 `file:../libs/PandaCheck.har`。`libs/` 里的源码目录不是这个包。脚本使用 DevEco 的 `tools/bin` 包装脚本和同一安装里的 Node，改写旧依赖后会跑 `ohpm install`。(#657、#655)
+- **`bigint()` 抽取 `bigint` 参数。** `integer()` 是 `number`，不是该值。(#654)
+- **泛型类先构造再调用。** `new CustomStack<string>()`，再在该实例上 `stack.push(drawn)`。(#645)
+- **公开静态原语字段可抽取。** 先 `Class.field = drawn`，再在性质回调里读 `Class.field`。(#643)
+- **隔四跳的 throw 必须被捕获。** (#644)
+- **`number[]`、`string[]` 或 `boolean[]` 字段用 `array().generate`。** (#642)
+- **一层嵌套接口袋用 `record().generate` 或 `recordOf().generate`，再 `as Name`。** (#641)
+- **`[number, number]` 字段用 `numberPair`。** (#640)
+- **非空的原语袋数组，包括 SDK 的 `FingerInfo[]`，用 `array(recordOf(...), { minLength: 1 })`。** (#639)
+- **可选原语字段用 `optional()`。** (#638)
+- **`record()` 叫不出的原语袋用 `recordOf(fn, show)`。** (#637)
+- **`--isolate` 为一个 `--func` 及其导入图构建迷你 HAP。** (#635)
+- **`--spec` 可重复**，用于 `build-run`、MCP 和 `watch`。
+
+#### 变更
+
+- pi 为 1.5.0。pi-subagents 为 0.84.0。
+- 文档中的模型设置以自定义提供方为默认。GLM 示例使用 GLM-5.3。
+
+#### 修复
+
+- 模板字符串里的 `${...}` 不再藏住后面的静态方法。(#653)
+- `--isolate` 按符号链接的真实路径计分，不按拷贝的占位文件。
+
 ## 0.2.0 - 2026-10-28
 
 ### English

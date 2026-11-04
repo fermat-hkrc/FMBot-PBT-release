@@ -24,7 +24,7 @@ Run the commands from `workdir`. For an MCP run in the default worktree mode,
 pi-pbt has rewritten paths from the deleted worktree to the original repository.
 Check out `run.revision`, apply the managed run's `changes.patch`, and then run
 the recorded commands. See the
-[MCP run-artifact description](installation.md#delegation-from-another-coding-agent-mcp).
+[MCP run-artifact description](subcommands.md#mcp).
 An in-place managed run (one started with `build_cmd`) needs no path rewrite or
 patch relocation. `run` is required to be narrowed to one property or test case,
 not the whole suite.
@@ -62,7 +62,7 @@ The following are command families, not pasteable universal recipes:
 
 | Project family | Typical build or run entry |
 |---|---|
-| OpenHarmony (GN) | Use the component's official `build.sh` target and the exact product/workdir recorded by the campaign. `host_product` is preferred when that component supports it; it is not available for every component. See [Build first, then test](installation.md#build-first-then-test-build-run-bring-your-own-build-command). |
+| OpenHarmony (GN) | Use the component's official `build.sh` target and the exact product/workdir recorded by the campaign. `host_product` is preferred when that component supports it; it is not available for every component. See [Build first, then test](subcommands.md#build-run). |
 | CMake / ctest | `cmake --build <build-dir> --target <recorded-target>`, then `ctest --test-dir <build-dir> -R <recorded-case>` if the project registered the test with ctest. |
 | Cargo | `cargo test <recorded-name>`; a separate `cargo build --tests` is optional rather than universally required. |
 | pytest | `pytest <recorded-file-or-node-id>`; there may be no separate build step. |
@@ -70,7 +70,7 @@ The following are command families, not pasteable universal recipes:
 | npm / jest / vitest | Use the project's package script and the file/test filter recorded by the campaign. Script names and argument forwarding differ by repository. |
 
 For a project with an official or non-obvious build entry, start the campaign
-with [`pi-pbt build-run`](installation.md#build-first-then-test-build-run-bring-your-own-build-command)
+with [`pi-pbt build-run`](subcommands.md#build-run)
 so the resulting report records a known command rather than an inferred one.
 
 Two environment variables are worth knowing:
@@ -85,7 +85,7 @@ Two environment variables are worth knowing:
   toolchain is available, but it never controls whether the test itself can run.
   A plain reproduction does not need coverage. Set `PBT_CODE_COVERAGE=0` if you
   are launching another pi-pbt campaign and want to disable instrumentation; see
-  [Code coverage reports](installation.md#code-coverage-reports).
+  [Code coverage reports](subcommands.md#environment-variables).
 
 ## 3. Keep the tests
 

@@ -8,10 +8,10 @@ pi-pbt 有两类不同的“覆盖率”，不能混为一谈：
 2. **代码覆盖率（execution evidence，执行证据）**：可用工具链会对 campaign 自己的
    构建和测试做插桩，产出 `pbt-out/code-coverage/` 下的原生 HTML 报表，并把
    `COVERAGE.md` 的声明与实际执行过的符号交叉核对。安装、工具链和开关见
-   [安装指南的代码覆盖率章节](installation.zh.md#代码覆盖率报表)。
+   [安装指南的代码覆盖率章节](subcommands.zh.md#环境变量)。
 
 本页主要解释第一类台账及其命令。命令总览见
-[`scan` / `coverage`](subcommands.zh.md#scan--coverage)。
+[`scan` / `coverage`](subcommands.zh.md#其他命令)。
 
 ---
 
@@ -33,7 +33,7 @@ internal/trivial（内部或简单包装）模式后的启发式分类，不表�
 
 自动语言探测只用 `find -maxdepth 2` 看 `--dir` 下两层；源码更深时应把 `--dir`
 直接指向源码子树，或用 `--lang c/c++|python|rust|typescript|go`。这与
-[子命令文档的说明](subcommands.zh.md#scan--coverage)一致。
+[子命令文档的说明](subcommands.zh.md#其他命令)一致。
 
 `hook-run` 也会尝试预扫描，但当前实现把索引写到
 `<out>/../pbt-out/FUNCTION_INDEX.md`，不一定是 campaign 最终写产物的根目录；扫描失败时
@@ -49,7 +49,7 @@ pi-pbt hook-run <sha> --repo . --out ./pbt-out
 ```
 
 `<sha>` 用于读取 diff 并写入 prompt，不会替你 checkout；被编译和测试的是 `--repo`
-当前工作树。完整前提和退出码见[安装指南的 CI / git hook 集成](installation.zh.md#ci--git-hook-集成)。
+当前工作树。完整前提和退出码见[子命令参考的 hook-run](subcommands.zh.md#hook-run)。
 
 命令启动前会清空选定的 `--out` 和工作目录，再尽力预扫描；因此不要把“增量模式”理解为
 该目录里的台账一定跨 `hook-run` 自动保留。需要跨 campaign 保存登记表时，应另外归档

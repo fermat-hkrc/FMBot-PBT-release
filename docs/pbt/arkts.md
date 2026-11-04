@@ -2,19 +2,31 @@
 
 [中文版 / Chinese version](arkts.zh.md)
 
-[Back to installation](../installation.md#harmonyos-hap--arkts-apps) ·
+[Back to installation](../subcommands.md#build-run) ·
 [Subcommands](../subcommands.md)
 
 pi-pbt supports ArkTS as **HarmonyOS HAP ohosTest**. A property is Hypium +
 PandaCheck in `src/ohosTest/ets/test/<Name>Pbt.test.ets`
-(`import { check, property, integer, string, boolean } from 'PandaCheck'`),
+(`import { check, property, integer, string, boolean, bigint } from 'PandaCheck'`),
 assembled with `hvigorw`, and run with `hdc shell aa test`. The verdict is
 `OHOS_REPORT_RESULT`. Install the library with `make-pandacheck-har.sh` into
-`libs/PandaCheck`. Do not `ohpm install fast-check`.
+`libs/PandaCheck.har`. Depend on `"PandaCheck": "file:../libs/PandaCheck.har"` from the module `oh-package.json5`. Do not copy `Index.ets` into `libs/`. Do not `ohpm install fast-check`.
 
 This is not Kea. This is not OpenHarmony GN C++. Host `es2panda`/`ark`
 (`PBT_PANDA=1`, `text()`/`bool()`, `PANDACHECK_RESULT`) is a **separate** runner
 for compiler `.ets` that is not a HAP. Do not mix the two.
+
+`--isolate` (with `--scope file.ets --func Name`) builds a **mini HAP** that
+symlinks the real `--scope` file and its relative imports. Use it to test a
+function in a large app (Photos) without compiling the APK. The import graph
+must be public kits (`@ohos.hilog`, `@ohos.i18n`, …). System APIs
+(`systemParameterEnhance`, `photoAccessHelper`, …) or a graph bigger than a
+function **STOP**. `--isolate` does not edit HARD `--scope` and does not copy
+the body into `ohosTest/ets/sut/`. The campaign cwd is `<out>/isolate-hap`.
+Import the symlink under `entry/src/main/ets` (the prompt names the specifier).
+A copy under `entry/src/common` or `ohosTest` is not `--scope`. `--build-cmd` is
+replaced by `assembleHap … entry@ohosTest` after `ohpm install` in that HAP.
+Isolate STOP and a failed `ohpm install` exit 3, same as a failed build gate.
 
 ## Feature inventory
 
@@ -26,7 +38,7 @@ types, call shapes, and modules. It is not a percent of ArkTS.
 `let`, `const`, inference, `void`, operators, `if` / `switch` / loops, and
 `this` are syntax. They are not in the count. A property does not draw them.
 
-**14 supported, 11 partial, 9 not supported** on this 34-row checklist.
+**18 supported, 9 partial, 7 not supported** on this 34-row checklist.
 Supported means a passing or failing property can use that form, and a
 close-out gate requires it. Partial means only some forms of that tutorial
 heading are drawn or caught. Not supported means we do not draw it, or the
@@ -35,11 +47,11 @@ honest close is `retired`.
 | Tutorial feature | pi-pbt | What that means |
 | --- | --- | --- |
 | `number` | supported | `integer()` / `double()`. |
-| `bigint` | not supported | No generator. |
+| `bigint` | supported | `bigint()`. `integer()` is not `bigint`. |
 | `boolean` | supported | `boolean()`. |
 | `string` | supported | `string()`. |
 | `Object` | not supported | Not a field bag we can construct. |
-| array of `number` / `string` / `boolean` | supported | `array(integer())`, `array(string())`, or `array(boolean())`. A bare element is rejected. Empty `T[]` when `T` is SDK branded (`ImageItem[]`) may only be `[]` / `constant([])`; a non-empty branded array stays retired. |
+| array of `number` / `string` / `boolean` | supported | `array(integer())`, `array(string())`, or `array(boolean())`. A bare element is rejected. A non-empty array of a `number`/`string`/`boolean` bag, including SDK `FingerInfo[]`, is `array(recordOf(fn, show), { minLength: 1 })`. Empty `T[]` when `T` is SDK branded (`ImageItem[]`, `Length[]`) may only be `[]` / `constant([])`. |
 | `enum` | supported | `constantFrom` of every member in the same file, or one relative import. A second hop is invisible. |
 | union | partial | Primitive, string-literal, numeric-literal, mixed-literal, and literal-plus-primitive unions are drawn. An undrawable arm is `retired`. |
 | type alias | partial | A drawable alias such as `type Mode = 'xs' \| 'sm'` is expanded and the existing gate applies. An alias of `Date` or a class is not expanded. |
@@ -49,23 +61,23 @@ honest close is `retired`.
 | function type | partial | A real `(...) =>` is a named function or an arrow. `Function` and `ESObject` are `retired`. |
 | overload | partial | Every primitive arm, or every arity, must be called. A non-primitive arm is `retired`. |
 | class or `struct` with fields | supported | `new` or `record` of every field, when declared in `--scope`. |
-| `static` field or method | partial | A public static method with a `number`, `string`, or `boolean` parameter must be called as `Class.method(drawn)`. A static field stays outside. |
+| `static` field or method | supported | A public static method with a `number`, `string`, or `boolean` parameter must be called as `Class.method(drawn)`. A public static field of those types, including an unannotated `= 0`, `= 'albumType'`, or `= true`, is `Class.field = drawn` and a read of `Class.field` in that property callback. A readonly field is read. A private or protected field, a non-exact type, and a field of `Date` stay outside. |
 | getter / setter | partial | A public getter or setter of `number`, `string`, or `boolean` must be read or assigned on a constructed instance. A setter argument is drawn. A getter of `Date` stays outside. |
 | inheritance, `super`, abstract class | not supported | Not constructed. |
 | `private` / `protected` field | not supported | The suite must not edit `--scope` to expose it. |
-| object literal | partial | Only a known field bag. `record()` itself is `{w, h}`. |
+| object literal | partial | `record()` is `{ w, h }`, `{ x, y }`, or `{ left, top, right, bottom }`. Any other `number`/`string`/`boolean` bag uses `recordOf`. An optional field is `optional(integer())`, `optional(string())`, or `optional(boolean())`. A `[number, number]` field is `numberPair`. An optional pair is `optional(numberPair(x, y))`, not an always-present literal. A field that is another in-scope interface `{ x, y }`, `{ w, h }`, LTRB, or primitive bag is `record().generate` or `recordOf().generate` with `as Name` on that result, one level only. A `number[]`, `string[]`, or `boolean[]` field is `array().generate`. An optional array field is `optional(array(integer())).generate`. `[]` is not that field. `number[][]`, a class, ArkUI `struct`, `@Sendable` class, `Date`, or other tuple stays out. |
 | `Record<K, V>` | not supported | Not a generic map. |
 | interface | partial | A field bag in `--scope` can be constructed. A method-only contract is not a value. |
 | generic function | supported | The call must be `name<string>`, `name<number>`, or `name<boolean>`. An inferred call is rejected. |
 | generic constraint | partial | A constraint of those three is drawn. Any other constraint is `retired`. |
-| generic class | not supported | `CustomStack<string>` is not constructed. |
+| generic class | supported | `new CustomStack<string>()`, `<number>`, or `<boolean>`, then call that instance's method with a drawn value of that type. An inferred `new CustomStack()` is rejected. A constraint other than those three is retired. |
 | generic default | partial | A drawable default such as `T = 'xs' \| 'sm'` is expanded and the existing gate applies. A default of `Date` or a class is not expanded. |
 | nullish `T` or `null` / `undefined` | supported | `arkNullish`. The call must not use `!` or `??` to drop the arm. |
 | named import of `--func` | supported | A passing or failing property must import the file and call that symbol. |
 | import alias or namespace | supported | `id as ident` and `ids.id(...)` count. A sibling call does not. |
 | default export | supported | A default-exported function must be imported as the default and called. A class or value default is not this binding. |
 | dynamic `import()` | not supported | The result is `ESObject`. |
-| `throw` / `try` | partial | A throw in `--func`, a same-file callee, a direct import, or up to three hops must be caught. A fourth hop is invisible. |
+| `throw` / `try` | supported | A throw in `--func`, a same-file callee, a direct import, or up to four hops must be caught. A fifth hop is invisible. |
 | `@interface` annotation | not supported | Not a value. |
 | ArkUI | not supported | Declarative UI is not this runner. |
 
@@ -191,14 +203,15 @@ The suite is `src/ohosTest/ets/test/*.test.ets`, registered in `List.test.ets`.
 | For an `enum` declared in `--scope`: `constantFrom` of every member, callback typed as that enum, no `as` | `integer()` / `string()` cast to the enum, or a member list that omits one |
 | For `string \| number` and the other unions of `string` / `number` / `boolean`: `oneof` of every arm, no `as` | Drawing only one arm, or casting to one arm |
 | If the scoped function body `throw`s or names `BusinessError`, or calls a same-file helper that does: call it inside `arkThrew` or `try`/`catch` and return a boolean | Happy path only, or an exception that escapes `check()` |
-| A generic: call `name<string>`, `name<number>`, or `name<boolean>` (or a union of those), no `as` | An inferred `name(x)`, or `name<ESObject>` / `any` / `@Sendable` |
-| For a `struct` declared in `--scope`: `record` of every field (or `new StructName`), callback typed as that struct, no `as` | `as Rect` / `ESObject` on a plain object, or a `record` that omits a field |
+| A generic: call `name<string>`, `name<number>`, or `name<boolean>` (or a union of those), no `as`. A generic class method is `new CustomStack<string>()` then `stack.push(drawn)` on that instance | An inferred `name(x)` or `new CustomStack()`, `xs.push` on another value, or `name<ESObject>` / `any` / `@Sendable` |
+| For a `struct` declared in `--scope`: `record({ w, h })`, `record({ x, y })`, LTRB `record`, or `recordOf` for any other `number`/`string`/`boolean` bag (or `new StructName`). An optional field uses `optional()`. A nested interface field is `record().generate` or `recordOf().generate` with `as Name` on that result. A `number[]`, `string[]`, or `boolean[]` field is `array().generate`. Callback typed as that struct, no other `as` | `as Rect` / `ESObject` on a plain object, a bag that omits a field, a bare draw of an optional field, `optional()` inside the inner bag standing in for an optional nested field, a class / ArkUI `struct` / `@Sendable` field drawn as a nested bag, `[]` for a `number[]` field, or `recordOf` on a tuple other than `[number, number]` / `number[][]` / other non-primitive field |
 | For a function-typed parameter: pass a named `.ets` function or an arrow, no `as` | Skipping the callback, or `as ESObject` / `as (x) =>` |
 | For overloads declared with `;` in `--scope`: call every signature (each primitive arm or each arity), no `as` | Drawing only the first overload |
 | For a union of HAR primitives and a named field bag in `--scope`: `oneof` of every arm, no `as` | Drawing only one arm |
 | For a Sendable parameter (`@Sendable` class, `SendableMap` / `ISendable`, `collections.Array`): **retire** | `integer()`, or `new Box(n)` on this thread |
 | For a branded SDK type (`Length`, `Resource`, a `@kit.*` / `@ohos.*` import not declared in `--scope`): **retire** | `integer()`, or `as Length` |
 | For a one-dimensional branded `T[]` / `Array<T>` (`ImageItem[]`): `[]` or `constant([])` at that argument, no `as` | Constructing `ImageItem`, a non-empty branded array, or retiring `--func` only because the element is branded |
+| For `Name[]` of a `number`/`string`/`boolean` bag, including SDK `FingerInfo[]`: `array(recordOf(fn, show), { minLength: 1 })`, or `record()` for `{ x, y }` / `{ w, h }` / LTRB. Callback typed `Name[]`. Pass that value to `--func`, no `as` | `[]`, a generator that is never passed, `array()` without `minLength: 1`, or `{ id: 0 } as FingerInfo` |
 | For a union with an undrawable arm (`string | Date`): **retire** | Drawing only the drawable arm |
 | For overloads whose arms are not HAR primitives and not distinct arities: **retire** | One JS call, or `as Length` on one arm |
 | If `--func` calls `getStringByNameSync`: `constantFrom` of every name in that module's `string.json`, and assert `n === n` | `string()`, or a prefixed name that cannot exist |
@@ -287,9 +300,8 @@ This is the HAP ohosTest path with PandaCheck instead of fast-check. Open issue:
   `T | null` / `T | undefined` / optional parameters via `arkNullish`, and an
   `enum` declared in `--scope`, or imported by one relative hop, via `constantFrom` of every member, and
   `string \| number` (and the other unions of those three) via `oneof` of every
-  arm, and a union of string literals, numeric literals, or both via `constantFrom` or `oneof` of every literal, and a literal mixed with an open primitive via `oneof` of `constant` and that primitive's generator, and a `[number, number]` parameter via `property2` and a `[x, y]` literal, and a generic instantiated as `name<string>` / `name<number>` /
-  `name<boolean>`, and a `struct` declared in `--scope` via `record` of every
-  field or `new StructName`, and a function-typed parameter via a named `.ets`
+  arm, and a union of string literals, numeric literals, or both via `constantFrom` or `oneof` of every literal, and a literal mixed with an open primitive via `oneof` of `constant` and that primitive's generator, and a `[number, number]` parameter via `property2` for one pair or a distinct `numberPair` at each pair argument of the same `property()` call, and a generic instantiated as `name<string>` / `name<number>` /
+  `name<boolean>`, a generic class method via `new CustomStack<string>()` then `stack.push(drawn)` on that instance, and a `struct` declared in `--scope` via `record({ w, h })`, `record({ x, y })`, LTRB `record`, `recordOf(fn, show)` for any other `number`/`string`/`boolean` bag, `optional()` for an optional field, or `new StructName`, a nested interface field via `record().generate` or `recordOf().generate` with `as Name` on that result (a class, ArkUI `struct`, or `@Sendable` field stays out), a `number[]` / `string[]` / `boolean[]` field via `array().generate` (`number[][]` stays out), a `Name[]` of a primitive-field bag including `FingerInfo[]` via `array(recordOf(fn, show), { minLength: 1 })` passed to `--func` (`ImageItem[]` stays `[]`; a bag with a nested field is not that array), and a function-typed parameter via a named `.ets`
   function or an arrow, and overloads via a call per semicolon signature, and a
   mixed union of those arms via `oneof` of every arm. A Sendable parameter is
   not drawable: retire that `--func`. A branded SDK type (`Length`, `Resource`)
@@ -335,7 +347,7 @@ function with those values.
 | Union of unsupported types | `passing` / `failing` is rejected. `retired` is the honest close. Drawing only `string()` is not `string \| Date`. | A named `.ets` adapter for every arm. Do not stretch HAR. |
 | branded/opaque SDK types | Bare `Length` / `Resource`: `passing` / `failing` is rejected. `retired` is the honest close. `as Length` is not that type. One-dimensional branded `T[]` may be `[]` / `constant([])` ([#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)). | Typed constructors for non-empty branded values. Do not stretch HAR. |
 | Overloads whose arms are not HAR primitives | `passing` / `failing` is rejected. `retired` is the honest close. One JS call is not that set. | One property per remaining signature. Do not stretch HAR. |
-| `throw` outside the scoped function body | A same-file callee, a direct import, and up to three hops must be caught or the `--func` retired. A fourth hop is still invisible. | Catch at the call the suite actually makes, or retire. |
+| `throw` outside the scoped function body | A same-file callee, a direct import, and up to four hops must be caught or the `--func` retired. A fifth hop is still invisible. | Catch at the call the suite actually makes, or retire. |
 | `getStringByNameSync` | `passing` / `failing` is rejected unless every `string.json` name is drawn. `string()` only hits the throw path. | `constantFrom` of those names. Assert finite. `NaN` is a failing result, not a successful number. |
 | Generic constrained to an unsupported type | `passing` / `failing` is rejected. `retired` is the honest close. `name<string>` is not `T extends SomeStruct`. | Retire that `--func`. |
 | Callback whose type is not a function (`Function`, `ESObject`) | `passing` / `failing` is rejected. `retired` is the honest close. A named stub is not `Function` or `ESObject`. | Retire that `--func`. |
@@ -355,8 +367,7 @@ function with those values.
    `--scope` is `constantFrom` of its members. A union of `string` / `number` /
    `boolean` is `oneof` of every arm. A scoped function that throws is caught
    with `arkThrew` or `try`/`catch`. A generic is `name<string>`,
-   `name<number>`, or `name<boolean>`. A struct declared in `--scope` is
-   `record` of its fields or `new StructName`. A function-typed parameter is a
+   `name<number>`, or `name<boolean>`. A generic class method is `new CustomStack<string>()` then `stack.push(drawn)` on that instance. A struct declared in `--scope` is `record({ w, h })`, `record({ x, y })`, LTRB `record`, `recordOf` for any other `number`/`string`/`boolean` bag, or `new StructName`. An optional field uses `optional()`. A nested interface field is `record().generate` or `recordOf().generate` with `as Name` on that result. A class, ArkUI `struct`, or `@Sendable` field stays out. A `number[]`, `string[]`, or `boolean[]` field is `array().generate`. `number[][]` stays out. A `Name[]` of a primitive-field bag, including `FingerInfo[]`, is `array(recordOf(fn, show), { minLength: 1 })` passed to `--func`. `ImageItem[]` stays `[]`. A bag with a nested field is not that array. A `[number, number]` field is `numberPair`. An optional pair is `optional(numberPair(x, y))`. Other tuples and non-primitive fields are not `recordOf`. A function-typed parameter is a
    named `.ets` function or an arrow. Overloads declared with `;` need a call per
    signature. A mixed union of those arms is `oneof` of every arm. A Sendable
    parameter is retired ([#543](https://github.com/fermat-hkrc/FMBot-PBT/issues/543)).
@@ -372,9 +383,9 @@ function with those values.
    A union of string literals is `constantFrom` of every literal. `string()` is not that union.
    A union of numeric literals is `constantFrom` of every literal. `integer()` is not that union.
    A union of string and numeric literals is `oneof` of `constant` or `constantFrom` for every literal. `string()` or `integer()` is not that union.
-   A `[number, number]` parameter is `property2(integer(), integer(), (x: number, y: number) => func([x, y]))`. `tuple()` returns a `Pair`, not that type. Any other tuple is retired.
+   One `[number, number]` parameter is `property2(integer(), integer(), (x: number, y: number) => func([x, y]))`. Each further pair is a distinct `numberPair(integer(), integer())` in the same `property()` call. `tuple()` returns a `Pair`, not that type. Any other tuple is retired.
    A literal mixed with an open primitive (`'xs' | number`, `0 | string`) is `oneof` of `constant` or `constantFrom` and that primitive's generator. `string()` alone is not that union.
-   A throw three hops away is caught or retired. A fourth hop is still invisible.
+   A throw four hops away is caught or retired. A fifth hop is still invisible.
    Missing `hvigorw` / SDK already defers the build gate. A mismatch is named and does not rewrite the tree.
    Long term: an ArkTS PBT library with the same `check`/`property` shape, no
    `any`, no `<const T>`. Scan the scoped signature and only allow arbitraries
@@ -382,8 +393,8 @@ function with those values.
 
 ## Related
 
-- [Installation: HAP / ArkTS apps](../installation.md#harmonyos-hap--arkts-apps)
-  ([中文](../installation.zh.md#harmonyos-hap--arkts-应用))
+- [Installation: HAP / ArkTS apps](../subcommands.md#build-run)
+  ([中文](../subcommands.zh.md#build-run))
 - [Chinese ArkTS page](arkts.zh.md)
 - [Subcommands](../subcommands.md) — `build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"`
 - [Kea GUI testing](../kea.md) — black-box UI on a phone, not source-level ArkTS

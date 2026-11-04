@@ -20,7 +20,7 @@ fills in a Markdown overview or bug page where the campaign left none.
 `hook-run` requires both files in the same recognized artifact root. A missing
 or invalid `report.json` makes the check incomplete (exit `2`), even if
 `REPORT.md` exists. See the
-[`hook-run` exit-code table](installation.md#ci--git-hook-integration).
+[`hook-run` exit-code table](subcommands.md#hook-run).
 
 Before `report.json`, consumers had to infer a verdict from Markdown files. The
 JSON makes the result explicit. The shipped validator checks it when the
@@ -246,7 +246,7 @@ then deletes that worktree. Before deletion, pi-pbt rewrites worktree paths in
 `report.json`, `REPORT.md`, `PROPERTIES.md`, `COVERAGE.md`, and bug reports to
 the original repository path. In that repository, check out `run.revision` and
 then apply `changes.patch` before using paths to generated tests. See the
-[MCP run-artifact description](installation.md#delegation-from-another-coding-agent-mcp).
+[MCP run-artifact description](subcommands.md#mcp).
 
 An in-place managed run (selected when `pbt_start` receives `build_cmd`) has no
 relocation step: its absolute paths already refer to the repository where the

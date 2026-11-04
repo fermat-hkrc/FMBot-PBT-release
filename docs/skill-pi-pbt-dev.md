@@ -39,7 +39,7 @@ detached worktree; `include_uncommitted: true` first freezes the current changes
 into a snapshot, while a supplied `build_cmd` deliberately runs in place. The
 MCP path is introduced here before later references to `pbt_report` and
 `pbt://...` result resources; see
-[Delegation from another coding agent](installation.md#delegation-from-another-coding-agent-mcp)
+[Delegation from another coding agent](subcommands.md#mcp)
 for setup and the isolation rules. Install the skill for the synchronous workflow
 described below; configure MCP when you specifically want asynchronous
 delegation. They can coexist.
@@ -345,4 +345,4 @@ host agent. After installing the new archive, run `pi-pbt skill-install --force`
 For project/custom installations, repeat the original `--host project` or
 `--dir` selection with `--force`; back up local edits before replacement, then
 reload the host agent. Verify `pi-pbt --version` and `pi-pbt --list-models`.
-See the [complete upgrade checklist](installation.md#upgrade-an-existing-installation).
+See the [complete upgrade checklist](installation.md#5-upgrade).
