@@ -10,6 +10,26 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.2.2 - 2026-11-05
+
+### English
+
+- Bundle checksum-verified, pinned RapidCheck source for offline C/C++ testing. Reuse project dependencies first; otherwise compile the bundled source with the target toolchain. GoogleTest is optional, and the BSD license ships in the release notices.
+- Read user-provided requirement, API and design documents before mapping implementation and deriving properties across interactive, CLI, MCP and watch campaigns, including whole-scope runs.
+- Make the ArkTS testing handbook an internal `build-run` reference rather than a separate skill. Explain that property counts apply to each function/method or related sequence of operations.
+- Enable system CA roots by default. Add enterprise-certificate exceptions for Huawei and common official dependency hosts, plus process-local package-tool compatibility. Global configuration, package signatures and hashes remain unchanged; `PBT_TLS_EXCEPTIONS=off` disables the exceptions.
+- Support ArkTS `Record<string, number>` through PandaCheck `dictionary()`, including shrinking both values and keys. Preserve HarmonyOS `runtimeOS` in isolated HAPs.
+- Update TypeScript to 7.0.2 and bundled fd to 10.5.1. Extend binary smoke tests to cover enterprise HTTPS and offline RapidCheck compilation, generation and shrinking.
+
+### 中文
+
+- 随包提供固定版本、校验过的 RapidCheck 源码，支持离线 C/C++ 测试。优先复用项目依赖，否则使用目标工具链编译内置源码；GoogleTest 可选，发行包附带 BSD 许可证。
+- 交互式、CLI、MCP 和 watch 测试统一先读用户提供的需求、API 和设计文档，再对齐代码、提取性质；没有 commit 或 diff 的全范围测试也遵循此规则。
+- ArkTS 测试手册改为 `build-run` 内部参考，不再暴露为独立 skill。明确性质数量按每个函数、方法或一组连续操作分别计算。
+- 默认添加系统 CA，提供华为及常用官方依赖源的企业证书例外和包管理器进程内兼容。不改全局配置，保留包签名与哈希校验；可用 `PBT_TLS_EXCEPTIONS=off` 关闭例外。
+- ArkTS 的 `Record<string, number>` 使用 PandaCheck `dictionary()`，支持值和键的反例最小化；隔离 HAP 保留 HarmonyOS `runtimeOS`。
+- TypeScript 更新至 7.0.2，内置 fd 更新至 10.5.1。二进制冒烟新增企业 HTTPS，以及离线 RapidCheck 编译、生成用例和反例最小化验证。
+
 ## 0.2.1 - 2026-11-04
 
 ### English

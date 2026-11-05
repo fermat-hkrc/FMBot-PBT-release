@@ -1,7 +1,6 @@
 # 安装指南
 
 [English](installation.md)
-
 装好之后怎么用，见[使用指南](usage.zh.md)。
 
 ## 1. 系统要求
@@ -12,7 +11,7 @@
 | 被测项目 | 需要 |
 |---|---|
 | 任何项目 | `git` |
-| C / C++ | C++17 编译器、项目自己的构建工具；CMake 项目需 `cmake` ≥ 3.16 |
+| C / C++ | C++17 编译器、项目自己的构建工具；CMake 项目需 `cmake` ≥ 3.16；随包提供 RapidCheck 源码，无须另行下载 |
 | Python | `python3` ≥ 3.9 与 `pip` |
 | Go | `go` |
 | Java / Kotlin | JDK 与项目自带的 Maven / Gradle |
@@ -85,10 +84,11 @@ Windows 上不支持 C/C++ 与 OpenHarmony 项目。
 其他字段见[模型配置参考](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models-configuration.md)；
 登录与内置服务商密钥配置见[服务商参考](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md)。
 
+HTTPS 默认使用系统与内置证书，并对华为及官方依赖源启用[企业证书兼容](network.zh.md)，无需额外配置。
+
 ## 4. 验证
 
 运行 `command -v pi-pbt`、`pi-pbt --version` 和 `pi-pbt --list-models`，确认程序可用且模型已加载。
-
 ## 5. 升级
 下载新版本压缩包，按第 2 节重新安装。`~/.pi-pbt/agent/` 中的配置会保留。
 

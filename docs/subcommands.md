@@ -162,15 +162,24 @@ Runs `hook-run` for each new commit. When one poll finds more than 10 new commit
 | | `quick` | `standard` | `thorough` |
 |---|---|---|---|
 | Time budget | about 10 minutes | about 30 minutes | unlimited |
-| Properties per target | 3–5 | 5–8 | as needed |
+| Properties per test subject | 3–5 | 5–8 | as needed |
 | Inputs per property | about 100 | ≥ 1000 | ≥ 10000 |
 
+A **test subject** is usually one function or method, or a group of related operations tested in sequence, such as
+opening an account, depositing, withdrawing, and closing it. The count applies to each subject, not to an entire
+repository or module, and does not refer to a build target.
+
 `hook-run` and `watch` default to `quick`, other entries to `standard`.
+
+Every test entry reads user-provided requirement, API or design documents before mapping them to the code and deriving properties. Intent is inferred from code only where documents are absent or silent.
 
 ## Environment variables
 
 | Variable | Meaning |
 |---|---|
+| `PBT_TLS_EXCEPTIONS=off` | turn off [enterprise certificate exceptions](network.md) and package-tool TLS compatibility |
+| `NODE_USE_SYSTEM_CA=0` | opt out of the default system CA addition; explicit runtime CA flags are respected |
+| `NODE_EXTRA_CA_CERTS=/path/ca.pem` | add PEM CA certificates; set before starting pi-pbt; inherited by child processes |
 | `PBT_LANG` | `zh` or `en`, output language |
 | `PBT_EFFORT` | default depth |
 | `PBT_TEST_JOBS` | test and build parallelism: a number, `max`, or `auto` (default, idle cores) |

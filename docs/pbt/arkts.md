@@ -7,7 +7,7 @@
 
 pi-pbt supports ArkTS as **HarmonyOS HAP ohosTest**. A property is Hypium +
 PandaCheck in `src/ohosTest/ets/test/<Name>Pbt.test.ets`
-(`import { check, property, integer, string, boolean, bigint } from 'PandaCheck'`),
+(`import { check, property, integer, string, boolean, bigint, dictionary } from 'PandaCheck'`),
 assembled with `hvigorw`, and run with `hdc shell aa test`. The verdict is
 `OHOS_REPORT_RESULT`. Install the library with `make-pandacheck-har.sh` into
 `libs/PandaCheck.har`. Depend on `"PandaCheck": "file:../libs/PandaCheck.har"` from the module `oh-package.json5`. Do not copy `Index.ets` into `libs/`. Do not `ohpm install fast-check`.
@@ -38,7 +38,7 @@ types, call shapes, and modules. It is not a percent of ArkTS.
 `let`, `const`, inference, `void`, operators, `if` / `switch` / loops, and
 `this` are syntax. They are not in the count. A property does not draw them.
 
-**18 supported, 9 partial, 7 not supported** on this 34-row checklist.
+**18 supported, 10 partial, 6 not supported** on this 34-row checklist.
 Supported means a passing or failing property can use that form, and a
 close-out gate requires it. Partial means only some forms of that tutorial
 heading are drawn or caught. Not supported means we do not draw it, or the
@@ -66,7 +66,7 @@ honest close is `retired`.
 | inheritance, `super`, abstract class | not supported | Not constructed. |
 | `private` / `protected` field | not supported | The suite must not edit `--scope` to expose it. |
 | object literal | partial | `record()` is `{ w, h }`, `{ x, y }`, or `{ left, top, right, bottom }`. Any other `number`/`string`/`boolean` bag uses `recordOf`. An optional field is `optional(integer())`, `optional(string())`, or `optional(boolean())`. A `[number, number]` field is `numberPair`. An optional pair is `optional(numberPair(x, y))`, not an always-present literal. A field that is another in-scope interface `{ x, y }`, `{ w, h }`, LTRB, or primitive bag is `record().generate` or `recordOf().generate` with `as Name` on that result, one level only. A `number[]`, `string[]`, or `boolean[]` field is `array().generate`. An optional array field is `optional(array(integer())).generate`. `[]` is not that field. `number[][]`, a class, ArkUI `struct`, `@Sendable` class, `Date`, or other tuple stays out. |
-| `Record<K, V>` | not supported | Not a generic map. |
+| `Record<K, V>` | partial | Tutorial form `Record<string, number>` is `dictionary(string(), integer())`. Default at most 4 keys; `{ maxLength }` like `array`. Shrink drops keys, then values, then keys (skip a rename that collides). The callback parameter is `Record<string, number>`. `{}` and `record()` are not that map. `Record<number, number>`, a same-file alias of another Record, `Record \| null`, optional Record, and a defaulted Record stay out. |
 | interface | partial | A field bag in `--scope` can be constructed. A method-only contract is not a value. |
 | generic function | supported | The call must be `name<string>`, `name<number>`, or `name<boolean>`. An inferred call is rejected. |
 | generic constraint | partial | A constraint of those three is drawn. Any other constraint is `retired`. |
@@ -185,7 +185,7 @@ pi-pbt build-run \
 have extra domain facts the SOP cannot know.
 
 Toolchain, SDK alignment, PandaCheck HAR, signing, and `aa test` are the
-`arkts-build-run` cards. pi-pbt does **not** silently rewrite
+ArkTS testing guide. pi-pbt does **not** silently rewrite
 `compileSdkVersion`, `runtimeOS`, or the hvigor pin. Align those by hand, or
 let the campaign fail loud.
 
@@ -398,4 +398,4 @@ function with those values.
 - [Chinese ArkTS page](arkts.zh.md)
 - [Subcommands](../subcommands.md) — `build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"`
 - [Kea GUI testing](../kea.md) — black-box UI on a phone, not source-level ArkTS
-- The bundled `arkts-build-run` skill: DevEco, SDK alignment, PandaCheck HAR, sign, and `aa test`
+- The bundled ArkTS testing guide: DevEco, SDK alignment, PandaCheck HAR, sign, and `aa test`

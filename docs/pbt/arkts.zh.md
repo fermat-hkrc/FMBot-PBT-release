@@ -7,7 +7,7 @@
 
 pi-pbt 支持的 ArkTS 路径是 **HarmonyOS HAP ohosTest**。性质测试是 Hypium +
 PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
-（`import { check, property, integer, string, boolean, bigint } from 'PandaCheck'`），
+（`import { check, property, integer, string, boolean, bigint, dictionary } from 'PandaCheck'`），
 用 `hvigorw` 组装，以 `hdc shell aa test` 跑。判定结果看 `OHOS_REPORT_RESULT`。
 用 `make-pandacheck-har.sh` 装到 `libs/PandaCheck.har`。模块 `oh-package.json5` 依赖写 `"PandaCheck": "file:../libs/PandaCheck.har"`。不要把 `Index.ets` 放进 `libs/`。不要 `ohpm install fast-check`。
 
@@ -24,7 +24,7 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 
 `let`、`const`、类型推断、`void`、运算符、`if` / `switch` / 循环和 `this` 是语法，不计入。性质不抽取它们。
 
-这份 34 行清单里，**18 项已支持，9 项部分支持，7 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
+这份 34 行清单里，**18 项已支持，10 项部分支持，6 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
 
 | 教程特性 | pi-pbt | 含义 |
 | --- | --- | --- |
@@ -48,7 +48,7 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 | 继承、`super`、抽象类 | 不支持 | 不构造。 |
 | `private` / `protected` 字段 | 不支持 | 套件不得改 `--scope` 来暴露它。 |
 | 对象字面量 | 部分支持 | `record()` 是 `{ w, h }`、`{ x, y }` 或 `{ left, top, right, bottom }`。其它 `number`/`string`/`boolean` 字段袋用 `recordOf`。可选字段用 `optional(integer())`、`optional(string())` 或 `optional(boolean())`。`[number, number]` 字段用 `numberPair`。可选数对用 `optional(numberPair(x, y))`，不是始终有值的字面量。同文件里另一个 interface 字段袋用 `record().generate` 或 `recordOf().generate`，一层，结果上需要 `as Name`。`number[]`、`string[]`、`boolean[]` 字段用 `array().generate`。可选数组字段用 `optional(array(integer())).generate`。`[]` 不是该字段。`number[][]`、class、ArkUI `struct`、`@Sendable` class、`Date` 和其它元组仍不支持。 |
-| `Record<K, V>` | 不支持 | 不是通用映射。 |
+| `Record<K, V>` | 部分支持 | 教程形态 `Record<string, number>` 用 `dictionary(string(), integer())`。默认最多 4 个键，`{ maxLength }` 与 `array` 相同。收缩先丢掉键，再收缩值，再收缩键（重名则跳过）。回调参数类型是 `Record<string, number>`。`{}` 和 `record()` 不是该映射。`Record<number, number>`、其它 Record 的同文件别名、`Record \| null`、可选 Record 和带默认值的 Record 仍然不是。 |
 | interface | 部分支持 | `--scope` 里的字段袋可以构造。只有方法的契约不是值。 |
 | 泛型函数 | 已支持 | 调用必须是 `name<string>`、`name<number>` 或 `name<boolean>`。推断调用被拒绝。 |
 | 泛型约束 | 部分支持 | 约束到这三种能抽取。其他约束 `retired`。 |
@@ -158,7 +158,7 @@ pi-pbt build-run \
 `true` 这类空操作不能证明 `passing` / `failing`。HAP 测试任务不要加 `--prompt`，
 除非有 SOP 不知道的领域事实。
 
-工具链、SDK 对齐、PandaCheck HAR、签名、`aa test` 见 `arkts-build-run` 技能卡。
+工具链、SDK 对齐、PandaCheck HAR、签名、`aa test` 见 ArkTS 测试指南。
 pi-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor 钉。自己对齐，
 或让测试任务大声失败。
 
@@ -312,4 +312,4 @@ HAR 是转换后的 JS（对 npm fast-check 做 `ohpm convert`）。它生成 JS
 - [英文 ArkTS 页](arkts.md)
 - [子命令](../subcommands.zh.md) — `build-run --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon"`
 - [Kea GUI 测试](../kea.zh.md) — 真机黑盒 UI，不是源码级 ArkTS
-- 内置 `arkts-build-run` skill：DevEco、SDK 对齐、PandaCheck HAR、签名、`aa test`
+- 内置 ArkTS 测试指南：DevEco、SDK 对齐、PandaCheck HAR、签名、`aa test`

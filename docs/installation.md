@@ -1,7 +1,6 @@
 # Installation guide
 
 [中文](installation.zh.md)
-
 How to use it once installed: [usage guide](usage.md).
 
 ## 1. System requirements
@@ -12,7 +11,7 @@ Also prepare any required databases, services, devices or emulators. Basic tools
 | Project under test | Needs |
 |---|---|
 | Any | `git` |
-| C / C++ | a C++17 compiler and the project's own build tools; CMake projects need `cmake` ≥ 3.16 |
+| C / C++ | a C++17 compiler and the project's own build tools; CMake projects need `cmake` ≥ 3.16; RapidCheck source is bundled for offline use |
 | Python | `python3` ≥ 3.9 and `pip` |
 | Go | `go` |
 | Java / Kotlin | a JDK and the project's own Maven / Gradle |
@@ -85,10 +84,11 @@ Put this in `~/.pi-pbt/agent/settings.json` (merge with any existing file); futu
 Other fields: [model configuration reference](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models-configuration.md).
 Login and built-in provider keys: [provider reference](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md).
 
+HTTPS uses system and bundled roots, with automatic [enterprise certificate compatibility](network.md) for Huawei and official dependencies.
+
 ## 4. Verify
 
 Run `command -v pi-pbt`, `pi-pbt --version` and `pi-pbt --list-models` to check the executable and loaded models.
-
 ## 5. Upgrade
 Download the new archive and install it as in section 2. The configuration in `~/.pi-pbt/agent/` is kept.
 
