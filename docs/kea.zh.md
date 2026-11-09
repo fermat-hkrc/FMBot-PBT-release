@@ -2,7 +2,7 @@
 
 [English version / 英文版](kea.md) · [返回安装指南](installation.zh.md)
 
-`pi-pbt kea` 是一个**实验性**入口，用来测试已经装在 USB 手机上的 HarmonyOS
+`fmbot-pbt kea` 是一个**实验性**入口，用来测试已经装在 USB 手机上的 HarmonyOS
 应用。它把应用当作黑盒，通过 `hdc` 驱动 Kea2 引擎：Kea2 一边自动探索 GUI，
 一边检查“无论用户怎么操作都应该成立”的性质，并报告崩溃、ANR 和性质违例。
 
@@ -30,11 +30,11 @@ decompile_home: /path/to/harmony-decompile
 
 ```bash
 cd /path/to/sut-folder     # 放 kea.config.yml 的目录
-pi-pbt kea                 # 交互式 TUI
-pi-pbt kea -p              # headless/print 模式（CI、nohup）
-pi-pbt kea -c              # 交互式续跑：沿用最新一次的产物目录
-pi-pbt kea -p -c           # headless 续跑
-pi-pbt kea --config other.yml --lang zh
+fmbot-pbt kea                 # 交互式 TUI
+fmbot-pbt kea -p              # headless/print 模式（CI、nohup）
+fmbot-pbt kea -c              # 交互式续跑：沿用最新一次的产物目录
+fmbot-pbt kea -p -c           # headless 续跑
+fmbot-pbt kea --config other.yml --lang zh
 ```
 
 `-p` 选择 headless 模式；`-c` 与它相互独立，会在 `<配置的 out>/LATEST`

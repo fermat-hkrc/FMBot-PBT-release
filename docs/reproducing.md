@@ -2,7 +2,7 @@
 
 A campaign's value is what survives it. This page covers the three things you
 do after one finishes: see a reported failure again, run the generated tests
-without pi-pbt, and keep them as part of the project.
+without fmbot-pbt, and keep them as part of the project.
 
 ## 1. Reproduce a reported failure
 
@@ -16,12 +16,12 @@ jq -r '.bugs[] | "\(.id) \(.summary)\n  build: \(.reproduction.build // "no sepa
 
 `REPORT.md` should carry equivalent commands in its `## Reproduction`
 section, and each `pbt-out/bug_reports/<slug>.md` should repeat the commands for
-its own bug. These Markdown files are written by the campaign; pi-pbt does not
+its own bug. These Markdown files are written by the campaign; fmbot-pbt does not
 currently render them from `report.json`, so use the JSON as the checked
 machine-readable contract when the files disagree.
 
 Run the commands from `workdir`. For an MCP run in the default worktree mode,
-pi-pbt has rewritten paths from the deleted worktree to the original repository.
+fmbot-pbt has rewritten paths from the deleted worktree to the original repository.
 Check out `run.revision`, apply the managed run's `changes.patch`, and then run
 the recorded commands. See the
 [MCP run-artifact description](subcommands.md#mcp).
@@ -50,7 +50,7 @@ must remain in the pasteable `reproduction.run` command. The shrunk
 test when the framework has no durable replay artifact or when long-term
 regression protection matters more than replaying the shrink process.
 
-## 2. Run the generated tests without pi-pbt
+## 2. Run the generated tests without fmbot-pbt
 
 A successful campaign is expected to put tests into the repository's normal
 test layout and runner. That is an output requirement, not a reason to assume
@@ -70,12 +70,12 @@ The following are command families, not pasteable universal recipes:
 | npm / jest / vitest | Use the project's package script and the file/test filter recorded by the campaign. Script names and argument forwarding differ by repository. |
 
 For a project with an official or non-obvious build entry, start the campaign
-with [`pi-pbt build-run`](subcommands.md#build-run)
+with [`fmbot-pbt build-run`](subcommands.md#build-run)
 so the resulting report records a known command rather than an inferred one.
 
 Two environment variables are worth knowing:
 
-- `PBT_TEST_JOBS=1` asks a pi-pbt campaign to use one test/build worker through
+- `PBT_TEST_JOBS=1` asks a fmbot-pbt campaign to use one test/build worker through
   the runner variables it manages. Use the framework's own serial option when
   running the recorded command directly. A failure that appears only under
   parallelism may be test interference or a real concurrency defect; the
@@ -84,7 +84,7 @@ Two environment variables are worth knowing:
 - Native code-coverage instrumentation is on by default when the required
   toolchain is available, but it never controls whether the test itself can run.
   A plain reproduction does not need coverage. Set `PBT_CODE_COVERAGE=0` if you
-  are launching another pi-pbt campaign and want to disable instrumentation; see
+  are launching another fmbot-pbt campaign and want to disable instrumentation; see
   [Code coverage reports](subcommands.md#environment-variables).
 
 ## 3. Keep the tests
@@ -99,7 +99,7 @@ needs the same files:
 - targeted build-manifest changes that register the recorded test target
 - any property-framework dependency declaration or vendored source the project
   deliberately adopted
-- for an OpenHarmony component following pi-pbt's supported layout: its new
+- for an OpenHarmony component following fmbot-pbt's supported layout: its new
   `test/pbt/` files, GN target/aggregation edits, and the targeted `bundle.json`
   `build.test` registration
 - for proptest: generated `proptest-regressions/` entries that should remain as
@@ -131,7 +131,7 @@ an external archive or managed-run artifact store is needed across those runs.
 ### Regression from here on
 
 Once committed, the tests are the project's. They need the property framework
-and build wiring that the campaign added, but they do not need the pi-pbt
+and build wiring that the campaign added, but they do not need the fmbot-pbt
 executable. They run in CI only if the project's normal CI targets include the
 recorded test target; verify that integration rather than assuming every test
 directory is discovered automatically. A later incremental campaign can read

@@ -5,7 +5,7 @@
 
 ## 1. 这个 skill 是什么
 
-`pi-pbt-dev` 是把 pi-pbt 接入你日常 code agent 的入口。装好后，你可以对 agent 说
+`pi-pbt-dev` 是把 fmbot-pbt 接入你日常 code agent 的入口。装好后，你可以对 agent 说
 "测一下刚才的修改"，agent 就会自动对改动范围跑一轮 PBT 测试任务，并把发现的问题呈现给你。
 
 两种模式，由 agent 根据你的意图选择：
@@ -16,17 +16,17 @@
 | **增量** | "测一下刚才改的代码" | 只测最近修改的文件 |
 
 架构是**薄壳**：skill 只含协议文本（`SKILL.md`）和三个辅助脚本，真正的 PBT 引擎
-是 `pi-pbt` 二进制（独立安装）。升级 skill 只更新文本，升级引擎只更新二进制。
+是 `fmbot-pbt` 二进制（独立安装）。升级 skill 只更新文本，升级引擎只更新二进制。
 
 ### skill 内进程与 MCP 委派的区别
 
 本教程讲的是**安装 skill** 这条路径。宿主 agent 启动
-`scripts/run-pbt.mjs`，脚本再启动一个 `pi-pbt -p` 子进程，并等待它退出后读取结果。
+`scripts/run-pbt.mjs`，脚本再启动一个 `fmbot-pbt -p` 子进程，并等待它退出后读取结果。
 进度行会把等待过程显示出来，但契约仍是同步的：这不是后台委派，同一个 agent turn
 不会在测试任务运行时继续编辑代码。
 
 MCP 是另一套无需安装 skill 的委派接口。`pbt_start` 会立即返回 `run_id`，独立的
-pi-pbt run manager 接管测试任务进程，宿主 agent 可继续开发，之后再调用
+fmbot-pbt run manager 接管测试任务进程，宿主 agent 可继续开发，之后再调用
 `pbt_status` / `pbt_report`。普通 MCP run 在 detached worktree 中测试不可变 commit；
 `include_uncommitted: true` 会先把当前改动冻结成快照；传入 `build_cmd` 则是有意的
 就地运行例外。这里先介绍 MCP，是为了让后文出现的 `pbt_report` 和 `pbt://...`
@@ -38,13 +38,13 @@ pi-pbt run manager 接管测试任务进程，宿主 agent 可继续开发，之
 
 | 项目 | 要求 | 说明 |
 |---|---|---|
-| Node.js | ≥ 18 | skill 的辅助脚本是 Node 写的（`pi-pbt` 二进制本身不需要 Node） |
-| `pi-pbt` 二进制 | 已安装 | 见[第一步](#3-第一步安装-pi-pbt-引擎) |
+| Node.js | ≥ 18 | skill 的辅助脚本是 Node 写的（`fmbot-pbt` 二进制本身不需要 Node） |
+| `fmbot-pbt` 二进制 | 已安装 | 见[第一步](#3-第一步安装-fmbot-pbt-引擎) |
 | git | 推荐 | git 项目增量测试有"客观范围层"（自动列出改动文件）；非 git 也能用，范围由 agent 从对话记忆给出并请你确认 |
-| 被测语言的工具链 | 按需 | Python 要 `python3`+`pip`，C/C++ 要 `cmake`+编译器，Rust 要 `cargo`…（pi-pbt 会真实编译运行它写的测试） |
-| LLM API | 已配置 | 测试任务由大模型驱动，见[第一步](#3-第一步安装-pi-pbt-引擎) |
+| 被测语言的工具链 | 按需 | Python 要 `python3`+`pip`，C/C++ 要 `cmake`+编译器，Rust 要 `cargo`…（fmbot-pbt 会真实编译运行它写的测试） |
+| LLM API | 已配置 | 测试任务由大模型驱动，见[第一步](#3-第一步安装-fmbot-pbt-引擎) |
 
-## 3. 第一步：安装 pi-pbt 引擎
+## 3. 第一步：安装 fmbot-pbt 引擎
 
 官方发行平台为 **Linux x64 / Linux arm64 / macOS arm64**，从你的分发渠道下载
 对应压缩包（详情见[安装指南](installation.zh.md#2-下载与安装)）。每个压缩包都会解出一个
@@ -52,9 +52,9 @@ pi-pbt run manager 接管测试任务进程，宿主 agent 可继续开发，之
 
 ```bash
 PLATFORM=linux-x64   # 或 linux-arm64 / macos-arm64
-sha256sum -c "pi-pbt-${PLATFORM}.tar.xz.sha256"   # 可选的完整性校验
-tar -xJf "pi-pbt-${PLATFORM}.tar.xz"
-cd "pi-pbt-${PLATFORM}"
+sha256sum -c "fmbot-pbt-${PLATFORM}.tar.xz.sha256"   # 可选的完整性校验
+tar -xJf "fmbot-pbt-${PLATFORM}.tar.xz"
+cd "fmbot-pbt-${PLATFORM}"
 ./install.sh
 ```
 
@@ -64,28 +64,28 @@ macOS 没有 `sha256sum` 时可用 `shasum -a 256 -c`，并按安装指南清除
 **Windows**：官方暂未发布 Windows 二进制。替代路径（源码构建 + 本地打包安装）：
 
 ```bash
-git clone <pi-pbt 仓库> && cd <pi-pbt 仓库>
+git clone <fmbot-pbt 仓库> && cd <fmbot-pbt 仓库>
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm i -g ./pi-pbt-<版本>.tgz        # 安装后获得 pi-pbt 命令
+npm i -g ./pi-pbt-<版本>.tgz        # 安装后获得 fmbot-pbt 命令
 ```
 
-> **注意**：`npm i -g pi-pbt` 目前**不可用**——包尚未发布到 npm registry，请使用上面的官方路径。
+> **注意**：`npm i -g fmbot-pbt` 目前**不可用**——包尚未发布到 npm registry，请使用上面的官方路径。
 
 ### 配置模型
 
-pi-pbt 的配置目录是 `~/.pi-pbt/agent/`（首次运行自动创建）。最快的两种方式：
+fmbot-pbt 的配置目录是 `~/.pi-pbt/agent/`（首次运行自动创建）。最快的两种方式：
 
 ```bash
 # 方式 1：API key 环境变量，立即可用
 export ANTHROPIC_API_KEY=sk-ant-...   # 或 OPENAI_API_KEY / GEMINI_API_KEY / ...
-pi-pbt --list-models                   # 能看到模型列表即配置成功
+fmbot-pbt --list-models                   # 能看到模型列表即配置成功
 ```
 
 ```text
 # 方式 2：交互式登录
-pi-pbt            # 启动后 /login 登录，/model（Ctrl+L）选模型
+fmbot-pbt            # 启动后 /login 登录，/model（Ctrl+L）选模型
 ```
 
 自定义模型/代理使用 `~/.pi-pbt/agent/models.json`。CLIProxyAPI 上的 GLM/DeepSeek
@@ -95,38 +95,38 @@ pi-pbt            # 启动后 /login 登录，/model（Ctrl+L）选模型
 验证：
 
 ```bash
-pi-pbt --version
-pi-pbt --list-models
+fmbot-pbt --version
+fmbot-pbt --list-models
 ```
 
 > **建议用你最强的模型**。PBT 最关键的一步是从代码推导出"什么必须恒成立"——这是纯推理，
 > 弱模型只能写出"调用不崩溃"这类空性质，测试全绿但什么都发现不了。
 
-### skill 如何找到 pi-pbt（默认无需配置）
+### skill 如何找到 fmbot-pbt（默认无需配置）
 
 skill 的脚本按以下顺序解析引擎位置：
 
 1. 环境变量 `PI_PBT_BIN`（若设置且文件存在）
-2. `PATH` 中的 `pi-pbt`（npm 全局安装或 release 二进制放入 PATH）
+2. `PATH` 中的 `fmbot-pbt`（npm 全局安装或 release 二进制放入 PATH）
 
 前两种都不满足时才报错并引导安装。所以默认情况**不需要任何配置**；仅当二进制放在
 PATH 之外（例如压缩包解压到自定义目录）时，显式指定：
 
 ```bash
-export PI_PBT_BIN=/path/to/pi-pbt      # Windows: set PI_PBT_BIN=C:\path\to\pi-pbt.exe
+export PI_PBT_BIN=/path/to/fmbot-pbt      # Windows: set PI_PBT_BIN=C:\path\to\fmbot-pbt.exe
 ```
 
 ## 4. 第二步：安装 skill
 
-skill 随 **pi-pbt 发行包自带**（内嵌在二进制里，或 npm 包 `skills/` 目录下），
-所以安装只需一条命令——把文件从 pi-pbt 拷到你的 agent 的 skill 目录：
+skill 随 **fmbot-pbt 发行包自带**（内嵌在二进制里，或 npm 包 `skills/` 目录下），
+所以安装只需一条命令——把文件从 fmbot-pbt 拷到你的 agent 的 skill 目录：
 
 ```bash
-pi-pbt skill-install                # 自动检测已安装的 agent
-pi-pbt skill-install --host claude  # 或 opencode / codex / codeagent / chrys
-pi-pbt skill-install --host project # 项目级（共享给协作者）
-pi-pbt skill-install --dir /自定义/路径  # 任意 skill 目录
-pi-pbt skill-uninstall              # 卸载（参数同上，幂等）
+fmbot-pbt skill-install                # 自动检测已安装的 agent
+fmbot-pbt skill-install --host claude  # 或 opencode / codex / codeagent / chrys
+fmbot-pbt skill-install --host project # 项目级（共享给协作者）
+fmbot-pbt skill-install --dir /自定义/路径  # 任意 skill 目录
+fmbot-pbt skill-uninstall              # 卸载（参数同上，幂等）
 ```
 
 支持的宿主位置：
@@ -140,7 +140,7 @@ pi-pbt skill-uninstall              # 卸载（参数同上，幂等）
 | chrys | `~/.chrys/skills/pi-pbt-dev/`（用户级）或 `<repo>/.chrys/skills/pi-pbt-dev/`（项目级） |
 | 项目级（`--host project`，共享给协作者） | `<repo>/.claude/skills/`、`<repo>/.agents/skills/`、`<repo>/.cac/skills/`、`<repo>/.chrys/skills/`（四个全装） |
 
-更新 pi-pbt 后重新执行并加 `--force` 可刷新旧安装。`skill-uninstall` 与安装使用
+更新 fmbot-pbt 后重新执行并加 `--force` 可刷新旧安装。`skill-uninstall` 与安装使用
 相同的目标选择：传同一个 `--host` 或 `--dir` 即可移除对应副本；不带参数时，它会从
 当前能检测到的用户级宿主位置移除，不会记忆历史上曾安装到哪些目录。
 
@@ -252,7 +252,7 @@ JSON 顶替。`summarize.mjs` 仍读 Markdown，不负责 JSON schema 校验。
 
 **版本注意：**2026-09-16 替换发布的 v0.1.18 包已含上述归档修复，此前下载的
 同版本旧包不含。请重新下载包和校验文件，替换二进制后执行
-`pi-pbt skill-install --force`；只看版本字符串无法区分这两次构建。
+`fmbot-pbt skill-install --force`；只看版本字符串无法区分这两次构建。
 
 agent 呈现给你的摘要形如：
 
@@ -272,8 +272,8 @@ agent 呈现给你的摘要形如：
 
 | 现象 | 处理 |
 |---|---|
-| `pi-pbt: command not found` | 按[第一步](#3-第一步安装-pi-pbt-引擎)重装引擎，确认在 PATH |
-| `pi-pbt --list-models` 为空 / 报 401 | 按[第一步](#3-第一步安装-pi-pbt-引擎)检查 API key 与 models.json |
+| `fmbot-pbt: command not found` | 按[第一步](#3-第一步安装-fmbot-pbt-引擎)重装引擎，确认在 PATH |
+| `fmbot-pbt --list-models` 为空 / 报 401 | 按[第一步](#3-第一步安装-fmbot-pbt-引擎)检查 API key 与 models.json |
 | 测试任务超时（`run-pbt` 退出码 3） | 按档位使用对应上限：quick 900 秒、standard 1800 秒、thorough 3600 秒；改测更小范围，或有意调大 `--timeout-sec` |
 | 摘要显示"未完成"（无 REPORT.md） | 测试任务 agent 未产出人读报告；看 `<out-dir>.log` 定位原因后重试。对 `hook-run`/MCP 还要检查 `report.json` 是否存在且符合 schema |
 | agent 不自动触发 | 确认 AGENTS.md 片段已加；明确说出“测一下刚才的修改”即可触发 |
@@ -288,8 +288,8 @@ agent 呈现给你的摘要形如：
 
 ## 10. 升级
 
-替换 pi-pbt 二进制**不会**刷新复制到宿主 agent 的 skill。安装新包后执行
-`pi-pbt skill-install --force`；项目/自定义安装应复用原来的 `--host project` 或
+替换 fmbot-pbt 二进制**不会**刷新复制到宿主 agent 的 skill。安装新包后执行
+`fmbot-pbt skill-install --force`；项目/自定义安装应复用原来的 `--host project` 或
 `--dir`，并加 `--force`。先备份手工改过的 skill，再刷新并重载宿主 agent。
-最后用 `pi-pbt --version`、`pi-pbt --list-models` 检查。
+最后用 `fmbot-pbt --version`、`fmbot-pbt --list-models` 检查。
 完整步骤见[升级已有安装](installation.zh.md#5-升级)。

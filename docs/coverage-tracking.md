@@ -1,9 +1,9 @@
 # PBT 覆盖登记与代码覆盖率
 
-pi-pbt 有两类不同的“覆盖率”，不能混为一谈：
+fmbot-pbt 有两类不同的“覆盖率”，不能混为一谈：
 
 1. **PBT 覆盖登记**：`FUNCTION_INDEX.md` 列出启发式扫描到的函数，`COVERAGE.md`
-   记录 campaign 声称已为哪些函数写过并运行过性质测试；`pi-pbt coverage` 根据这两份
+   记录 campaign 声称已为哪些函数写过并运行过性质测试；`fmbot-pbt coverage` 根据这两份
    Markdown 台账做汇总。这是测试进度登记，不是编译器或运行器测出的真实执行覆盖率。
 2. **代码覆盖率（execution evidence，执行证据）**：可用工具链会对 campaign 自己的
    构建和测试做插桩，产出 `pbt-out/code-coverage/` 下的原生 HTML 报表，并把
@@ -17,12 +17,12 @@ pi-pbt 有两类不同的“覆盖率”，不能混为一谈：
 
 ## 子命令
 
-### `pi-pbt scan`
+### `fmbot-pbt scan`
 
 纯本地操作（不调用 LLM）。实际语法是 `--dir` 选项，而不是位置参数：
 
 ```bash
-pi-pbt scan --dir /path/to/project --out /path/to/project/pbt-out
+fmbot-pbt scan --dir /path/to/project --out /path/to/project/pbt-out
 ```
 
 它用 `rg`（ripgrep，文本搜索工具）的语言正则启发式匹配函数定义，并写
@@ -40,12 +40,12 @@ internal/trivial（内部或简单包装）模式后的启发式分类，不表�
 只打印 `auto-scan skipped` 并继续。显式 `scan --out <dir>` 适合独立检查索引；`hook-run`
 会清空自己的 `--out`，不能把事先生成的同目录索引当作持久输入。
 
-### `pi-pbt hook-run <sha>`
+### `fmbot-pbt hook-run <sha>`
 
 面向 CI / git hook 的单提交检查：
 
 ```bash
-pi-pbt hook-run <sha> --repo . --out ./pbt-out
+fmbot-pbt hook-run <sha> --repo . --out ./pbt-out
 ```
 
 `<sha>` 用于读取 diff 并写入 prompt，不会替你 checkout；被编译和测试的是 `--repo`
@@ -55,7 +55,7 @@ pi-pbt hook-run <sha> --repo . --out ./pbt-out
 该目录里的台账一定跨 `hook-run` 自动保留。需要跨 campaign 保存登记表时，应另外归档
 这些产物或使用 managed run 的产物目录。
 
-### `pi-pbt coverage [--diff <sha>]`
+### `fmbot-pbt coverage [--diff <sha>]`
 
 `coverage` 不调用 LLM，从**当前工作目录的** `pbt-out/` 读取 `FUNCTION_INDEX.md`、
 `COVERAGE.md`（没有时回退到 `COVERAGE_STATUS.md`）以及根目录或一级子目录中的
@@ -64,9 +64,9 @@ pi-pbt hook-run <sha> --repo . --out ./pbt-out
 
 ```bash
 cd /path/to/project
-pi-pbt coverage --list
-pi-pbt coverage --json
-pi-pbt coverage --diff <sha> --project-dir .
+fmbot-pbt coverage --list
+fmbot-pbt coverage --json
+fmbot-pbt coverage --diff <sha> --project-dir .
 ```
 
 可用选项还包括 `--module <name>`（按 registry 的 module 字段筛选输出）；`--list` 与
@@ -93,8 +93,8 @@ pi-pbt coverage --diff <sha> --project-dir .
 
 对 `hook-run`，stderr 可能额外打印按提交计算的 diff 摘要；当前自动追加进
 `REPORT.md` 的 `Coverage Report` 本身是全量台账报告，并不会自动带上
-`pi-pbt coverage --diff` 命令所输出的完整 Diff Coverage 段。需要该段或 JSON 时仍要
-手动运行 `pi-pbt coverage --diff ...`。
+`fmbot-pbt coverage --diff` 命令所输出的完整 Diff Coverage 段。需要该段或 JSON 时仍要
+手动运行 `fmbot-pbt coverage --diff ...`。
 
 若没有索引/台账、没有 `REPORT.md`，或没有插桩数据，相应步骤会跳过；不能据此声称所有
 项目和框架都自动得到完整覆盖率报告。
@@ -105,7 +105,7 @@ pi-pbt coverage --diff <sha> --project-dir .
 
 ### `pbt-out/FUNCTION_INDEX.md`
 
-函数索引台账。可由 `pi-pbt scan` 的正则启发式生成，也可由 agent 在 campaign 的
+函数索引台账。可由 `fmbot-pbt scan` 的正则启发式生成，也可由 agent 在 campaign 的
 Scan 阶段生成或补充。它只描述已登记的扫描结果；即使表头写着 `Total functions`，也不
 证明编译器意义上的所有函数都已被完整枚举。
 
@@ -144,10 +144,10 @@ Scan 阶段生成或补充。它只描述已登记的扫描结果；即使表头
 ### `pbt-out/COVERAGE_STATUS.md`
 
 全量 PBT 覆盖登记的 Markdown 快照。编排扩展会在有 registry 数据时计算并写入；
-agent 也可能写它。`pi-pbt coverage` 在找不到 `COVERAGE.md` 时会把它当作输入回退，
+agent 也可能写它。`fmbot-pbt coverage` 在找不到 `COVERAGE.md` 时会把它当作输入回退，
 但它不是原生代码覆盖率文件。
 
-### `pi-pbt coverage --list` 完整登记报告
+### `fmbot-pbt coverage --list` 完整登记报告
 
 从可找到的 `FUNCTION_INDEX.md`、`COVERAGE.md` / `COVERAGE_STATUS.md` 和
 `SCAN.md` 综合生成。下面的百分比都表示“登记为 tested/covered 的函数条目占台账分母
@@ -234,10 +234,10 @@ agent 也可能写它。`pi-pbt coverage` 在找不到 `COVERAGE.md` 时会把�
 
 > **Priority 3 — Scan uncovered files**
 > 2 file(s) not yet scanned: deflate.c, inflate.c
-> Run `pi-pbt scan --dir <dir> --out ./pbt-out` to add them to FUNCTION_INDEX.md.
+> Run `fmbot-pbt scan --dir <dir> --out ./pbt-out` to add them to FUNCTION_INDEX.md.
 ```
 
-### `pi-pbt coverage --diff <sha>` Diff 登记段
+### `fmbot-pbt coverage --diff <sha>` Diff 登记段
 
 在完整登记报告末尾追加的 diff 作用域视图。
 
@@ -282,21 +282,21 @@ JSON 模式也支持 `--json --diff <sha>`：
 
 ```bash
 # 1. 先确认启发式索引是否符合目标范围
-pi-pbt scan --dir /path/to/project/src --out /path/to/project/pbt-out
+fmbot-pbt scan --dir /path/to/project/src --out /path/to/project/pbt-out
 
 # 2. 对目标范围发起 campaign
 cd /path/to/project
-pi-pbt -p "对 src 做性质测试（PBT）" --provider <provider> --model <model>
+fmbot-pbt -p "对 src 做性质测试（PBT）" --provider <provider> --model <model>
 
 # 3. 查看 PBT 覆盖登记（在包含 pbt-out/ 的目录运行）
 cd /path/to/project
-pi-pbt coverage --list
+fmbot-pbt coverage --list
 
 # 4. 单提交门禁；调用方先保证工作树就是该提交
-pi-pbt hook-run <full-sha> --repo /path/to/project --out /path/to/run-output
+fmbot-pbt hook-run <full-sha> --repo /path/to/project --out /path/to/run-output
 
 # 5. 如需完整 diff 台账段，手动查询
-pi-pbt coverage --diff <full-sha> --project-dir /path/to/project
+fmbot-pbt coverage --diff <full-sha> --project-dir /path/to/project
 ```
 
 自动追加只是方便阅读；判断 campaign 是否完成，应看 `report.json` / `REPORT.md`、
@@ -309,8 +309,8 @@ pi-pbt coverage --diff <full-sha> --project-dir /path/to/project
 
 | 方式 | 命令 | 内容 |
 |------|------|------|
-| **全文登记报告** | `pi-pbt coverage --list` | 台账的 Summary / Module / Oracle / File / Untested / Recommended Focus 等章节 |
-| **精简登记报告** | `pi-pbt coverage` | 隐去 Untested Functions、File Coverage、Files Not Yet Scanned；其他章节仍可能保留 |
-| **JSON 登记数据** | `pi-pbt coverage --json` | `CoverageStatusReport` 字段；有可计算的 diff 时再附 `diffCoverage`、`diffChangedFiles`、`diffSha` |
-| **Diff 登记视图** | `pi-pbt coverage --diff <sha> --project-dir .` | 在文本输出末尾追加启发式 Diff Coverage 段；若无索引或无法形成范围，可能没有该段 |
+| **全文登记报告** | `fmbot-pbt coverage --list` | 台账的 Summary / Module / Oracle / File / Untested / Recommended Focus 等章节 |
+| **精简登记报告** | `fmbot-pbt coverage` | 隐去 Untested Functions、File Coverage、Files Not Yet Scanned；其他章节仍可能保留 |
+| **JSON 登记数据** | `fmbot-pbt coverage --json` | `CoverageStatusReport` 字段；有可计算的 diff 时再附 `diffCoverage`、`diffChangedFiles`、`diffSha` |
+| **Diff 登记视图** | `fmbot-pbt coverage --diff <sha> --project-dir .` | 在文本输出末尾追加启发式 Diff Coverage 段；若无索引或无法形成范围，可能没有该段 |
 | **自动追加** | campaign 完成后 | 有台账且有 `REPORT.md` 时追加登记报告；有原生 profile 时另追加 execution evidence |

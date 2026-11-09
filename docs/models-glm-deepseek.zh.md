@@ -109,10 +109,10 @@ export CLIPROXY_API_KEY='你的代理访问密钥'
 curl --fail --silent --show-error \
   -H "Authorization: Bearer $CLIPROXY_API_KEY" \
   http://127.0.0.1:8317/v1/models
-pi-pbt --list-models
-pi-pbt --provider cliproxy-devin --model devin/glm-5-2 --thinking high
+fmbot-pbt --list-models
+fmbot-pbt --provider cliproxy-devin --model devin/glm-5-2 --thinking high
 # 或
-pi-pbt --provider cliproxy-devin --model devin/deepseek-v4-pro --thinking high
+fmbot-pbt --provider cliproxy-devin --model devin/deepseek-v4-pro --thinking high
 ```
 
 `--list-models` 只核对配置和模型可发现性，不证明网关能完成工具调用。首次用新路线时，

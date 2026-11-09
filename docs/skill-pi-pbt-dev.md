@@ -7,7 +7,7 @@
 
 ## 1. What this skill is
 
-`pi-pbt-dev` is the way to wire pi-pbt into your everyday code agent. Once
+`pi-pbt-dev` is the way to wire fmbot-pbt into your everyday code agent. Once
 installed, you can tell the agent "test the changes I just made" and it will run
 a PBT campaign over the changed scope and present the findings to you.
 
@@ -19,20 +19,20 @@ Two modes, chosen by the agent from your intent:
 | **Incremental** | "test the code I just changed" | only the files changed recently |
 
 The architecture is a **thin shell**: the skill contains only the protocol text
-(`SKILL.md`) and three helper scripts; the actual PBT engine is the `pi-pbt`
+(`SKILL.md`) and three helper scripts; the actual PBT engine is the `fmbot-pbt`
 binary (installed separately). Updating the skill updates text; updating the
 engine updates the binary — they do not interfere.
 
 ### Process-backed skill versus MCP delegation
 
 This tutorial covers the **installed skill** path. The host agent starts
-`scripts/run-pbt.mjs`, which starts one `pi-pbt -p` child process and waits for it
+`scripts/run-pbt.mjs`, which starts one `fmbot-pbt -p` child process and waits for it
 to exit before reading the result. Progress lines make that wait visible, but the
 contract is synchronous: this is not a background delegation, and the same agent
 turn does not continue editing while the campaign runs.
 
 MCP is a separate, skill-free integration for delegation. Its `pbt_start` tool
-returns a `run_id` immediately and a pi-pbt run manager owns the independent
+returns a `run_id` immediately and a fmbot-pbt run manager owns the independent
 campaign process, so the host agent can continue development and later call
 `pbt_status` / `pbt_report`. Normal MCP runs test an immutable commit in a
 detached worktree; `include_uncommitted: true` first freezes the current changes
@@ -48,13 +48,13 @@ delegation. They can coexist.
 
 | Item | Requirement | Notes |
 |---|---|---|
-| Node.js | >= 18 | the skill's helper scripts are written in Node (the `pi-pbt` binary itself needs no Node) |
-| `pi-pbt` binary | installed | see [Step 1](#3-step-1-install-the-pi-pbt-engine) |
+| Node.js | >= 18 | the skill's helper scripts are written in Node (the `fmbot-pbt` binary itself needs no Node) |
+| `fmbot-pbt` binary | installed | see [Step 1](#3-step-1-install-the-fmbot-pbt-engine) |
 | git | recommended | git projects get an "objective scope layer" (changed files listed automatically); non-git works too — the agent lists the files from its session memory and asks you to confirm |
-| Toolchain for the language under test | as needed | Python needs `python3`+`pip`, C/C++ needs `cmake`+compiler, Rust needs `cargo`… (pi-pbt actually compiles and runs the tests it writes) |
-| LLM API | configured | campaigns are driven by a large model — see [Step 1](#3-step-1-install-the-pi-pbt-engine) |
+| Toolchain for the language under test | as needed | Python needs `python3`+`pip`, C/C++ needs `cmake`+compiler, Rust needs `cargo`… (fmbot-pbt actually compiles and runs the tests it writes) |
+| LLM API | configured | campaigns are driven by a large model — see [Step 1](#3-step-1-install-the-fmbot-pbt-engine) |
 
-## 3. Step 1: Install the pi-pbt engine
+## 3. Step 1: Install the fmbot-pbt engine
 
 Official release platforms are **Linux x64 / Linux arm64 / macOS arm64** —
 download the matching archive from your distribution channel (details in the
@@ -64,9 +64,9 @@ bundled `fd`/`rg` tools are installed together:
 
 ```bash
 PLATFORM=linux-x64   # or linux-arm64 / macos-arm64
-sha256sum -c "pi-pbt-${PLATFORM}.tar.xz.sha256"   # optional integrity check
-tar -xJf "pi-pbt-${PLATFORM}.tar.xz"
-cd "pi-pbt-${PLATFORM}"
+sha256sum -c "fmbot-pbt-${PLATFORM}.tar.xz.sha256"   # optional integrity check
+tar -xJf "fmbot-pbt-${PLATFORM}.tar.xz"
+cd "fmbot-pbt-${PLATFORM}"
 ./install.sh
 ```
 
@@ -77,30 +77,30 @@ Gatekeeper quarantine as described in the installation guide.
 and install the packed tarball:
 
 ```bash
-git clone <pi-pbt repo> && cd <pi-pbt repo>
+git clone <fmbot-pbt repo> && cd <fmbot-pbt repo>
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm i -g ./pi-pbt-<version>.tgz     # gives you the pi-pbt command
+npm i -g ./pi-pbt-<version>.tgz     # gives you the fmbot-pbt command
 ```
 
-> **Note**: `npm i -g pi-pbt` is currently **not available** — the package is
+> **Note**: `npm i -g fmbot-pbt` is currently **not available** — the package is
 > not published on the npm registry; use the official paths above.
 
 ### Configure a model
 
-pi-pbt's config directory is `~/.pi-pbt/agent/` (created automatically on first
+fmbot-pbt's config directory is `~/.pi-pbt/agent/` (created automatically on first
 run). The two fastest paths:
 
 ```bash
 # Path 1: API key via environment variable — works immediately
 export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY / GEMINI_API_KEY / ...
-pi-pbt --list-models                   # a model list means you are configured
+fmbot-pbt --list-models                   # a model list means you are configured
 ```
 
 ```text
 # Path 2: interactive login
-pi-pbt            # then /login to sign in, /model (Ctrl+L) to pick a model
+fmbot-pbt            # then /login to sign in, /model (Ctrl+L) to pick a model
 ```
 
 Custom models/proxies use `~/.pi-pbt/agent/models.json`. For GLM/DeepSeek
@@ -110,8 +110,8 @@ and verify the actual model ID and limits, rather than copying a generic 1M wind
 Verify:
 
 ```bash
-pi-pbt --version
-pi-pbt --list-models
+fmbot-pbt --version
+fmbot-pbt --list-models
 ```
 
 > **Use your strongest model.** The hardest step of PBT is deriving "what must
@@ -119,12 +119,12 @@ pi-pbt --list-models
 > properties like "calling it does not crash": the tests pass, the report looks
 > fine, and nothing was really tested.
 
-### How the skill finds pi-pbt (no configuration needed by default)
+### How the skill finds fmbot-pbt (no configuration needed by default)
 
 The skill's scripts resolve the engine in this order:
 
 1. the `PI_PBT_BIN` environment variable (if set and the file exists)
-2. `pi-pbt` on `PATH` (npm global install, or the release binary placed on PATH)
+2. `fmbot-pbt` on `PATH` (npm global install, or the release binary placed on PATH)
 
 Only when neither matches does the skill error out and point you at the install
 instructions. So the default needs **no configuration at all**; set `PI_PBT_BIN`
@@ -132,21 +132,21 @@ explicitly only when the binary lives off PATH (e.g. an archive extracted into a
 custom directory):
 
 ```bash
-export PI_PBT_BIN=/path/to/pi-pbt      # Windows: set PI_PBT_BIN=C:\path\to\pi-pbt.exe
+export PI_PBT_BIN=/path/to/fmbot-pbt      # Windows: set PI_PBT_BIN=C:\path\to\fmbot-pbt.exe
 ```
 
 ## 4. Step 2 — Install the skill
 
-The skill ships **inside the pi-pbt distribution** (embedded in the binary, or
+The skill ships **inside the fmbot-pbt distribution** (embedded in the binary, or
 under `skills/` in the npm package), so installing it is one command — the files
-are copied out of pi-pbt into your agent's skill directory:
+are copied out of fmbot-pbt into your agent's skill directory:
 
 ```bash
-pi-pbt skill-install                # auto-detects which agents are installed
-pi-pbt skill-install --host claude  # or opencode / codex / codeagent / chrys
-pi-pbt skill-install --host project # project-level (shares with collaborators)
-pi-pbt skill-install --dir /custom/path  # any skill directory
-pi-pbt skill-uninstall              # remove it again (same flags, idempotent)
+fmbot-pbt skill-install                # auto-detects which agents are installed
+fmbot-pbt skill-install --host claude  # or opencode / codex / codeagent / chrys
+fmbot-pbt skill-install --host project # project-level (shares with collaborators)
+fmbot-pbt skill-install --dir /custom/path  # any skill directory
+fmbot-pbt skill-uninstall              # remove it again (same flags, idempotent)
 ```
 
 Supported host locations:
@@ -160,7 +160,7 @@ Supported host locations:
 | chrys | `~/.chrys/skills/pi-pbt-dev/` (user) or `<repo>/.chrys/skills/pi-pbt-dev/` (project) |
 | Project-level (`--host project`, shares with collaborators) | `<repo>/.claude/skills/`, `<repo>/.agents/skills/`, `<repo>/.cac/skills/`, `<repo>/.chrys/skills/` (all four) |
 
-Re-run with `--force` after updating pi-pbt to refresh an older install.
+Re-run with `--force` after updating fmbot-pbt to refresh an older install.
 `skill-uninstall` uses the same target selection as installation: pass the same
 `--host` or `--dir` to remove that copy. With no flags it removes the skill from
 each currently detectable user-level host location; it does not remember a
@@ -297,7 +297,7 @@ invalid or missing JSON makes the run incomplete. The full MCP document is
 
 **Version note:** the replacement v0.1.18 archives published on 2026-09-16
 include this archival fix. Earlier v0.1.18 downloads do not: download the archive
-and checksum again, replace the binary, then run `pi-pbt skill-install --force`.
+and checksum again, replace the binary, then run `fmbot-pbt skill-install --force`.
 The version string alone cannot distinguish these same-version builds.
 
 The summary your agent presents looks like:
@@ -319,8 +319,8 @@ incremental campaign over the fixed files to verify.
 
 | Symptom | Fix |
 |---|---|
-| `pi-pbt: command not found` | reinstall the engine from [Step 1](#3-step-1-install-the-pi-pbt-engine), and make sure it is on PATH |
-| `pi-pbt --list-models` empty / 401 | check the API key and `models.json` as described in [Step 1](#3-step-1-install-the-pi-pbt-engine) |
+| `fmbot-pbt: command not found` | reinstall the engine from [Step 1](#3-step-1-install-the-fmbot-pbt-engine), and make sure it is on PATH |
+| `fmbot-pbt --list-models` empty / 401 | check the API key and `models.json` as described in [Step 1](#3-step-1-install-the-fmbot-pbt-engine) |
 | campaign timeout (`run-pbt` exit code 3) | use the tier-aligned cap: quick 900 s, standard 1800 s, thorough 3600 s; test a smaller scope or raise `--timeout-sec` deliberately |
 | summary says "incomplete" (no REPORT.md) | the campaign agent produced no human report; inspect `<out-dir>.log` and retry. For `hook-run`/MCP, also check that `report.json` exists and satisfies the schema |
 | agent does not auto-trigger | check the AGENTS.md snippet is present; an explicit "test the changes I just made" always works |
@@ -340,9 +340,9 @@ incremental campaign over the fixed files to verify.
 
 ## 10. Upgrading
 
-Replacing the pi-pbt binary does **not** refresh the skill already copied into a
-host agent. After installing the new archive, run `pi-pbt skill-install --force`.
+Replacing the fmbot-pbt binary does **not** refresh the skill already copied into a
+host agent. After installing the new archive, run `fmbot-pbt skill-install --force`.
 For project/custom installations, repeat the original `--host project` or
 `--dir` selection with `--force`; back up local edits before replacement, then
-reload the host agent. Verify `pi-pbt --version` and `pi-pbt --list-models`.
+reload the host agent. Verify `fmbot-pbt --version` and `fmbot-pbt --list-models`.
 See the [complete upgrade checklist](installation.md#5-upgrade).

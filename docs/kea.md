@@ -2,7 +2,7 @@
 
 [中文版 / Chinese version](kea.zh.md) · [Back to installation](installation.md)
 
-`pi-pbt kea` is an **experimental** mode for testing an already installed
+`fmbot-pbt kea` is an **experimental** mode for testing an already installed
 HarmonyOS app on a USB-connected phone. It treats the app as a black box and
 drives the Kea2 engine over `hdc`: Kea2 explores the GUI while checking
 properties that must hold whatever the user does, and reports crashes, ANRs, and
@@ -33,11 +33,11 @@ Then run it from the SUT folder, or point `--config` at a file elsewhere:
 
 ```bash
 cd /path/to/sut-folder     # the folder holding kea.config.yml
-pi-pbt kea                 # interactive TUI
-pi-pbt kea -p              # headless/print mode (CI, nohup)
-pi-pbt kea -c              # interactive continuation in the latest run directory
-pi-pbt kea -p -c           # headless continuation
-pi-pbt kea --config other.yml --lang zh
+fmbot-pbt kea                 # interactive TUI
+fmbot-pbt kea -p              # headless/print mode (CI, nohup)
+fmbot-pbt kea -c              # interactive continuation in the latest run directory
+fmbot-pbt kea -p -c           # headless continuation
+fmbot-pbt kea --config other.yml --lang zh
 ```
 
 `-p` selects headless mode; `-c` is independent and reuses the directory named by

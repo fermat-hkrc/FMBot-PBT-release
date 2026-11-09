@@ -8,7 +8,7 @@ A completed campaign writes customer-facing and technical result artifacts:
 - `bug_reports/<slug>.md` is the Markdown version of the individual bug report.
 - `report.json` is the structured source for CI, dashboards, and the generated customer reports.
 
-When a valid `report.json` is written, pi-pbt renders the top-level
+When a valid `report.json` is written, fmbot-pbt renders the top-level
 `REPORT.html` and the per-bug `bug_reports/<slug>.html` from it — and renders
 them again at close-out, so the HTML always matches the final validated JSON.
 Do not hand-maintain those HTML files. The Markdown is different: `REPORT.md`
@@ -52,7 +52,7 @@ removed in a real `report.json`.
 ```jsonc
 {
   "schemaVersion": 4,                    // bumped when a field changes meaning
-  "generator": { "tool": "pi-pbt", "version": "0.1.17" },
+  "generator": { "tool": "fmbot-pbt", "version": "0.1.17" },
   "run": {
     "date": "2026-09-14",
     "revision": "76296ab70ebeb03798762e396289c5625eb5733a",   // the commit tested — makes the report reproducible
@@ -222,7 +222,7 @@ The renderer renders only what `report.json` carries; it never infers evidence
 from freeform Markdown. When `contractBasis` is `documented-limitation`,
 `documented-and-violated`, or `documented-exclusion`, the page also carries a
 **Documentation** block (Chinese: **文档依据**) with the author's verbatim text —
-that block is what tells a developer reading the page that pi-pbt read their
+that block is what tells a developer reading the page that fmbot-pbt read their
 comment and is disagreeing with it on purpose. `report.json` keys remain English
 and stable as the machine-readable contract. HTML output escapes all report
 values before placing them in the page. The report generator also rejects a
@@ -242,7 +242,7 @@ not infer or fabricate them while rendering.
 
 Under the MCP run manager's default worktree mode, the campaign runs in
 `<runDir>/worktree`, captures its repository changes in `changes.patch`, and
-then deletes that worktree. Before deletion, pi-pbt rewrites worktree paths in
+then deletes that worktree. Before deletion, fmbot-pbt rewrites worktree paths in
 `report.json`, `REPORT.md`, `PROPERTIES.md`, `COVERAGE.md`, and bug reports to
 the original repository path. In that repository, check out `run.revision` and
 then apply `changes.patch` before using paths to generated tests. See the
@@ -267,7 +267,7 @@ campaign ran.
 
 The field is optional in the schema, so a report without it is still valid
 schema 4 and `schemaVersion` does not change: read a missing `review` as
-"unknown", never as "reviewed". A pi-pbt campaign always writes it: the
+"unknown", never as "reviewed". A fmbot-pbt campaign always writes it: the
 campaign's write of `report.json` and the final gate compare it with what the
 campaign actually did, and a `not-reviewed` result also needs REPORT.md's
 `**Independent review:** not reviewed (<reason>) — <why>` line.

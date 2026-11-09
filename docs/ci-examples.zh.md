@@ -2,7 +2,7 @@
 
 [English](ci-examples.md) · [使用指南](usage.zh.md#模式二mr-门禁)
 
-两个示例都假设 runner 上已安装 pi-pbt 并配置好模型。`./build.sh` 换成项目自己的构建命令，不需要构建时删掉这一步。
+两个示例都假设 runner 上已安装 fmbot-pbt 并配置好模型。`./build.sh` 换成项目自己的构建命令，不需要构建时删掉这一步。
 
 ## GitHub Actions
 
@@ -23,7 +23,7 @@ jobs:
       - run: ./build.sh
 
       - run: >
-          pi-pbt hook-run ${{ github.event.pull_request.head.sha }}
+          fmbot-pbt hook-run ${{ github.event.pull_request.head.sha }}
           --base ${{ github.event.pull_request.base.sha }}
           --repo . --out "$RUNNER_TEMP/pbt-out" --lang zh
 
@@ -42,7 +42,7 @@ jobs:
 ```yaml
 pbt:
   stage: test
-  tags: [pi-pbt]
+  tags: [fmbot-pbt]
   timeout: 90m
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -50,7 +50,7 @@ pbt:
     GIT_DEPTH: "0"
   script:
     - ./build.sh
-    - pi-pbt hook-run "$CI_COMMIT_SHA" --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --repo . --out pbt-report --lang zh
+    - fmbot-pbt hook-run "$CI_COMMIT_SHA" --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --repo . --out pbt-report --lang zh
   artifacts:
     when: always
     paths:

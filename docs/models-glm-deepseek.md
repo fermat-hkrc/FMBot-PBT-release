@@ -118,10 +118,10 @@ export CLIPROXY_API_KEY='your-proxy-access-key'
 curl --fail --silent --show-error \
   -H "Authorization: Bearer $CLIPROXY_API_KEY" \
   http://127.0.0.1:8317/v1/models
-pi-pbt --list-models
-pi-pbt --provider cliproxy-devin --model devin/glm-5-2 --thinking high
+fmbot-pbt --list-models
+fmbot-pbt --provider cliproxy-devin --model devin/glm-5-2 --thinking high
 # Or:
-pi-pbt --provider cliproxy-devin --model devin/deepseek-v4-pro --thinking high
+fmbot-pbt --provider cliproxy-devin --model devin/deepseek-v4-pro --thinking high
 ```
 
 `--list-models` checks discovery/configuration, not successful tool use. Test a

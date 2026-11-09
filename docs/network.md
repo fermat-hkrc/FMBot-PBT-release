@@ -4,7 +4,7 @@
 
 Enterprise certificate compatibility is enabled by default. No certificate configuration is needed for the destinations below.
 
-| pi-pbt HTTPS destinations with a certificate exception | Hosts |
+| fmbot-pbt HTTPS destinations with a certificate exception | Hosts |
 |---|---|
 | Huawei | `huawei.com`, `*.huawei.com`, `repo.huaweicloud.com`, `mirrors.huaweicloud.com`, `ohpm.openharmony.cn` |
 | npm / Node / PyPI | `registry.npmjs.org`, `nodejs.org`, `pypi.org`, `files.pythonhosted.org` |

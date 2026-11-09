@@ -6,18 +6,18 @@
 
 | 命令 | 用途 |
 |---|---|
-| `pi-pbt` | 交互式会话，用自然语言提出测试要求 |
-| `pi-pbt -p "<要求>"` | 无人值守运行一次；退出码不代表判定结果 |
-| `pi-pbt mcp` | MCP 服务，供 Claude Code、Codex 调用（模式一） |
-| `pi-pbt hook-run <sha>` | 测试一次提交或一个 MR，退出码即判定结果（模式二） |
-| `pi-pbt build-run --build-cmd "<命令>"` | 先运行你给的构建命令，成功后再测试 |
-| `pi-pbt watch` | 监视分支，每个新提交测试一次 |
-| `pi-pbt resume` | 继续一次中断的测试任务 |
-| `pi-pbt finalize` | 不调用模型，校验并渲染已有的测试结果 |
-| `pi-pbt scan` / `pi-pbt coverage` | 列出函数 / 汇总测试进度，不调用模型 |
-| `pi-pbt dashboard` | 本机网页面板 |
-| `pi-pbt skill-install` | 给 coding agent 安装 `pi-pbt-dev` skill |
-| `pi-pbt kea` | HarmonyOS 真机界面测试（实验性），见 [Kea 指南](kea.zh.md) |
+| `fmbot-pbt` | 交互式会话，用自然语言提出测试要求 |
+| `fmbot-pbt -p "<要求>"` | 无人值守运行一次；退出码不代表判定结果 |
+| `fmbot-pbt mcp` | MCP 服务，供 Claude Code、Codex 调用（模式一） |
+| `fmbot-pbt hook-run <sha>` | 测试一次提交或一个 MR，退出码即判定结果（模式二） |
+| `fmbot-pbt build-run --build-cmd "<命令>"` | 先运行你给的构建命令，成功后再测试 |
+| `fmbot-pbt watch` | 监视分支，每个新提交测试一次 |
+| `fmbot-pbt resume` | 继续一次中断的测试任务 |
+| `fmbot-pbt finalize` | 不调用模型，校验并渲染已有的测试结果 |
+| `fmbot-pbt scan` / `fmbot-pbt coverage` | 列出函数 / 汇总测试进度，不调用模型 |
+| `fmbot-pbt dashboard` | 本机网页面板 |
+| `fmbot-pbt skill-install` | 给 coding agent 安装 `pi-pbt-dev` skill |
+| `fmbot-pbt kea` | HarmonyOS 真机界面测试（实验性），见 [Kea 指南](kea.zh.md) |
 
 通用参数：`--lang zh` 输出中文；`--effort quick|standard|thorough` 测试深度；`--provider`、`--model`、
 `--thinking` 选择模型；`--scope <路径>` 限定测试范围；`--out <目录>` 指定输出目录。
@@ -25,8 +25,9 @@
 ## `hook-run`
 
 ```text
-pi-pbt hook-run <sha> [--base <rev>] [--spec <file>]... [--repo <path>] [--out <dir>] [--workdir <dir>]
-  [--scope <path>] [--effort …] [--lang zh] [--prompt <text> | --prompt-file <path>]
+fmbot-pbt hook-run <sha> [--base <rev>] [--spec <file>]... [--repo <path>] [--out <dir>] [--workdir <dir>]
+  [--build-cmd "<command>" [--build-workdir <dir>]] [--scope <path> [--func <name>]] [--target change|scope]
+  [--effort …] [--lang zh] [--prompt <text> | --prompt-file <path>]
   [--provider <p>] [--model <m>] [--thinking <level>] [--mode text|json|json-full] [--no-coverage]
 ```
 
@@ -36,8 +37,14 @@ pi-pbt hook-run <sha> [--base <rev>] [--spec <file>]... [--repo <path>] [--out <
 | 代码 | `<sha>` | 被测提交；是合并提交时，与它的第一个父提交比较 |
 | | `--base <rev>` | MR 的基准提交，改为测试从它到 `<sha>` 的全部改动 |
 | | `--repo <path>` | 已检出 `<sha>` 的工作树，默认当前目录；浅克隆请用 `fetch-depth: 0` |
-| | `--scope <path>` | 只测这个文件或目录 |
-| 编译命令 | — | 在 CI 中先用项目自己的命令构建；pi-pbt 沿用已有的构建结果 |
+| | `--scope <path>`、`--func <name>` | 只测这个文件或目录，以及其中一个函数（`--func` 需要 `--scope`） |
+| | `--target scope` | 测试 `<sha>` 中 `--scope` 下的全部代码，而不只是改动（`--scope .` 即全仓）；检出必须停在 `<sha>`；不能与 `--base` 同用 |
+| 编译命令（可选） | `--build-cmd "<command>"` | 测试前先用这条命令构建检出代码；测试过程中只用这条命令重建。不给时请在 CI 中先构建，fmbot-pbt 沿用构建结果 |
+| | `--build-workdir <dir>` | 构建命令的运行目录，默认 `--repo`；必须包含 `--repo` 或位于其中 |
+| | `--workdir <dir>` | 会被删除重建的临时目录，默认是 `--repo` 同级的 `pbt-hook-work`；不是构建目录 |
+
+使用 `--build-cmd` 时，检出代码必须已处于 `<sha>`（不会替你 checkout，否则以 `2` 退出）；构建失败以 `3` 退出，
+不开始测试，输出见 `<out>/build.log`。`--out`、`--workdir` 不得包含检出代码、构建目录、当前目录或 `--spec` 文档（含符号链接）。
 
 | 输出 | 说明 |
 |---|---|
@@ -49,7 +56,7 @@ pi-pbt hook-run <sha> [--base <rev>] [--spec <file>]... [--repo <path>] [--out <
 ## `build-run`
 
 ```text
-pi-pbt build-run --build-cmd "<command>" [--spec <file>]... [--workdir <dir>] [--repo <path>] [--out <dir>]
+fmbot-pbt build-run --build-cmd "<command>" [--spec <file>]... [--workdir <dir>] [--repo <path>] [--out <dir>]
   [--scope <path>] [--func <name>] [--diff <file> | --commit <sha>] [--isolate]
   [--effort …] [--lang zh] [--prompt <text> | --prompt-file <path>]
   [--provider <p>] [--model <m>] [--thinking <level>] [--mode text|json|json-full] [--no-coverage]
@@ -79,7 +86,7 @@ OpenHarmony 组件优先使用原生 `host_product`，产物位于 `out/host/hos
 
 ```bash
 export PBT_OH_WORKSPACE=/path/to/openharmony
-pi-pbt build-run \
+fmbot-pbt build-run \
   --workdir "$PBT_OH_WORKSPACE" \
   --repo "$PBT_OH_WORKSPACE/foundation/arkui/ace_engine" \
   --build-cmd "./build.sh --export-para PYCACHE_ENABLE:true --product-name host_product --build-target base_unittest --ccache --no-prebuilt-sdk" \
@@ -90,7 +97,7 @@ pi-pbt build-run \
 普通 CMake 项目：
 
 ```bash
-pi-pbt build-run --build-cmd "cmake -S . -B build && cmake --build build --target calc_test" --scope src/calc.cpp
+fmbot-pbt build-run --build-cmd "cmake -S . -B build && cmake --build build --target calc_test" --scope src/calc.cpp
 ```
 
 HarmonyOS 应用见 [ArkTS 指南](pbt/arkts.zh.md)。
@@ -100,7 +107,7 @@ HarmonyOS 应用见 [ArkTS 指南](pbt/arkts.zh.md)。
 ```bash
 set -o pipefail
 LOG_DIR=/tmp/pbt-logs && mkdir -p "$LOG_DIR"
-pi-pbt build-run --mode json \
+fmbot-pbt build-run --mode json \
   --build-cmd "./build.sh --product-name host_product --build-target base_unittest" \
   2>"$LOG_DIR/stderr.log" | tee "$LOG_DIR/events.jsonl"
 ```
@@ -108,8 +115,8 @@ pi-pbt build-run --mode json \
 ## `mcp`
 
 ```bash
-claude mcp add --transport stdio pi-pbt -- pi-pbt mcp
-codex mcp add pi-pbt -- pi-pbt mcp
+claude mcp add --transport stdio fmbot-pbt -- fmbot-pbt mcp
+codex mcp add fmbot-pbt -- fmbot-pbt mcp
 ```
 
 | 工具 | 用途 |
@@ -128,11 +135,11 @@ codex mcp add pi-pbt -- pi-pbt mcp
 | `spec` | 需求文档（可选），一个路径或路径列表；不给时从代码推断意图 |
 | `include_uncommitted` | 连同未提交的改动一起测试 |
 | `revision` | 要测试的提交，默认 `HEAD` |
-| `base` | 基准提交，测试从它到 `revision` 的全部改动；不能与 `build_cmd` 同用 |
-| `scope` | 限定测试范围 |
+| `base` | 基准提交，测试从它到 `revision` 的全部改动；不能与 `target: "scope"` 同用 |
+| `scope`、`target` | 限定测试范围；`target: "scope"` 测试 `scope` 下的全部代码，而不只是改动（`.` 即全仓；按模块分次运行更易阅读） |
 | `effort`、`lang`、`provider`、`model` | 同命令行参数 |
 | `prompt` | 追加给测试任务的说明 |
-| `build_cmd`、`build_workdir` | 构建命令及其运行目录；此时测试在原检出中进行，结束前不要修改代码 |
+| `build_cmd`、`build_workdir` | 构建命令及其运行目录，同 `hook-run --build-cmd`；此时测试在原检出中进行，检出必须停在 `revision`，结束前不要修改代码 |
 
 不带 `build_cmd` 时，测试在独立的 git worktree 中进行。结果保存在 `~/.pi-pbt/runs/<run_id>/`，生成的测试在
 其中的 `changes.patch`。
@@ -140,21 +147,31 @@ codex mcp add pi-pbt -- pi-pbt mcp
 ## `watch`
 
 ```text
-pi-pbt watch [--repo <path>] [--base <rev>] [--spec <file>]... [--interval <sec>] [--fetch] [--branch <name>] [--out <dir>] [--lang zh] [--effort …]
+fmbot-pbt watch [--repo <path>] [--base <rev>] [--spec <file>]... [--interval <sec>] [--fetch] [--branch <name>] [--out <dir>] [--lang zh] [--effort …]
 ```
 
-每个新提交运行一次 `hook-run`。一次轮询发现超过 10 个新提交时只测最新的 10 个，需要每个提交都测请用 `hook-run`。
+按从旧到新的顺序，每个新提交运行一次 `hook-run`，并带上这里给出的任意 `hook-run` 参数，开始监听前即校验。每次轮询
+最多测最新的 10 个新提交，需要每个都测请用 `hook-run`。使用 `--build-cmd` 时只测当前检出的 HEAD，且不能与 `--fetch` 同用。
+
+## 会话中的 skill
+
+在交互式 `fmbot-pbt` 会话中，`/skill:pbt-build-run`、`/skill:pbt-hook-run`、`/skill:pbt-watch` 分别接受 `build-run`、
+`hook-run`、`watch` 的参数，执行同一套准备、构建门禁和判定（`0`–`3`）；测试在当前会话中可见地运行。用 `stop_watch`
+工具停止监听。
+
+与命令的差异：会话保持自己的工作目录；不支持 `--mode json|json-full`；`--provider`、`--model`、`--thinking` 会切换
+会话的模型并在之后继续生效；`--provider` 需要同时给 `--model`。
 
 ## 其他命令
 
 | 命令 | 说明 |
 |---|---|
-| `pi-pbt resume [--out <dir>] [--attempts <n>] [--wait <sec>]` | 继续中断的测试任务 |
-| `pi-pbt finalize [--out <dir>] [--lang zh]` | 校验并渲染已有结果；`0` 有效，`2` 无效 |
-| `pi-pbt scan [--dir <path>] [--out <dir>]` | 列出函数，写入 `FUNCTION_INDEX.md`，见[覆盖率跟踪](coverage-tracking.md) |
-| `pi-pbt coverage [--list \| --json]` | 汇总 `pbt-out/` 中的测试进度 |
-| `pi-pbt dashboard [--port 8000]` | 本机网页面板 |
-| `pi-pbt skill-install [--host <agent>] [--dir <path>] [--force]` | 安装 `pi-pbt-dev` skill，见 [skill 指南](skill-pi-pbt-dev.zh.md) |
+| `fmbot-pbt resume [--out <dir>] [--attempts <n>] [--wait <sec>]` | 继续中断的测试任务 |
+| `fmbot-pbt finalize [--out <dir>] [--lang zh]` | 校验并渲染已有结果；`0` 有效，`2` 无效 |
+| `fmbot-pbt scan [--dir <path>] [--out <dir>]` | 列出函数，写入 `FUNCTION_INDEX.md`，见[覆盖率跟踪](coverage-tracking.md) |
+| `fmbot-pbt coverage [--list \| --json]` | 汇总 `pbt-out/` 中的测试进度 |
+| `fmbot-pbt dashboard [--port 8000]` | 本机网页面板 |
+| `fmbot-pbt skill-install [--host <agent>] [--dir <path>] [--force]` | 安装 `pi-pbt-dev` skill，见 [skill 指南](skill-pi-pbt-dev.zh.md) |
 
 ## 测试深度
 
@@ -177,7 +194,7 @@ pi-pbt watch [--repo <path>] [--base <rev>] [--spec <file>]... [--interval <sec>
 |---|---|
 | `PBT_TLS_EXCEPTIONS=off` | 关闭[企业证书例外](network.zh.md)与包管理器的 TLS 兼容 |
 | `NODE_USE_SYSTEM_CA=0` | 关闭默认添加系统 CA；程序保留显式指定的运行时证书选项 |
-| `NODE_EXTRA_CA_CERTS=/path/ca.pem` | 添加 PEM 格式的 CA 证书；启动 pi-pbt 前设置，子进程继承此配置 |
+| `NODE_EXTRA_CA_CERTS=/path/ca.pem` | 添加 PEM 格式的 CA 证书；启动 fmbot-pbt 前设置，子进程继承此配置 |
 | `PBT_LANG` | `zh` 或 `en`，输出语言 |
 | `PBT_EFFORT` | 默认测试深度 |
 | `PBT_TEST_JOBS` | 测试与构建的并行度：数字、`max` 或 `auto`（默认，空闲核心数） |

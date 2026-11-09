@@ -4,7 +4,7 @@
 
 默认开启企业证书兼容，访问下表中的目标无需额外配置证书。
 
-| pi-pbt 的 HTTPS 证书例外范围 | 域名 |
+| fmbot-pbt 的 HTTPS 证书例外范围 | 域名 |
 |---|---|
 | 华为 | `huawei.com`、`*.huawei.com`、`repo.huaweicloud.com`、`mirrors.huaweicloud.com`、`ohpm.openharmony.cn` |
 | npm / Node / PyPI | `registry.npmjs.org`、`nodejs.org`、`pypi.org`、`files.pythonhosted.org` |

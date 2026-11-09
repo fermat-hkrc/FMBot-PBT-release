@@ -10,6 +10,32 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.3.0 - 2026-11-09
+
+### English
+
+- **The command is now `fmbot-pbt`.** Release archives are `fmbot-pbt-<platform>.tar.xz` and contain `fmbot-pbt`. `pi-pbt` keeps working: a symlink in the archive and in `/usr/local/bin` (`install.sh` replaces an old `pi-pbt` binary with it), `pi-pbt.cmd` on Windows, and a second npm bin. The config directory `~/.pi-pbt` and the `PBT_*` / `PI_PBT_*` variables are unchanged.
+- The interactive startup header shows the FMBot-PBT mark and version with pi's key hints; `quietStartup` still hides it.
+- `hook-run` takes `--build-cmd`, `--build-workdir` and `--func`, and `--target scope --scope <dir>` (`.` = whole repository) tests a scope at a commit instead of a change. `/skill:pbt-hook-run` and the MCP `pbt_start` tool (`target`, `scope`, `build_cmd`) run the same hook-run engine, parser, build gate and verdict (0 clean, 1 bugs, 2 incomplete, 3 build failed).
+- Stopping a build or `watch` stops the whole build process tree.
+- ArkTS: type aliases, function types, complete overload signatures, getters and setters, bounded Date unions, pinned tutorial union forms, literal-union fields in `recordOf`, and `Record<string, number | string | boolean>` via `dictionary(string(), primitiveUnion())`. `recordOf` must shrink each field; `integer()` is refused for a fractional threshold.
+- Isolated `--func` HAPs inherit the SUT's SDK floor, emit `OpenHarmonyTestRunner`, hard-link the import graph so OHM stays `@entry`, skip unused local imports, and allow a few dozen local files.
+- Scope scans are delegated and their ledgers are invalidated when source contents change; close-out reviews rerun targeted tests; the coverage steer follows the change surface; scan and close-out steering cost less.
+- Windows: evidence paths are normalized and citations parsed; the campaign-quiet wait no longer hangs.
+- Updated: biome 2.6.6, vitest 5.1.0, fast-check 4.10.2, semver 7.8.6, pi-btw 0.8.1, pi-subagents 0.87.0, bundled fd 10.5.2. pi stays 1.5.0.
+
+### 中文
+
+- **命令改名为 `fmbot-pbt`。** 发行包改名为 `fmbot-pbt-<平台>.tar.xz`，包内是 `fmbot-pbt`。`pi-pbt` 仍可使用：发行包和 `/usr/local/bin` 里是指向它的符号链接（`install.sh` 会替换旧的 `pi-pbt` 二进制），Windows 上是 `pi-pbt.cmd`，npm 安装同时提供两个命令。配置目录 `~/.pi-pbt` 和 `PBT_*` / `PI_PBT_*` 变量不变。
+- 交互界面启动时显示 FMBot-PBT 标识和版本，保留 pi 的快捷键提示；`quietStartup` 仍可隐藏。
+- `hook-run` 新增 `--build-cmd`、`--build-workdir`、`--func`；`--target scope --scope <目录>`（`.` 为全仓）测试某个提交上的整个范围，而不是变更。`/skill:pbt-hook-run` 和 MCP 的 `pbt_start`（`target`、`scope`、`build_cmd`）共用同一个 hook-run 引擎、参数解析、构建门禁和结论（0 无问题，1 有缺陷，2 未完成，3 构建失败）。
+- 停止构建或 `watch` 时会停止整个构建进程树。
+- ArkTS：支持类型别名、函数类型、完整重载签名、getter 与 setter、有界 Date 联合、教程固定的联合形式、`recordOf` 中的字面量联合字段，以及用 `dictionary(string(), primitiveUnion())` 生成 `Record<string, number | string | boolean>`。`recordOf` 必须逐字段最小化；小数阈值不接受 `integer()`。
+- 隔离 `--func` HAP 继承被测模块的 SDK 下限，生成 `OpenHarmonyTestRunner`，硬链接导入图使 OHM 保持 `@entry`，跳过未使用的本地导入，并允许几十个本地文件。
+- 范围扫描改为委派执行，源码内容变化时作废扫描记录；收尾审查重跑目标测试；覆盖引导聚焦变更面；扫描和收尾引导开销更低。
+- Windows：统一证据路径并解析引用；等待测试静默不再卡住。
+- 更新：biome 2.6.6、vitest 5.1.0、fast-check 4.10.2、semver 7.8.6、pi-btw 0.8.1、pi-subagents 0.87.0、内置 fd 10.5.2。pi 仍为 1.5.0。
+
 ## 0.2.2 - 2026-11-05
 
 ### English
