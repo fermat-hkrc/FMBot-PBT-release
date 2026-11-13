@@ -22,7 +22,7 @@
 
 本教程讲的是**安装 skill** 这条路径。宿主 agent 启动
 `scripts/run-pbt.mjs`，脚本再启动一个 `fmbot-pbt -p` 子进程，并等待它退出后读取结果。
-进度行会把等待过程显示出来，但契约仍是同步的：这不是后台委派，同一个 agent turn
+进度行会把等待过程显示出来，但约定仍是同步的：这不是后台委派，同一个 agent turn
 不会在测试任务运行时继续编辑代码。
 
 MCP 是另一套无需安装 skill 的委派接口。`pbt_start` 会立即返回 `run_id`，独立的
@@ -166,7 +166,7 @@ node <skill>/scripts/diff-scope.mjs   # 应输出改动文件清单 JSON
 对本次改动做增量 PBT：
 
 - 改动仅文档/注释/纯测试/配置文件 → 跳过
-- 改动含生产代码 → 按 skill 模式判定执行（范围须经确认，见 skill 契约）
+- 改动含生产代码 → 按 skill 模式判定执行（范围须经确认，见 skill 约定）
 - 战役发现的 bug 摘要必须呈现在对话中，并询问是否修复
 ```
 
@@ -234,7 +234,7 @@ skill 会为每轮测试任务选择一个新目录（如 `pbt-out/2026-09-16T10
 | `PROPERTIES.md` | 性质性质清单：每个被测性质的形式化陈述与状态（passing / failing / retired） |
 | `bug_reports/bug_001_*.md` | 每个 bug 一份：Law、最小输入、期望/实际、根因、回归测试位置 |
 
-源码测试任务契约还会生成 `report.json`，它是同一组事实的机读视图：schema 版本、
+源码测试任务约定还会生成 `report.json`，它是同一组事实的机读视图：schema 版本、
 被测 revision 与档位、构建证据、每条性质和 bug、每个 bug 的精确复现命令，以及重新
 核算的 totals。脚本、CI、dashboard 或 MCP client 需要稳定字段而不是解析 Markdown
 时，应读取它。
@@ -247,7 +247,7 @@ JSON 顶替。`summarize.mjs` 仍读 Markdown，不负责 JSON schema 校验。
 
 受管的 `hook-run` 与 MCP 会共同校验 `REPORT.md` / `report.json`，JSON 缺失或无效
 意味着未完成。MCP 全文资源为 `pbt://runs/<id>/report.json`，`pbt_report` 返回摘要；
-字段及校验规则见[报告契约](report-schema.md)。
+字段及校验规则见[报告约定](report-schema.md)。
 
 
 **版本注意：**2026-09-16 替换发布的 v0.1.18 包已含上述归档修复，此前下载的

@@ -10,6 +10,38 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.4.0 - 2026-11-13
+
+### English
+
+- **Campaign results are records, not hand-written Markdown.** report.json is schema 5 and is written one validated record at a time: `record_run`, `record_property`, `record_bug`, `record_caveat`, `record_remark`, `record_summary` (which closes the campaign). Property designs go through `record_design` into `pbt-out/properties.json`. REPORT.md, PROPERTIES.md, REVIEW.md and bug pages are rendered from the records; writing any of them by hand, or report.json / properties.json, is refused with the tool to use instead. Schema 4 reports and the hand-written `APPROVED_IR.md` ledger are retired. Verdicts stored before this release do not carry over.
+- The close-out review lives in report.json; `respond_review` answers one finding by id. Each property keeps its history (status changes, re-verification of a counterexample, baseline runs); a property that failed and now passes needs a re-verification or a failing baseline run.
+- Function-scoped campaigns (including ArkTS compressed ones) use the same ledger and independent review as every other campaign; only PLAN.md is skipped.
+- One oracle taxonomy: the IR's `oracle:` names a class (`round_trip`, `invariant`, `error_contract`, …); older spellings are rewritten, unknown ones refused. Reports name the class in the report's language with its definition and sources.
+- Bug pages show the offending code as a diff hunk with its path and function, and `record_bug` requires the fix as a unified diff.
+- Scope campaigns order modules by earlier verdicts in the same repository: modules with a failing property first, then untested, then passed.
+- A compile error in a file the campaign wrote (its test, helper or build registration) is fixed and rebuilt with the same command, not a build STOP. The campaign's `--out` directory counts as its own whatever it is called.
+- Scan and Plan run at `xhigh` thinking (`PBT_DESIGN_THINKING`, `keep` disables it); a higher session level is never lowered.
+- API performance (time to headers and first token, duration, tokens, tool time, child workers) is shown in the status line and written to `pbt-out/api-perf.json`.
+- ArkTS: tutorial-scoped Record, interface, generic constraint and generic default support (28 supported / 0 partial / 6 unsupported); isolated graphs are protected copies under `entry/src/common`; isolated HAPs copy the owning module's real string resources and refuse missing or dynamic ones; scoped operations must actually execute and be observed. PandaCheck is pinned with IEEE numeric support and its bytes are verified through build and binary delivery.
+- The enterprise-TLS preload no longer breaks Node older than 16 and builds on Windows.
+- Updated: pi 1.5.2. New: js-tokens 10.0.0.
+
+### 中文
+
+- **测试结果改为结构化记录，不再手写 Markdown。** report.json 升级为 schema 5，由工具逐条校验写入：`record_run`、`record_property`、`record_bug`、`record_caveat`、`record_remark`、`record_summary`（由它收尾）。性质设计通过 `record_design` 写入 `pbt-out/properties.json`。REPORT.md、PROPERTIES.md、REVIEW.md 和缺陷页面都从记录渲染；手写这些文件或 report.json、properties.json 会被拒绝，并提示应使用的工具。schema 4 报告和手写的 `APPROVED_IR.md` 台账已停用。本版本之前保存的判定记录不再沿用。
+- 收尾审查保存在 report.json 中，`respond_review` 按编号逐条回复审查意见。每个性质保留历史（状态变化、反例复核、基线运行）；曾失败、现已通过的性质必须有复核或失败的基线运行。
+- 单函数测试任务（包括 ArkTS 精简流程）与其他任务使用同一套台账和独立审查，只跳过 PLAN.md。
+- 统一的判定方式（oracle）分类：IR 的 `oracle:` 必须是分类 id（`round_trip`、`invariant`、`error_contract` 等），旧写法自动改写，未知值被拒绝。报告用报告语言给出分类名称、定义和文献出处。
+- 缺陷页面以带路径和函数名的 diff hunk 展示问题代码；`record_bug` 要求修复建议是统一 diff 格式。
+- 范围测试任务按本仓库以前的判定结果排列模块：先有失败性质的模块，再是未测过的，最后是已全部通过的。
+- 测试任务自己写的文件（测试、辅助代码或构建登记）编译出错时，改好后用同一条命令重建，不再当作构建失败 STOP。`--out` 目录无论叫什么名字都算任务自己的目录。
+- 扫描和规划阶段使用 `xhigh` 思考级别（`PBT_DESIGN_THINKING`，设为 `keep` 关闭）；不会降低会话本身更高的级别。
+- 状态栏显示 API 性能（响应头和首个 token 时间、耗时、token 数、工具耗时、子任务），并写入 `pbt-out/api-perf.json`。
+- ArkTS：支持教程范围内的 Record、interface、泛型约束和泛型默认值（28 项支持 / 0 项部分支持 / 6 项不支持）；隔离的导入图作为受保护副本放在 `entry/src/common`；隔离 HAP 复制所属模块的真实字符串资源，缺失或动态资源会被拒绝；范围内的操作必须真正执行并被观测。PandaCheck 固定到支持 IEEE 数值的版本，构建和二进制交付时校验其字节。
+- 企业 TLS 预加载不再导致 Node 16 以下版本无法运行，并可在 Windows 上构建。
+- 更新：pi 1.5.2。新增：js-tokens 10.0.0。
+
 ## 0.3.0 - 2026-11-09
 
 ### English

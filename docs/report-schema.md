@@ -7,15 +7,23 @@ A completed campaign writes customer-facing and technical result artifacts:
 - `REPORT.md` is the technical Markdown campaign narrative.
 - `bug_reports/<slug>.md` is the Markdown version of the individual bug report.
 - `report.json` is the structured source for CI, dashboards, and the generated customer reports.
+- `api-perf.json` is fmbot-pbt's own measurement of the model provider: one record per
+  main-session call (time to the response headers, time to first token, duration, tokens,
+  final HTTP status), tool time per
+  tool, and each delegated scan or close-out review child (duration, usage, errors, rate
+  limits). `REPORT.html` shows its summary, the CLI teardown (or the TUI on exit) appends
+  it to `REPORT.md` as a marked `## API performance` section, and the TUI footer shows
+  calls, time to first token, output rate and errors while the session runs. It is not
+  part of the `report.json` contract and never changes a verdict. pi-ai retries a 429 or
+  5xx inside the request without an event for the failed attempts, so their wait shows
+  as a long time to the response headers rather than as an error.
 
-When a valid `report.json` is written, fmbot-pbt renders the top-level
-`REPORT.html` and the per-bug `bug_reports/<slug>.html` from it — and renders
-them again at close-out, so the HTML always matches the final validated JSON.
-Do not hand-maintain those HTML files. The Markdown is different: `REPORT.md`
-and `bug_reports/<slug>.md` are authored by the campaign (the technical
-narrative with Verdict, Modules Tested, Design Caveats, change surface and
-coverage evidence), and the renderer never overwrites an existing one; it only
-fills in a Markdown overview or bug page where the campaign left none.
+A campaign never writes these files. It records each fact with a record tool
+(`record_run`, `record_property`, `record_bug`, `record_caveat`,
+`record_remark`, `record_summary`; see [Record tools](#record-tools) below), and fmbot-pbt writes
+`report.json` and renders `REPORT.md`, `REPORT.html` and every
+`bug_reports/<slug>.md` / `.html` from it after each record. A write or edit of
+any of them is refused.
 
 `hook-run` requires both files in the same recognized artifact root. A missing
 or invalid `report.json` makes the check incomplete (exit `2`), even if
@@ -46,12 +54,12 @@ format. A command containing `...` or a `<placeholder>` is rejected. See
 
 ## Shape
 
-JSON does not support comments; the comments below are explanatory and must be
-removed in a real `report.json`.
+The record tools write this file; the comments below are explanatory and do not
+appear in a real `report.json`.
 
 ```jsonc
 {
-  "schemaVersion": 4,                    // bumped when a field changes meaning
+  "schemaVersion": 5,                    // bumped when a field changes meaning
   "generator": { "tool": "fmbot-pbt", "version": "0.1.17" },
   "run": {
     "date": "2026-09-14",
@@ -104,6 +112,9 @@ removed in a real `report.json`.
       "reportPath": "bug_reports/invert-singular.md",   // relative to this file; one bug per file
       "contractBasis": "documented-limitation",        // optional — see "What retires a finding"
       "documentedBehavior": "Invert assumes a non-singular matrix — matrix4.h:88",  // required with a documented basis
+      "contractEvidence": "documented matrix4.h:88 — `Invert assumes a non-singular matrix`",
+      "documentationConflict": "(none)",
+      "callerEvidence": "/srv/oh/foundation/arkui/ace_engine/frameworks/core/transform.cpp:40 `matrix.Invert();`",
       "reproduction": {
         "build": "./build.sh --product-name host_product --build-target geometry_pbt_test",
         "run": "RC_PARAMS='reproduce=BQSThRncAQAA' out/host/host_product/tests/geometry_pbt_test --gtest_filter=GeometryPbt.Inverse",
@@ -113,8 +124,23 @@ removed in a real `report.json`.
       }
     }
   ],
+  "caveats": [],                          // design notes; see Schema 5
+  "remarks": [],                          // why the result is weaker than it should be
+  "summary": {
+    "conclusion": "One medium bug: Invert reports success for a singular matrix.",
+    "changedCode": "frameworks/base/geometry/matrix4.cpp",
+    "coverageEvidence": { "level": "file-level", "detail": "coverage_gaps: matrix4.cpp covered by geometry_pbt_test" },
+    "followUp": "Fix b1 and keep its regression test."
+  },
+  "modules": [{ "name": "geometry", "tests": 1, "bugs": 1, "oracles": ["round_trip"] }],
+  "testFiles": [{ "file": "/srv/oh/foundation/arkui/ace_engine/test/pbt/base/geometry_pbt_test.cpp", "tests": 1 }],
+  "reproduction": {
+    "build": "./build.sh --product-name host_product --build-target geometry_pbt_test",
+    "run": "out/host/host_product/tests/geometry_pbt_test",
+    "workdir": "/srv/oh"
+  },
   "totals": { "properties": 1, "passing": 0, "failing": 1, "bugs": 1 },
-  "review": { "status": "reviewed", "findings": 2 }   // optional in the schema; see "Independent review"
+  "review": { "status": "reviewed", "targets": { "bug:b1": { "sha": "…", "share": "bug:b1", "summary": "…" } }, "findings": [], "lastFinding": 0 }   // see "Independent review"
 }
 ```
 
@@ -163,10 +189,10 @@ jq -r '.properties[] | select(.status == "failing") | "\(.name) — \(.counterex
 - `reproduction.build` / `.run` must not contain `...`, `<placeholder>`, `TODO`, `TBD`, `FIXME`, `XXX`, `PLACEHOLDER` or `N/A`.
 - Every bug's property names it back, and their counterexamples agree — one witness per link.
 - `impact` and `fix` are required for every bug so a customer can understand the consequence and the recommended remediation without interpreting test internals. `fix` must show the change **as code** — a fenced block or an inline code span with the corrected line(s) — and must not be a pointer at another bug (`同 b1`, `see b1`): every page stands alone.
-- **Every bug carries its evidence** (schema 4): `law` (the invariant violated, plain language), `rootCause` (`file:line` + why), `offendingCode` (`file` absolute and inside `run.repository`, `line` one-based, `snippet` the defective line(s) verbatim), `rawOutput` (the framework's failure text) and `regressionTest` (absolute path inside `run.repository`, or `null` while none is written). None of them may still carry the skeleton's `<...>` template phrase. The `offendingCode` snippet is **re-read from the tree** when the campaign writes `report.json`, at every close-out, and in the final gates (`hook-run`, the run manager — which judges it before a worktree is torn down): matching is whitespace-insensitive per line and tolerates the snippet starting within two lines of `line`; a paraphrase, an elision or a stale line number is refused with the line the file actually has there. `regressionTest: null` is accepted only at write time; the close-out and the final gates require a readable file, so a page never ships saying "not written yet". An edit of the campaign's `report.json` is judged on the file it produces (the edits are applied to the current text, exactly and uniquely, and the result runs the same checks as a write), so one field can be corrected with `edit`; an edit whose text is not found once is refused rather than left to a fuzzy match.
+- **Every bug carries its evidence**: `law` (the invariant violated, plain language), `rootCause` (`file:line` + why), `offendingCode` (`file` absolute and inside `run.repository`, `line` one-based, `snippet` the defective line(s) verbatim), `rawOutput` (the framework's failure text) and `regressionTest` (absolute path inside `run.repository`, or `null` while none is written). None of them may still carry the skeleton's `<...>` template phrase. The `offendingCode` snippet is **re-read from the tree** at each record, at every close-out, and in the final gates (`hook-run`, the run manager — which judges it before a worktree is torn down): matching is whitespace-insensitive per line and tolerates the snippet starting within two lines of `line`; a paraphrase, an elision or a stale line number is refused with the line the file actually has there. `regressionTest: null` is accepted only at write time; the close-out and the final gates require a readable file, so a page never ships saying "not written yet".
 - `reportPath` is unique across bugs and ends in `.md` — one bug, one file. Two bugs sharing a path render to the same `<slug>.html`, and the second silently replaces the first (observed on ace_engine `scroll_container`: b2 overwrote b1's page).
-- `report.json` is refused at write time while the campaign's own artifacts record a finding written out of it: a Design Caveat describing a failure, a passing `PROPERTIES.md` entry with a `Counterexample:`, a Formal admitting the documented value or its sign twin, a writer differential with permuted arguments, or an enumerated domain that omits an enumerator the entry names. The refusal is corrective — file the bug or quote the documentation that declares the input invalid, then write the file again.
-- A bug's contract may be documented or inferred. `REPORT.md`'s bug entry says which under `**Contract evidence:**` (`documented <file:line>` + quote, or `inferred (<signature / type / caller / symmetry>)`); a failing, shrunk property is a bug either way — documentation retires it only by declaring the failing input invalid.
+- The conclusion (`record_summary`) is refused while the campaign's own records state a finding written out of it: a Design Caveat describing a failure, a passing `PROPERTIES.md` entry with a `Counterexample:`, a Formal admitting the documented value or its sign twin, a writer differential with permuted arguments, or an enumerated domain that omits an enumerator the entry names. The refusal is corrective — file the bug or quote the documentation that declares the input invalid, then call `record_summary` again.
+- A bug's contract may be documented or inferred. The bug's `contractEvidence` says which (`documented <file:line>` + quote, or `inferred (<signature / type / caller / symmetry>)`); a failing, shrunk property is a bug either way — documentation retires it only by declaring the failing input invalid.
 - `bugs[].contractBasis` is optional (`inferred` | `documented-exclusion` | `documented-limitation` | `documented-and-violated`). It records **what the comment actually claims**, which is the difference between a finding and a test bug:
   - `documented-exclusion` — the cited text declares the input **invalid / out of domain** (`调用方须保证…`, `never valid`, `precondition`, `must not be persisted`). The generator was wrong; no bug is filed.
   - `documented-limitation` — the cited text **admits a known gap on an input the API accepts** (`暂不支持闰年`, `cannot handle the NONE suffix`, `not implemented yet`). That is the bug being documented: it is filed, `documentedBehavior` quotes the author's text verbatim with its `file:line`, and the severity is graded one step below what the impact alone would earn (critical→high, high→medium, medium→low), stated as such in `REPORT.md`'s `**Severity:**` line. The validator enforces the one contradiction it can decide — a `documented-limitation` bug cannot also be `critical`: "the author disclosed this" and "the top severity" cannot both be the headline. The step itself stays a judgement the report states, because the impact-based grade is not recoverable from the final field.
@@ -175,20 +201,13 @@ jq -r '.properties[] | select(.status == "failing") | "\(.name) — \(.counterex
 - `bugs[].documentedBehavior` is required whenever `contractBasis` is not `inferred`: the author's text verbatim plus its `file:line`. "We read your comment and it documents the limitation rather than excluding the input" has to be quotable, or the report cannot answer the rebuttal it exists to answer.
 - `reportPath` stays inside the artifact directory: no absolute paths, no `..`.
 
-## Customer-facing HTML report template
+## Rendered pages
 
-`src/templates/pbt-bug-report.html` and `src/templates/pbt-bug-report.md` are
-the repository-visible, versioned sources of the per-defect HTML and fallback
-Markdown layouts. They have fixed placeholders for the five required sections;
-`src/pbt-html-report.ts` only supplies data from validated `report.json`.
-`npm run build` stages both at `dist/templates/`, and the Bun binary embeds and
-extracts the same files. Do not hand-write generated `bug_reports/*.html`.
-Existing agent-authored bug Markdown is preserved rather than overwritten; when
-there is no Markdown, the fixed `.md` template is rendered.
-
-`REPORT.html`, `bug_reports/<slug>.html`, and any Markdown the renderer fills in
-(`REPORT.md` / `bug_reports/<slug>.md` when the campaign left none) all follow the
-campaign output language:
+`src/pbt-report-render.ts` (REPORT.md) and `src/pbt-html-report.ts` (REPORT.html
+and the bug pages) are the only report layouts in the repository: there is no
+template file and no sample report to keep in step. They render only what a
+validated `report.json` carries and overwrite every page on each record; do not
+hand-write or edit them. Every page follows the campaign output language:
 
 - `PBT_LANG=zh` renders Chinese prose, uses `<html lang="zh-CN">`, and uses the
   per-bug sections **问题概述 / 问题代码 / 发现与验证方法 / 复现步骤 / 修复建议**.
@@ -230,8 +249,7 @@ values before placing them in the page. The report generator also rejects a
 
 ### Evidence the page embeds, and what it still does not
 
-Schema 4 closed the gap this section used to describe: the page embeds the
-offending source excerpt, the root cause, the framework's failure output, the
+The page embeds the offending source excerpt, the root cause, the framework's failure output, the
 fix as code and the regression test path. What it still does not embed is the
 property-test code itself and the shrinking trace — the test file and target
 are named, the reproduction command re-runs the case, and the shrunk witness
@@ -254,29 +272,86 @@ campaign ran.
 
 ## Independent review
 
-`review` records whether an independent reviewer checked this result:
+`review` is the close-out review itself. fmbot-pbt alone writes it — the
+`closeout_review` tool from the reviewer children's results, `respond_review`
+with the campaign's answer to a finding — and renders `pbt-out/REVIEW.md` from
+it; nothing reads that page back.
 
-- `{ "status": "reviewed", "findings": <n> }` — the close-out review ran
-  (`pbt-out/REVIEW.md`, one read-only reviewer child with a fresh context) and
-  every one of its `n` findings has a response in that file;
-- `{ "status": "not-reviewed", "reason": "...", "detail": "<why>" }` — it did
-  not, with `reason` one of `disabled` (`PBT_CLOSEOUT_REVIEW=off`),
-  `reviewer-unavailable` (the bundled pi-subagents did not accept the reviewer
-  in that session) or `reviewer-failed` (the reviewer failed twice and the
-  campaign went on without it).
+| Field | Content |
+|---|---|
+| `status` | `reviewed`, or `not-reviewed` with `reason` and `detail` |
+| `reason` | `disabled` (`PBT_CLOSEOUT_REVIEW=off`), `reviewer-unavailable` (the bundled pi-subagents did not accept the reviewer in that session) or `reviewer-failed` (the reviewer failed twice and the campaign went on without it) |
+| `targets` | each reviewed target by key — `bug:<id>`, `caveat:<id>`, `property:<name>`, `retired:<name>` — with `sha` (the fingerprint of the record, ledger entry and cited files its review read), `share`, `summary`, optional `runId`, `model`, `caveat` (the verdict on a caveat's citation), `raised`, `contested` |
+| `findings[]` | `id` (`R<n>`, never reused), `target` (a key of `targets`), `kind` (`unsupported-bug` / `weakened-oracle` / `unsupported-caveat`), `subject` (what the reviewer named), `problem`, `evidence`, `requestedAction`, `response` once the campaign answered |
+| `lastFinding` | the highest finding number assigned |
+| `reviewedNow` | the targets the latest call reviewed; the rest were carried over unchanged |
 
-The field is optional in the schema, so a report without it is still valid
-schema 4 and `schemaVersion` does not change: read a missing `review` as
-"unknown", never as "reviewed". A fmbot-pbt campaign always writes it: the
-campaign's write of `report.json` and the final gate compare it with what the
-campaign actually did, and a `not-reviewed` result also needs REPORT.md's
-`**Independent review:** not reviewed (<reason>) — <why>` line.
+A record or cited file that changes after its review makes that target due
+again; the conclusion (`record_summary`) is refused until the review covers the
+records as they are and every finding has a `response`. A `reviewer-failed`
+review keeps the findings of the shares that finished, and they need a response
+too.
+
+The field is optional in the schema: read a missing `review` as "unknown",
+never as "reviewed". The rendered report states it.
 
 ## Compatibility
 
 `schemaVersion` is the compatibility boundary. A consumer must check it before
 using fields and reject a version it does not know. Adding an optional field
 does not require a bump; changing a field's meaning or removing one does.
+
+### Schema 5
+
+Schema 5, the only schema, makes `report.json` the only source of the result
+(`docs/report-single-source.md`). Besides the run, build, properties and bugs
+above, it carries:
+
+| Field | Content |
+|---|---|
+| `summary` | `conclusion`, `changedCode`, `coverageEvidence` (`level`: `line-level` / `file-level` / `none`, `detail`), `followUp` |
+| `properties[].history[]` | written by fmbot-pbt, oldest first: `{ kind: "status", status, at, counterexample? }` for each new status or new witness, `{ kind: "reverified", at, command, output }` for the same counterexample re-run on the real implementation. A property that failed and is now passing or retired needs a `reverified` entry after its last failure, or a failing `discrimination` |
+| `properties[].discrimination` | `baseline`, `command`, `result` (`fails` / `passes`), `output`: the property run against the pre-change baseline |
+| `modules[]` | `name`, `tests`, `bugs`, `oracles[]` (the Modules Tested table) |
+| `caveats[]` | `id`, `claim`, `docEvidence` (`file` absolute, `line`, `quote` verbatim), `classification` (`input-domain-restriction` / `does-not-constrain`), optional `note` |
+| `remarks[]` | `category` (`environment` / `build` / `budget` / `coverage` / `tooling` / `other`), `text`: why the result is weaker than it should be; not a caveat, not reviewed |
+| `testFiles[]` | `file` (absolute), `tests` |
+| `reproduction` | the whole suite: `build` (or null), `run`, `workdir` (absolute) |
+| `bugs[].contractEvidence`, `bugs[].documentationConflict` | required; `contractBasis` becomes required |
+| `bugs[].callerEvidence` or `bugs[].appEntry` | the in-tree call, or the app-facing entry (`capi/`, `napi/`, `OH_*`), that passes the witness, `file:line` + quote; one is required unless the function is itself app-facing |
+| `bugs[].sharedContract` | for a sibling differential: the production line stating both siblings implement the same contract |
+| `bugs[].formal` | the property's Formal statement, filled from the ledger; must equal it |
+
+### Record tools
+
+`report.json` is written through record tools, one validated record per call;
+a refused call changes nothing and names the field to fix:
+
+| Tool | Writes | Filled by fmbot-pbt |
+|---|---|---|
+| `record_run` | `run`, `build` | `generator`, `schemaVersion` |
+| `record_property` | one property's result, a re-verification (`reverified`), a baseline run (`discrimination`) | name, `formal`, oracle, function and test file from its `PROPERTIES.md` entry; `history` |
+| `record_bug` | one bug | `formal` and the counterexample from its property; that property's `bugId`; a `reportPath` from the id and summary |
+| `record_caveat` | one design note; its quote is checked at the cited line | — |
+| `record_remark` | one remark | — |
+| `record_summary` | `summary`, `modules`, `testFiles`, `reproduction`; REPORT.md is rendered from then on | — |
+
+`totals` and `review` are always computed by fmbot-pbt. In a Chinese campaign
+every prose field (a bug's summary, law, impact, expected, actual, root cause
+and fix; a note's claim; a remark; the summary) must be Chinese and pass the
+typography and jieba dictionary checks, or the record is refused. Fields that
+quote documentation, evidence, framework output or code are exempt.
+
+fmbot-pbt renders `REPORT.md` and every `bug_reports/<slug>.md` from it and
+overwrites them. `REPORT.md` appears only once `summary` is recorded, because
+its presence marks a campaign as closing. Headings and labels are plain words
+in the campaign language (`结论` / `Conclusion`, `设计说明` / `Design notes`);
+nothing parses them. The marked coverage, code coverage and API
+performance sections are kept across re-renders. Evidence fields quote source
+verbatim, so a quoted `TODO:` / `FIXME:` is accepted there; only a skeleton
+`<...>` phrase is refused. The caller-reachability and sibling-differential
+checks run on the bug records. A design note's `docEvidence` must not be the
+campaign's own output (a `pbt-out/` file or a log).
 
 ### Kotlin / Gradle execution evidence
 

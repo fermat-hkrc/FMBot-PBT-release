@@ -100,7 +100,7 @@ fmbot-pbt build-run \
 fmbot-pbt build-run --build-cmd "cmake -S . -B build && cmake --build build --target calc_test" --scope src/calc.cpp
 ```
 
-HarmonyOS 应用见 [ArkTS 指南](pbt/arkts.zh.md)。
+HarmonyOS 应用见 [ArkTS 指南](pbt/arkts.zh.md)。`--isolate` 要求 `--scope <file.ets> --func <name>`，在 `<out>/isolate-hap` 生成 HAP，把产品依赖图复制到 `entry/src/common`（不用硬链接或符号链接），更新套件导入路径，并在 `ohpm install` 后将 `--build-cmd` 替换为生成 HAP 的 ohosTest 构建。副本与原始依赖均只读且校验哈希，修改或缺失的图不能记 passing/failing；会话内 skill 使用同一准备流程。
 
 保存 JSON 事件日志（stdout 只有事件，诊断信息在 stderr；结果仍以 `report.json` 为准）：
 
@@ -203,6 +203,6 @@ fmbot-pbt watch [--repo <path>] [--base <rev>] [--spec <file>]... [--interval <s
 | `PBT_SCAN_DELEGATION=off` | 不使用并行扫描子代理 |
 | `PBT_VERDICTS=off` / `PBT_CARRY=off` | 不记录 / 不复用历史判定结果 |
 | `PBT_OH_WORKSPACE` | OpenHarmony 源码树位置；在源码树内运行时自动识别 |
-| `PBT_PHASE_MODELS` | 按阶段指定模型，如 `{"plan":"anthropic/claude-opus-5-5"}` |
+| `PBT_PHASE_MODELS` / `PBT_DESIGN_THINKING` | 按阶段指定模型，如 `{"plan":"anthropic/claude-opus-5-5"}` / 扫描和设计性质阶段的思考等级，默认 `xhigh`（模型不支持时依次用 `max`、`high`），不低于会话等级；`keep` 表示沿用会话等级 |
 | `PBT_MCP_MAX_CONCURRENT` | MCP 同时运行的测试数，默认 1 |
 | `PI_PBT_RUNS_DIR` | MCP 结果目录，默认 `~/.pi-pbt/runs` |

@@ -36,7 +36,7 @@ Found a problem? Open an [issue](https://github.com/fermat-hkrc/FMBot-PBT-releas
 
 ## 中文
 
-fmbot-pbt 是做**性质测试**的智能体：从文档契约中提取代码必须满足的性质，用大量自动生成的输入检查这些性质，
+fmbot-pbt 是做**性质测试**的智能体：从文档约定中提取代码必须满足的性质，用大量自动生成的输入检查这些性质，
 报告找到的缺陷和最小复现。本仓库发布可执行文件。
 
 下载上表中对应平台的压缩包，然后：

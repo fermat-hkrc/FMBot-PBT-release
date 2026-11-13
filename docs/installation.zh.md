@@ -3,7 +3,6 @@
 [English](installation.md) · 装好之后怎么用，见[使用指南](usage.zh.md)。
 
 ## 1. 系统要求
-
 先准备好项目本身的编译、依赖解析和运行环境，确认现有构建与测试命令可用，再运行 fmbot-pbt。发布的二进制已内置运行时，无须单独安装 Node.js；npm/源码渠道要求 **Node.js 22.x（至少 22.19）或 24.11+**，与内置语法解析器一致。
 涉及数据库、服务、设备或模拟器的项目，也要先准备这些运行依赖。下表列出基本工具：
 
@@ -14,7 +13,7 @@
 | Python | `python3` ≥ 3.9 与 `pip` |
 | Go | `go` |
 | Java / Kotlin | JDK 与项目自带的 Maven / Gradle |
-| HarmonyOS 应用 | DevEco 工具与匹配的 SDK、可连接的真机或模拟器，见 [ArkTS 指南](pbt/arkts.zh.md) |
+| HarmonyOS 应用 | DevEco 工具、匹配 SDK、`ohpm`、Python 3 及设备/模拟器。HAR 构建优先选 SDK 内置 Node，独立 SDK 可用 PATH 中的 Node.js 22+；见 [ArkTS 指南](pbt/arkts.zh.md) |
 | OpenHarmony 组件 | 已配置好的 OpenHarmony 源码树 |
 
 ## 2. 下载与安装
@@ -79,16 +78,17 @@ Windows 上不支持 C/C++ 与 OpenHarmony 项目。
 }
 ```
 
-其他字段见[模型配置参考](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models-configuration.md)；
+扫描和设计性质阶段决定约定和性质，使用 `xhigh` 思考等级，模型不支持时依次用 `max`、`high`；测试任务其余阶段使用上面的等级。只有模型的 `thinkingLevelMap` 映射了 `xhigh` 或 `max`（如 `"thinkingLevelMap": {"xhigh": "xhigh"}`，值以接口实际接受的为准），pi 才认为模型支持这两个等级。用 `PBT_DESIGN_THINKING` 修改或关闭（[参考](subcommands.zh.md)）。其他字段见[模型配置参考](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models-configuration.md)；
 登录与内置服务商密钥配置见[服务商参考](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md)。
 
 HTTPS 默认使用系统与内置证书，并对华为及官方依赖源启用[企业证书兼容](network.zh.md)，无需额外配置。
 
 ## 4. 验证
-
 运行 `command -v fmbot-pbt`、`fmbot-pbt --version` 和 `fmbot-pbt --list-models`，确认程序可用且模型已加载。
 
 第一次测试：在 `fmbot-pbt` 会话里输入 `/skill:pbt-hook-run <sha>`，或直接用自然语言描述；无人值守时运行 `fmbot-pbt hook-run <sha>`。加 `--target scope --scope <路径>` 可测试整个模块（`.` 即全仓），而不只是改动。目标需要项目构建时，两种方式都加 `--build-cmd "<命令>"`（以及 `--build-workdir <目录>`），且检出必须停在 `<sha>`。退出码：`0` 无缺陷，`1` 发现缺陷，`2` 未完成，`3` 构建失败。全部参数见[参考](subcommands.zh.md)。
+大型应用中的单个 ArkTS 函数可用 `build-run --isolate --scope <file.ets> --func <name>`，仍需传 `--build-cmd`。引擎在 `<out>/isolate-hap` 生成 HAP，把产品依赖图复制到 `entry/src/common`，将构建命令换成该 HAP 的 ohosTest 构建，并给出套件的精确导入路径。副本和原始源码都经过完整性检查，不得修改；会话内 `/skill:pbt-build-run` 行为相同。隔离时，字面量 `app.string.*` 引用的字符串条目从源码所属模块复制，保留限定词目录和字符串别名。发现过程保留复制源码中 ArkUI 构建器方法体内的资源调用，但不生成 ArkUI 测试。资源缺失、动态引用、类型不支持或有歧义时停止准备，不补造占位值。资源完整性检查覆盖原所属模块及隔离 HAP 的 `AppScope`、main、ohosTest 资源命名空间，不只保护已有副本。不得增删资源文件或限定词目录，也不得注入覆盖定义；这些操作会被阻止，即使源码哈希未变，报告也不能通过校验。较大的依赖图把基线存入有哈希校验的 `isolate-hap/.pbt-isolate-baseline.tsv`，避免进程环境过大；不要修改或删除该文件。首次构建前，共享引擎会构建并安装 PandaCheck、解析所有模块依赖，日志在 `isolate-setup/build.log`。这一步在所有平台都使用 Bash（Windows 需 Git Bash）；实际构建命令仍使用原平台 shell。引导测试会导入真实源码依赖图和框架，避免只编译空测试架就通过构建门禁；引导检查不算 SUT 性质结论。HAR 重建会刷新消费模块依赖，并拒绝安装字节仍旧的运行库。详见 [ArkTS 指南](pbt/arkts.zh.md)。
+
 ## 5. 升级
 下载新版本压缩包，按第 2 节重新安装。`~/.pi-pbt/agent/` 中的配置会保留。
 

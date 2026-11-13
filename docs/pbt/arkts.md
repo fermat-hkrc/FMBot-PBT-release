@@ -7,7 +7,7 @@
 
 fmbot-pbt supports ArkTS as **HarmonyOS HAP ohosTest**. A property is Hypium +
 PandaCheck in `src/ohosTest/ets/test/<Name>Pbt.test.ets`
-(`import { check, property, integer, string, boolean, bigint, dictionary, primitiveUnion, date, dateUnion, array, recursive, functionModel, FunctionModel, unionCase, unionOf } from 'PandaCheck'`),
+(`import { check, property, integer, double, ieeeDouble, string, boolean, bigint, dictionary, numericDictionary, primitiveUnion, date, dateUnion, array, recursive, functionModel, FunctionModel, unionCase, unionOf } from 'PandaCheck'`),
 assembled with `hvigorw`, and run with `hdc shell aa test`. The verdict is
 `OHOS_REPORT_RESULT`. Install the library with `make-pandacheck-har.sh` into
 `libs/PandaCheck.har`. Depend on `"PandaCheck": "file:../libs/PandaCheck.har"` from the module `oh-package.json5`. Do not copy `Index.ets` into `libs/`. Do not `ohpm install fast-check`.
@@ -17,17 +17,19 @@ This is not Kea. This is not OpenHarmony GN C++. Host `es2panda`/`ark`
 for compiler `.ets` that is not a HAP. Do not mix the two.
 
 `--isolate` (with `--scope file.ets --func Name`) builds a **mini HAP** that
-places the real `--scope` file and its relative imports at `entry/src/main/ets/`.
-That file is a hard link (same inode as the checkout) when the filesystem allows it
-and the placed text matches the checkout. An unused `import { Name } from './Name'` is
-stripped on a regular-file copy so the compiler does not need that module; the function
-body is unchanged and the checkout is not edited. A cross-device fallback is also a
-regular file at that path, not a symlink and not a paste into `ohosTest/ets/sut/`. Use it to test a function in a large app (Photos) without
-compiling the APK. The import graph must be public kits (`@ohos.hilog`, `@ohos.i18n`, …).
+copies the real `--scope` file and its relative imports into `entry/src/common/`,
+shared by main and ohosTest. These are independent regular files, never hard links
+or symlinks. Only unused named local imports may be stripped by the generator;
+function bodies and the checkout stay unchanged. Every generated file and original
+dependency is hash-baselined before the build. Passing/failing close-out rejects
+changes, missing files or redirected paths on either side. Use it to test a
+function in a large app (Photos) without compiling the entire app. The import graph must be public kits (`@ohos.hilog`, `@ohos.i18n`, …).
 System APIs (`systemParameterEnhance`, `photoAccessHelper`, …) or a graph bigger than a
 function **STOP**. `--isolate` does not edit HARD `--scope`. The campaign cwd is `<out>/isolate-hap`.
-Import that file under `entry/src/main/ets` (the prompt names the specifier). Do not replace it
-with a symlink. A copy under `entry/src/common` or `ohosTest` is not `--scope`. `--build-cmd` is
+Import that generated file under `entry/src/common` (the prompt names the specifier,
+for example `../../../common/default/model/common/DurationFormatter`). Do not edit
+it, replace it with a symlink, or author another copy under main/ets or ohosTest.
+The original graph is also read-only. `--build-cmd` is
 replaced by `assembleHap … entry@ohosTest` after `ohpm install` in that HAP.
 Isolate STOP and a failed `ohpm install` exit 3, same as a failed build gate.
 
@@ -41,7 +43,7 @@ types, call shapes, and modules. It is not a percent of ArkTS.
 `let`, `const`, inference, `void`, operators, `if` / `switch` / loops, and
 `this` are syntax. They are not in the count. A property does not draw them.
 
-**23 supported, 5 partial, 6 not supported** on this 34-row checklist.
+**28 supported, 0 partial, 6 not supported** on this 34-row checklist.
 Supported means a passing or failing property can use that form, and a
 close-out gate requires it. Partial means only some forms of that tutorial
 heading are drawn or caught. Not supported means we do not draw it, or the
@@ -49,7 +51,7 @@ honest close is `retired`.
 
 | Tutorial feature | fmbot-pbt | What that means |
 | --- | --- | --- |
-| `number` | supported | `integer()` / `double()`. A comparison with a fractional threshold uses `double()`; `integer()` does not cross it. |
+| `number` | supported | `integer()` / bounded finite `double()`, or explicit `ieeeDouble()` for ordinary draws plus representative IEEE edges. Fractional thresholds require `double()` or the explicit IEEE mode; `integer()` does not cross them. See finite/special-domain and display rules below. |
 | `bigint` | supported | `bigint()`. `integer()` is not `bigint`. |
 | `boolean` | supported | `boolean()`. |
 | `string` | supported | `string()`. |
@@ -63,18 +65,18 @@ honest close is `retired`.
 | rest parameter | supported | `func(...xs)` where `xs` is `array()` of `number`, `string`, or `boolean`. A bare list is rejected. |
 | function type | supported | The tutorial's concrete function values, including `Math.sin`, real named/arrow/imported/static functions, inferred/contextual arrows and lexical/returned closures. Complete signatures and real call bindings are checked. `functionModel` supplies seeded generated behavior and shrinking through typed closures. Untyped `Function` / `ESObject` interoperability is separate, not a concrete signature. |
 | overload | supported | Tutorial free functions, public instance/static methods and constructors (also semicolonless headers). Every complete ordered signature and arity needs a scoped, unchanged, typed call. Supported non-primitive domains keep their own recipes; only an unavailable underlying domain forces retirement. |
-| class or `struct` with fields | supported | `new` or `record` of every field, when declared in `--scope`. |
+| class or `struct` with fields | supported | Every instance field needs a drawn constructor argument or a complete public field assignment, including method-bearing classes. Constructor recipes also need complete display/shrinking. Public data classes may use contextual literals/typed `recordOf`; `record` only has numeric XY/WH/LTRB shapes. Constructor defaults are not open-field draws. |
 | `static` field or method | supported | A public static method with a `number`, `string`, or `boolean` parameter must be called as `Class.method(drawn)`. A public static field of those types, including an unannotated `= 0`, `= 'albumType'`, or `= true`, is `Class.field = drawn` and a read of `Class.field` in that property callback. A readonly field is read. A private or protected field, a non-exact type, and a field of `Date` stay outside. |
 | getter / setter | supported | Tutorial `Person4.age`, getter-only and setter-only forms, plus Date and supported underlying domains. Actual public instance/static ownership, fresh receivers, typed constructor/setter draws, same-receiver observed reads, bounded getter inference and per-operation catches are checked. Private state, substitutes and unavailable underlying domains do not count. |
 | inheritance, `super`, abstract class | not supported | Not constructed. |
 | `private` / `protected` field | not supported | The suite must not edit `--scope` to expose it. |
-| object literal | partial | `record()` is `{ w, h }`, `{ x, y }`, or `{ left, top, right, bottom }`. Any other `number`/`string`/`boolean` bag uses `recordOf(fn, show, shrinkName)`. `shrinkName` changes one field per candidate from that field's `shrink` and keeps the others. An optional field is `optional(integer())`, `optional(string())`, or `optional(boolean())`. Flat interface fields may also be closed string-literal unions, inline (including wrapped lines) or resolvable local/imported alias chains: `constantFrom<Alias>(every literal)`, wrapped in `optional()` for optional fields. A `[number, number]` field is `numberPair`. An optional pair is `optional(numberPair(x, y))`, not an always-present literal. A field that is another in-scope interface `{ x, y }`, `{ w, h }`, LTRB, or primitive bag is `record().generate` or `recordOf().generate` with `as Name` on that result, one level only. A `number[]`, `string[]`, or `boolean[]` field is `array().generate`. An optional array field is `optional(array(integer())).generate`. `[]` is not that field. `number[][]`, a class, ArkUI `struct`, `@Sendable` class, `Date`, or other tuple stays out. |
-| `Record<K, V>` | partial | Tutorial form `Record<string, number>` is `dictionary(string(), integer())`. An extra draw, not this row: `Record<string, number \| string \| boolean>` is `dictionary(string(), primitiveUnion())`. The value argument must be `primitiveUnion()` itself. `oneof(primitiveUnion())` does not shrink. Default 4 keys. `{ maxLength }` sets that cap, including downward. Shrink drops keys, then values, then keys (skip a rename that collides). The callback parameter is that Record. `{}` and `record()` are not that map. `Record<number, number>`, any other value type, a same-file alias of those, `Record \| null`, optional Record, and a defaulted Record stay out. |
-| interface | partial | A field bag in `--scope` can be constructed. A method-only contract is not a value. |
-| generic function | supported | The call must be `name<string>`, `name<number>`, or `name<boolean>`. An inferred call is rejected. |
-| generic constraint | partial | A constraint of those three is drawn. Any other constraint is `retired`. |
-| generic class | supported | `new CustomStack<string>()`, `<number>`, or `<boolean>`, then call that instance's method with a drawn value of that type. An inferred `new CustomStack()` is rejected. A constraint other than those three is retired. |
-| generic default | partial | Alias/default dependencies are resolved in metadata, including class defaults. Existing explicit primitive generic instantiations and underlying-domain gates still apply; a Date/class default does not supply its own generator. |
+| object literal | supported | Tutorial contextual initialization, assignment, arguments, typed returns, array elements and nested fields use actual source-resolved interface/public data-class types. Direct/shorthand literals retain typed draws; composed `recordOf(generate, show, shrink)` recipes support available nested fields, Date/bigint/matrices, literals/enums, fixed tuple fields, optional values and real constructor leaves. Complete field generation/display and one-component shrinking are checked. No constructor substitution, private/ArkUI/Sendable/native synthesis or source rewriting. |
+| `Record<K, V>` | supported | String keys use `dictionary(string(), values)`; numeric keys use `numericDictionary(integer(), values)`. Complete typed values include tutorial `PersonInfo` bags, primitives, Date/bigint, arrays and nested maps. Aliases and supported wrappers retain unchanged typed SUT arguments, complete component display/shrinking, key caps and collision safety. See the exact boundaries and real HAR/HAP/device plus `build-run` delivery evidence below. |
+| interface | supported | Actual local/imported methods, accessor properties and interface extension use genuine accessible source-owned implementing classes with complete state recipes. Pure inherited field bags retain literal recipes. See the exact boundaries and real HAR/HAP plus unchanged-callable delivery evidence below. |
+| generic function | supported | Matching explicit types or complete declared defaults are required. Primitive instantiations and declared bounds retain their underlying recipes; value-based inference is rejected. |
+| generic constraint | supported | Actual imported/substituted bounds, including tutorial `Hashable.hash()`, use fresh source-owned implementations with complete state, display and shrinking. Every direct scoped call retains matching explicit/defaulted types, unchanged draws and observed dispatch. Unavailable construction still retires; see boundaries and real HAR/HAP/device plus delivery evidence below. |
+| generic class | supported | Explicit `new CustomStack<string>()` and genuine constrained receivers such as `new MyHashMap<HashedKey, string>()`, freshly constructed inside the property with typed constructor/method draws and observed effects. Complete declared defaults may supply omitted types; value-inferred receivers and unavailable bounds are rejected. |
+| generic default | supported | Actual omitted function/class/interface arguments require complete source-resolved defaults, preserving lexical/import identity, dependent substitutions, explicit overrides and bounds. Every value-bearing domain keeps its generator/real constructor, display/shrink and per-call observation gates. See unchanged-source HAR/HAP/device and build-run evidence below; this is not arbitrary inference or automatic Date/class construction. |
 | nullish `T` or `null` / `undefined` | supported | Complete `unionOf` / `unionCase` cases; legacy `arkNullish` only in a test file without `unionOf`. The call must not use `!` or `??` to drop the arm. |
 | named import of `--func` | supported | A passing or failing property must import the file and call that symbol. |
 | import alias or namespace | supported | `id as ident` and `ids.id(...)` count. A sibling call does not. |
@@ -86,6 +88,550 @@ honest close is `retired`.
 
 `@Sendable` is in the kit overview, not in this tutorial. A Sendable parameter
 is `retired`. Do not add it to this count.
+
+### Explicit IEEE-754 numeric domains
+
+`double()` keeps its bounded finite generation and shrinking. The opt-in
+`ieeeDouble()` combines ordinary decimal/threshold draws, representative edges,
+wide finite values and subnormals. It includes NaN and both infinities by default;
+`includeNaN` and `includeInfinity` independently default **true**. For finite-only
+sampling use `ieeeDouble({ includeNaN: false, includeInfinity: false })`, still
+including signed zeros, subnormals and large magnitudes. Do not silently broaden
+an existing finite-only property to special values.
+
+Campaign witnesses require omitted options or an inline object of literal boolean
+flags, with no unknown/duplicate/computed keys, spreads, casts or opaque options.
+Use unmodified named PandaCheck imports and stable arbitrary bindings. Numeric
+Record **keys** require both flags false; values may use the full mode. All
+existing complete-domain, actual-call, constructor ownership, distinct unchanged
+typed draw, observation and unsupported-sibling checks remain in force. Closed
+`constantFrom<number>` edge sets are supplemental, not an open numeric recipe.
+
+Use each component's `show`, including nested object/array/map/optional recipes:
+JSON loses NaN/infinities and signed zero, while raw string coercion loses `-0`.
+Built-in wrappers, numeric bags and tuples delegate to their components. Preserve
+same-component shrinking into fresh real instances, one field at a time.
+PandaCheck retains `recordOf(generate, show, shrink?)`; **campaign** recipes still
+require complete effective shrinking. Predicate exceptions count as failures even
+if formatting would be empty or throw; framework generation/shrink/show errors
+still propagate. This does not remove campaign-specific exception-oracle checks.
+
+For an actual identity-preserving scoped `echo`, retain its result and compare
+inline: `actual === value ? (actual !== 0 || 1 / actual === 1 / value) :
+(actual !== actual && value !== value)`. This is ArkTS-compatible SameValue;
+`Object.is` is restricted, and `===` alone is insufficient. Derive oracles from
+the SUT contract: rounding, overflow and NaN invalidate many ordinary algebraic laws.
+
+Sampling is **not uniform or exhaustive**, does not cover all NaN payloads, and
+finite trials do not prove every region was visited. Shrinking strictly lowers
+finite magnitude ranks, with bounded duplicate-free candidates and `-0 → 0`, but
+the runner remains greedy/budget-limited: no arbitrary-predicate global minimum
+or convergence within every finite budget is promised.
+
+The bundled numeric card is `references/numbers.md`. `hap/UPSTREAM.json` records
+canonical PandaCheck revision `f46b330bbae6a81e409f0bdf442c6ffffaff6e3d` and SHA-256
+hashes of the unchanged runtime and IEEE controls; offline tests need no sibling
+checkout. Node controls, real HAR/HAP/Hypium execution, a new `fmbot-pbt build-run`
+campaign, report/independent campaign review and PR/CI remain separate gates.
+The pin explicitly declares `adapterDifferences: []`: there are no runtime
+patches; stricter campaign policy stays outside PandaCheck.
+`npm run check:pandacheck` verifies the actual source bytes in both `check` gates. Builds
+also verify staged `dist` assets, and binary smoke verifies the freshly extracted
+runtime and pin rather than trusting the manifest alone. For online provenance,
+`node scripts/check-pandacheck.mts --upstream` hashes the allow-listed files at
+the exact GitHub revision using authenticated `gh`. Offline CI needs no sibling
+checkout or cross-repo token; missing online read access is an error, not success.
+
+The older #710 evidence below remains historical; it did not use `ieeeDouble`.
+The inventory stays **28/0/6**: this extends number sampling, not a new language row.
+
+On 2026-11-11 a newly rebuilt fmbot-pbt binary drove `build-run` on unchanged
+`hap_defaults_types.ets#read`. It authored `DefaultBoxReadIeeePbt.test.ets` with
+**eight passing properties, 0 bugs**, seeds **420101–420108**, **4096** trials each
+(32,768 total): omitted defaults with genuine `SomeType` recipes and explicit
+`number` receivers, each under all four finite/special modes. All scoped reads
+retain identity/SameValue observations, including repeated reads and explicit
+matching default elaboration. The supervisor did not hand-repair the suite.
+
+Actual API-26 HAR/application/test HAP rebuilds, signing/install and whole-suite
+Hypium passed **28 tests, 0 failures/errors**: eight generated properties, eight
+unchanged IEEE controls, four legacy-double controls, seven default controls and
+one smoke. Initial baseline was 20/20; first generated run was 28/28 at 1000
+trials/property; final strengthening was 28/28 at 4096. IEEE controls retain seeds
+1, 42 and 0xC0FFEE, progressing/terminating shrinking, ordinary/wide/subnormal
+samples, option separation and faithful NaN/infinity/`-0` replay. Their intentional
+failures are framework controls, not SUT bugs.
+
+Source SHA-256 stayed
+`a4e315f1a2df6ae0d5a75f122023b46e60cf041960873de9d2587322d246e0ca`; all three supplied
+suites stayed byte-identical, and installed runtime bytes match the upstream pin.
+Fresh independent review covered all eight properties with **zero findings**;
+report and required-review revalidation passed. This is a preprovisioned
+`--no-isolate` callable fixture, not a new isolation E2E, production app/native
+lifecycle or measured line/branch coverage proof.
+
+### Tutorial-complete generic defaults
+
+This is a **defaulted type argument**, not a default-valued function parameter.
+Omission is accepted only when declared defaults determine every missing type.
+Explicit arguments win: `first<T = number, U = T[]>` selects `number, number[]`
+when omitted, `string, string[]` for `first<string>`, and keeps both arguments
+for `first<string, boolean[]>`. No inference from values fills required types.
+Resolve imports, aliases and namespaces in the declaration's lexical context;
+class defaults precede method defaults without leaking through shadowed names.
+Self/forward references cannot borrow globals. Every actual bound still applies.
+
+For unchanged `echo<T = number>(value: T): T` returning its input:
+
+```ets
+check(property(integer(), (value: number): boolean => echo(value) === value));
+check(property(string(), (value: string): boolean => echo<string>(value) === value));
+```
+
+A default is not a generator: `T = Date` needs `date()`. Existing `SomeType`
+with a number constructor and exact public `value` reader needs a complete recipe:
+
+```ets
+const numbers = integer();
+const items = recordOf((rng: Random, size: number): SomeType =>
+  new SomeType(numbers.generate(rng, size)),
+  (value: SomeType): string => numbers.show(value.value),
+  (value: SomeType): SomeType[] => numbers.shrink(value.value)
+    .map((n: number): SomeType => new SomeType(n)));
+check(property(items, (value: SomeType): boolean => {
+  const box = new DefaultBox(value);
+  return box.read() === value;
+}));
+```
+
+Import the actual source-owned classes. This assumes the real
+`DefaultBox<T = SomeType>` constructor/read contract; `new DefaultBox<string>(text)`
+uses its explicit override. `Reader<T = SomeType>` selects that default in an
+actual interface formal/annotation, never by constructing an interface or fake
+implementation. Conflicting annotations cannot override actual construction.
+No-value defaults such as `defaultKind<T = number>()` still need an observed call.
+Every value-bearing position retains complete seeded generation, component display,
+effective shrinking, distinct unchanged typed draws and surviving call observations.
+Void calls retain the affected-state/per-call history checks below. Receivers are
+fresh inside each property. Casts, fixed substitutes, missing recipes, mutations,
+escapes and unsupported siblings fail closed. Class inheritance, unavailable
+native/SDK/Sendable construction, separately scoped generic constructors and
+unsupported behavioral compositions remain separate limits.
+
+Use the bundled `references/defaults.md` card and existing verbatim IR binding
+(`generators: { value: items }`). Preserve omitted/explicit syntax in tests;
+checker-only instantiation views never replace the compiled SUT. Approved IR must
+expand successfully, followed by real build, device, report and review gates.
+
+On 2026-11-10, rebuilt fmbot-pbt (pi 1.5.2) drove API-26 PandaCheck HAR and both
+application/ohosTest HAP builds, signing/install and final whole-suite `aa test`:
+**14 passed, 0 failures/errors**. Seven unchanged supplied
+`PandaCheckDefaults.test.ets` cases cover omitted/explicit functions, dependent
+defaults/overrides, real class/interface dispatch, receiver independence,
+fresh seeded generation/display and effective shrinking. The intentional control
+replays seed **710**, 200 runs, minimized **`2`**; it is not a SUT bug.
+
+The same `build-run` on unchanged `hap_defaults_types.ets#read` accepted
+**six generated passing properties, 0 bugs**, 1000 trials each at seeds
+**71001–71006**: omitted/matching class arguments, string/number/boolean overrides
+and independent read interleaving. Together with seven supplied cases and one
+smoke, these are the final 14 tests. Independent review raised **three answered
+numeric-sampling findings**; final `double()` recipes are finite/size-limited,
+not exhaustive IEEE-754 generation. Special numeric cases passed in an intermediate
+run but their closed-edge recipe was rejected for final attestation; that is a
+tooling limitation, not an API exclusion or a confirmed bug. Generated observation
+syntax was corrected by the campaign, not hand-repaired by the supervisor.
+
+Scoped SHA-256 remained
+`a4e315f1a2df6ae0d5a75f122023b46e60cf041960873de9d2587322d246e0ca`;
+the supplied suite stayed byte-identical. Report and required independent-review
+validation passed. This preprovisioned `--no-isolate` callable fixture is not a new
+CLI-isolation E2E, production-app/native-lifecycle proof or measured code coverage.
+Only the generic-default row is newly promoted: **28/0/6**, still 34 rows.
+
+### Tutorial-complete generic constraints
+
+`Key extends Hashable` means the actual source contract, not `string`. Resolve
+local/imported bounds, aliases, dependent type arguments and interface extension
+without losing nominal module identity. Class bounds may use the actual accessible
+class, not a derived-class substitute. Complete every function/class type argument
+explicitly or through the declared-default protocol above; arbitrary inference is not promoted.
+
+Use the shared interface/object recipe witnesses. For an existing source-owned
+`HashedKey implements Hashable`, with a real two-number constructor, exact public
+`code`/`salt` readers and `hash()`, the bounded integer example is:
+
+```ets
+const codes = integer();
+const salts = integer();
+function shrinkKey(key: HashedKey): HashedKey[] {
+  const out: HashedKey[] = [];
+  for (const code of codes.shrink(key.code)) {
+    out.push(new HashedKey(code, key.salt));
+  }
+  for (const salt of salts.shrink(key.salt)) {
+    out.push(new HashedKey(key.code, salt));
+  }
+  return out;
+}
+const keys = recordOf((rng: Random, size: number): HashedKey =>
+  new HashedKey(codes.generate(rng, size), salts.generate(rng, size)),
+  (key: HashedKey): string => codes.show(key.code) + ':' + salts.show(key.salt), shrinkKey);
+check(property(keys, (key: HashedKey): boolean =>
+  hashKey<HashedKey>(key) === key.code * 31 + key.salt),
+  { seed: 709, numRuns: 1000 });
+check(property(keys, string(), (key: HashedKey, value: string): boolean => {
+  const map = new MyHashMap<HashedKey, string>();
+  map.set(key, value);
+  return map.lastHash === key.code * 31 + key.salt && map.lastValue === value;
+}), { seed: 709, numRuns: 1000 });
+```
+
+Import the real declarations from the scoped source. The examples assume that
+source's actual hash/latest-write contract, not universal hash-table semantics.
+Every generated/shrunk implementation is fresh, uses every varying component,
+displays through its component arbitrary and shrinks one component while retaining
+siblings. Real public one-field setters follow the interface protocol below;
+private state is never exposed. Direct construction from complete scalar callback
+draws is also available. Receiver constructor arguments need their own typed draws;
+a receiver's normal initial state is not a generated key.
+
+Every direct scoped call needs distinct unchanged correctly typed arguments,
+including later calls in the same property. The original callable must exercise its
+constrained formal, not a replacement or unused closure. Observe a surviving value
+result or compatible public post-state; void instance methods require their own
+receiver's affected state, via a public field or exact getter/zero-argument reader
+connected to reachable scoped writes (including proven one-field setters).
+Constant/unrelated getters and untouched fields are not effect evidence; indirect
+helper/alias mutations need a separate protocol. Pre-call snapshots and unrelated
+key reads do not count. Observe or retain each call's state before another call
+overwrites it; repeated calls need an in-loop observation. A retained post-call
+scalar snapshot may be checked later. Void free functions apply the same proof to
+input state affected by reachable writes of the original constrained formal,
+including proven one-field setters; unchanged components are not effect evidence.
+Later input positions count as read-only only through standalone proved public
+field/exact-reader accesses; aliases, escapes and unproved calls conservatively invalidate earlier state.
+Shared bounded reachability and finalizer/outcome rules apply. No casts, fake/shadowed classes,
+constructor/prototype replacement, whole-instance escapes or fixed substitutes.
+Metadata-only monomorphic views are never compiled or written over the SUT; raw
+import and source-integrity checks remain in force.
+
+Read the bundled `references/constraints.md` card and use the existing verbatim IR
+binding. Unsupported sibling domains remain visible. Native/SDK/Sendable/ArkUI,
+inaccessible/abstract/inherited construction, opaque recursion and generic/overloaded
+interface members still retire. Composed behavioral inputs and separately scoped
+constrained constructors need their own protocols. Custom scalar `recordOf<number>`
+recipes and keys extracted from generated operation-array loops are not currently
+accepted constrained-input witnesses; device execution alone cannot attest them.
+Use recognized complete component recipes and direct callback draws for delivery,
+retaining wider supplemental checks honestly. `double()` is finite and size-limited;
+changing a bound does not guarantee extreme values were sampled. General numeric
+oracles use the operator-based SameValue expression below, not `Object.is`.
+
+On 2026-11-10, rebuilt fmbot-pbt (pi 1.5.1) drove real API-26 PandaCheck HAR,
+application and ohosTest HAP builds, signed/installed both HAPs, and ran the whole
+registered suite: **20 passed, 0 failures/errors**. The six unchanged supplied
+`PandaCheckConstraints.test.ets` cases cover genuine dispatch, freshness/replay,
+component shrinking, explicit generic function/class calls and independent values.
+Its intentional control shrank/replayed **`2:0`**, seed **709**, 200 runs; it is not
+a SUT bug. Host transpilation is only a separate cross-check.
+
+The same `build-run` delivery on unchanged `hap_constraints_types.ets#set` accepted
+**six generated passing properties, 0 bugs**, 1000 trials each at seeds **709–714**:
+string/number/boolean delivery, two-write history, receiver isolation and prefix
+invariance. Six earlier broad-domain properties passed on-device but were retired
+from machine delivery because their custom scalar/composed bindings were unproved;
+they remained registered and executed, not erased or relabeled as SUT failures.
+A supplemental deterministic case checked **3375** exceptional-number/history
+combinations. Together with six supplied cases and one smoke case, these make the
+20-case final run. Independent review found no remaining active-property defects;
+six administrative-retirement findings were answered. Tooling rejection does not
+exclude a production input or establish a SUT bug.
+
+Scoped source SHA-256 remained
+`4744d65b4dcdd85381fac401dc44ef2de135a709a3d68449e2e203afc99e641e`;
+the supplied suite was byte-identical. Report attestation and required review
+validation passed. The supervisor did not hand-repair generated tests. This was a
+preprovisioned `--no-isolate` callable fixture, not a new CLI-isolation E2E,
+production-app/native-lifecycle proof or measured code coverage. That milestone
+promoted only constraints; generic-default delivery is recorded separately above.
+
+### Tutorial-complete interfaces
+
+Resolve the actual interface, including imported aliases, concrete generic arguments,
+methods, property/accessor signatures and every extended interface. Pure inherited
+field bags retain the object-literal protocol. Behavioral contracts need an imported
+accessible class declaring `implements` for that interface or a derived interface;
+its declaration must belong to the scoped module or reachable source imports.
+Every inherited public member must match its complete resolved signature. Never
+instantiate an interface, invent a test-local implementation, cast a method literal,
+replace prototypes or expose private state. **Interface extension is not class inheritance.**
+
+For an existing `RectangleSize implements AreaSize` with a public width/height
+constructor and exact public getters, use a concretely typed recipe:
+
+```ets
+const widths = integer();
+const heights = integer();
+function shrinkRectangle(value: RectangleSize): RectangleSize[] {
+  const out: RectangleSize[] = [];
+  for (const width of widths.shrink(value.width)) {
+    out.push(new RectangleSize(width, value.height));
+  }
+  for (const height of heights.shrink(value.height)) {
+    out.push(new RectangleSize(value.width, height));
+  }
+  return out;
+}
+const rectangles = recordOf((rng: Random, size: number): RectangleSize =>
+  new RectangleSize(widths.generate(rng, size), heights.generate(rng, size)),
+  (value: RectangleSize): string => widths.show(value.width) + ':' + heights.show(value.height),
+  shrinkRectangle);
+```
+
+The interface is not a factory: the exact tutorial's private zero-initialized
+`RectangleSize`, without public initialization/read APIs, still needs an available
+state recipe; do not add those APIs to HARD `--scope`. Every constructor argument
+and state field must be generated, displayed and component-shrunk. Real instances,
+methods and sibling state survive shrinking; defaults do not cover open fields.
+Neither do constant/zero-width components in an edge-only property: draw the full
+varying state, call the SUT, retain the general oracle and strengthen conditionally.
+ArkTS rejects `Object.is` (`arkts-limited-stdlib`). Numeric SameValue uses stored
+`actual`/`expected` and `actual === expected ? (actual !== 0 || 1 / actual === 1 / expected) : (actual !== actual && expected !== expected)`;
+this preserves NaN/signed-zero semantics without a restricted API.
+For accessor-backed `Style`, generation and shrink candidates may create a fresh
+`StyledRectangle`, assign a drawn `value.color` through its actual public setter,
+and read through its actual getter. A recognized setter assigns its typed formal
+unchanged to one backing field; an exact public reader returns that field.
+Readonly fields require constructor initialization. Arbitrary setter effects are
+not inferred. `ExtendedStyle extends Style { width: number; }` retains both
+color and width, whether fulfilled by public fields or accessor implementations.
+
+Every direct call in every checked property passes distinct unchanged typed draws.
+The callback may retain the concrete class type to access genuine public readers,
+or the actual interface type. The scoped callable (declaration, arrow/function
+expression or class method) must directly exercise a contract member on its original
+formal, not a shadowed/replaced value or unused closure.
+Catch-only use and continuation after unproved exception flow are not witnesses;
+direct uses inside try/finally remain available. Source-use evidence and predicate
+observations share bounded reachability, including loop completion, with separate
+conservative shadowing/replacement checks. Nested closures/classes provide no
+positive-use evidence, but their captured-formal writes are still scanned, including
+destructured and iteration assignments; genuinely shadowed locals stay distinct.
+Observe its result or public
+same-receiver post-state after a void call. The SUT call, the read and its result use must
+all be reachable on a compatible execution path; constant-dead branches, short
+circuits, mutually exclusive paths, terminated paths and unproved catch/exception
+flow do not count. Returns/throws overridden by a finalizer and caught throws do
+not observe the property outcome, even though their expressions execute. A
+finalizer's own surviving observation remains valid. Normal nested try/catch,
+switch fallthrough and harmless labels preserve pending observations; their
+completion summaries do not admit catch/switch/labeled-only execution evidence.
+Labeled transfers and `with` completion remain unproved.
+Void/undefined calls require actual public post-state evidence,
+not a comparison with their return value. Unresolved return types cannot provide
+value-result evidence; concrete generic return annotations retain shared resolution. Concrete-only public fields/getters/exact
+readers are allowed after the shared input witness proves the implementation and
+recipe; a different instance or pre-call snapshot is not post-state evidence. Do not
+escape whole draws through unknown helpers/aliases, containers or closures (also
+for direct construction inside the property); scalar snapshots remain valid.
+Compute independent oracles from public readers without replacing SUT arguments. A legitimate SUT setter may
+mutate its input; test-side substitution is different.
+
+Recognition is bounded, not whole-program purity/type-flow inference. Direct
+interface arguments with explicit synchronous signatures are covered; behavioral
+interface arrays/records/fields/unions, optional/default/rest parameters,
+overloaded/generic member signatures and helper-only dispatch need separate
+protocols. Inaccessible/abstract/Sendable/ArkUI classes, class inheritance,
+unavailable native/SDK signatures/lifecycles and opaque state still retire.
+Pure field bags retain existing compositions. Unavailable sibling inputs remain
+visible to their own policies. Use verbatim arbitrary bindings in successfully
+expanded IR, preserve raw imports/source SHA, and require real build, device and
+accepted report/review evidence. Host fixtures alone do not complete delivery.
+
+On 2026-11-10, the rebuilt fmbot-pbt binary (pi 1.5.1) built the real API-26 HAR
+and entry/ohosTest HAPs, signed/installed both, and executed the supplied
+`PandaCheckInterfaces.test.ets` byte-identically. Its five conformance cases cover
+real implementation identity, freshness/replay, constructor and public-setter
+state, inherited contracts, component shrinking and the intentional failing
+control (seed **708**, minimized **`2:0`**). The control is not a product bug.
+
+The same `build-run` delivery authored/expanded IR for unchanged
+`hap_interfaces_types.ets#measure` and closed with **6 accepted passing properties,
+0 bugs**, plus a clean independent review. Source SHA-256 remained
+`087ff74120442e62ee1206787973c601c71f6d4d9f60d9c42473ae441e9f2fa8`.
+The initial full device run passed **12 tests, 0 failures/errors** (six generated,
+five supplied, one existing smoke). After agent-owned recipe/assertion corrections,
+the final generated-suite rerun passed **6/6**, while the unchanged conformance and
+smoke cases retained their initial passes; this is not a claim of a final full-suite
+rerun. Final seed **708** drove five 1000-trial properties and one 10000-trial
+property plus 81 explicit exceptional-number pairs. Random draws remain bounded
+and size-limited; no exhaustive numeric or measured line-coverage claim is made.
+The supervisor did not repair the generated suite. An earlier compiler STOP and
+an OHPM registry timeout were retained, not counted as successes; the successful
+build used official `ohpm install --metadata_cache` with the cached pinned dependency.
+This is an unchanged callable fixture, not production-app/native-lifecycle proof.
+That delivery promoted only the interface row.
+
+### Tutorial-complete typed Record domains
+
+`Record<string, V>` uses `dictionary(string(), values)`; `Record<number, V>` uses
+`numericDictionary(integer(), values)`, or `double()` for fractional numeric keys.
+Wide finite keys may use `ieeeDouble({ includeNaN: false, includeInfinity: false })`;
+unrestricted or partly disabled IEEE keys are rejected. Values may use the full
+IEEE mode, with component-owned display/shrinking. HAP `double()` takes zero
+arguments, not fast-check `min`/`max` options.
+Numeric names are canonical finite numbers stored as string property keys; `-0`
+becomes `0`. Values use their own complete typed recipe. For the tutorial's actual
+imported `PersonInfo { age: number; salary: number; }`, construct `peopleValues`
+with the object `recordOf(generate, show, shrink)` protocol below, then:
+
+```ets
+const peopleArb = dictionary(string(), peopleValues, { maxLength: 4 });
+const numberedPeopleArb = numericDictionary(integer(), peopleValues);
+// property(peopleArb, (people: Record<string, PersonInfo>) => actualSut(people))
+```
+
+Forward actual RNG/size to both fields, display both with their components and
+shrink one field at a time into the returned array while retaining the other.
+Primitives, bigint, Date, literals/enums, arrays/matrices, nested records and
+available real constructor values compose the same way. The exact primitive
+triple may use `primitiveUnion()`; other available unions use complete shrinking
+`unionOf`/`unionCase` recipes, not non-shrinking `oneof`.
+
+The default key cap is **4**; an inline positive integer `maxLength` can lower or
+raise it. Runtime zero/negative caps yield empty-only maps and cannot attest
+coverage; nonfinite/fractional caps throw. Empty maps are valid generated cases,
+not a sufficient fixed substitute. Repeated generated keys overwrite; shrinking
+tries removing keys, one value, then one key, never overwriting a sibling key.
+`__proto__` is excluded to avoid the prototype setter. Maps are fresh, originals
+unchanged; retained values keep their component's reference semantics, not deep
+cloning. Seeds replay draws and display; greedy shrinking is not global minimality.
+
+Local/imported/chained/generic aliases retain actual nominal/module ownership.
+Optional/undefined Records use `optional(mapArb)`, nullable Records use
+`nullish(mapArb)`, and both use `optional(nullish(mapArb))`. These wrappers retain
+inner component display for non-nullish counterexamples. Complete typed cases
+are also accepted. Map-case ownership excludes the declared nullish arms.
+This Record-specific component protocol does not change sibling scalar/Date
+union selection rules. Root arrays use `array(mapArb, { minLength: 1 })`;
+Record fields/nested maps keep their whole component recipe. Defaulted/rest
+Records, literal/union/bigint keys, recursive maps and unavailable
+native/SDK/Sendable/ArkUI/inaccessible values still retire. Aliases do not create
+missing construction support or excuse an unsupported sibling.
+
+Every direct SUT call in every checked property passes distinct unchanged typed
+callback draws. A valid baseline call does not license a second call with a
+transformed or fixed map: it blocks suite attestation. Compute independent oracle
+values from the drawn records; strengthen generators, not the SUT arguments. Casts, mutations, fixed maps/keys/open values, wrong values,
+missing recipes, ineffective shrink output and unused draws are rejected by the
+shared generation/report witness checks. Use verbatim arbitrary bindings in
+property IR; successful expansion, raw imports/SHA and real `aa test` remain
+required. Host conformance execution alone is not device or delivery evidence.
+
+On 2026-11-10, rebuilt fmbot-pbt (pi 1.5.1) built the real API-26 PandaCheck HAR
+and both entry/ohosTest HAPs, signed and installed them on the emulator, and ran
+the unchanged `PandaCheckRecords.test.ets` conformance fixture. It checks replay,
+freshness, bounds, typed PersonInfo/other values, integer/fractional keys,
+collision-safe key/value shrinking and the intentional seeded failure control
+(seed **707**, minimized `{'': 2:0}`). That control is not a product bug.
+
+Separately, the CLI `build-run` campaign authored and successfully expanded IR
+for unchanged `hap_records_types.ets#totalCompensation`, retained its SHA-256
+`33f6d388dce93882cd49e964c965ac825a0f53ac634bb7d74d061577fddd62d1`, and filed
+**6 passing properties, 0 bugs**, with a clean independent close-out review.
+The final binary-driven full-suite rerun reported **12 tests, 0 failures/errors,
+12 passes**: six generated properties (1000 draws each), five supplied
+conformance cases and one pre-existing smoke test. The added wrapper control
+verifies exact minimized display and replay through optional, nullish and both
+composed wrappers, after rebuilding the HAR with the review fix. Only the agent authored the
+delivery tests; the supervisor did not repair that suite. Earlier compiler and
+attestation failures were retained and fixed in the shipped runtime/fixtures/steering,
+not passed off as success. This is an unchanged callable fixture, not production
+application or arbitrary floating-point/native-domain proof; no measured line
+coverage is claimed. The Record milestone promoted only that row.
+
+### Tutorial-complete object literals
+
+The pinned tutorial's `class C { n: number; s: string; }` can be supplied by a
+contextually typed literal, not only by `new C()`. Typed initializers, a single
+assignment, direct arguments, typed local helper returns, array elements and
+nested fields retain actual unchanged property draws. Direct/shorthand fields
+are supported; do not redeclare production types or cast a fabricated object.
+A fresh actual class instance, including a method-bearing class, can use direct
+public field assignments from typed draws before the call/return. Constructor
+arguments count only for the fields they demonstrably initialize unchanged;
+remaining fields need assignments. A matching constructor signature alone does
+not cover fixed defaults, omitted open fields, display or shrinking. Readonly state needs its real constructor; private state may also use a verified
+public one-field setter, with available public exact-field reads, never forbidden writes. Escaped aliases and later mutations are not witnesses.
+
+For approved property IR, name the object recipe through the existing verbatim
+generator channel (`generators: { input: inputs }`), not an invented `gen: object`.
+Require successful `expand_property_ir` scaffolding/inlining before filling its
+real imports, production callback type and complete recipe; failed IR is not
+completion.
+
+For larger inputs, use `recordOf(generate, show, shrink)` with all three
+arguments. Bind each component arbitrary with `const`, forward the actual RNG
+and size to `.generate(rng, size)`, and return a fresh complete typed literal.
+The display must observe every field. Bigint, callable and other non-JSON-safe
+fields require their same component arbitrary's `show`, including nested
+compositions. `JSON.stringify` throws for bigint and omits callable fields;
+it is display evidence only for JSON-safe fields. Shrink each field with that same component's `shrink(value.field)`,
+retaining all siblings, and push candidates into the array actually returned.
+Both `for-of` and canonical indexed loops are recognized. Singleton fields may
+retain their sole literal value. Fixed open fields, missing/duplicate keys,
+wrong components, discarded shrink output, casts and mutated draws are rejected.
+
+Components include primitives, bigint, Date, literals/enums, arrays/matrices,
+nested bags, arrays of bags, supported dictionaries, concrete callable values
+and fixed tuple fields. Compose separate named recipes; there is no primitive-only
+or one-level nesting cap. Optional fields wrap the **whole** component with
+`optional`; required nullish cases retain every arm. Root bag arrays require
+`minLength: 1` or nonempty contextual drawn literals. Generic field arguments and
+defaults resolve from their actual local/imported/namespaced declarations.
+
+A public data-only class may use a literal. A class requiring constructor
+behavior, methods or private state still needs its genuine accessible imported
+constructor and keeps nominal/runtime identity in both draws and shrink candidates.
+The bounded constructor check follows direct field assignments and matching
+primitive overload branches, not arbitrary constructor effects. Exact public
+field readers are recognized; opaque construction/observation retires. No synthetic native/SDK/Sendable,
+ArkUI, inaccessible/class-inherited or opaque recursive object values. Optional/rest
+tuple slots and unavailable underlying compositions retain separate limits.
+Generic **function** restrictions and root Date-array/default/static-field rules
+are unchanged. This is the tutorial's object-literal feature, not universal
+construction, arbitrary helper purity or whole-program control-flow inference.
+
+Only successfully proved argument positions receive host metadata projections.
+Those views are never compiled or written over source/test files; raw imports,
+original SHA, actual builds and device execution remain authoritative.
+
+Independent upstream and bundled API-26 HAR plus signed app/test HAP runs each
+passed **9 tests, 0 failures/errors**, including tutorial contexts, composed
+fields, real class identity, freshness, seeds `1`, `42`, `0xC0FFEE`, and exact
+nested/tuple shrinking (`Date(1000)` and `0n:Date(0):undefined:[]:[10,]` with
+component-owned bigint display), plus constructor-and-assign shrinking to `10:`.
+Method-bearing instances exercise complete constructor arguments, complete public
+assignments and mixed construction/assignment, preserving methods and real class
+identity through shrinking. These are
+language/library conformance models, not production application evidence.
+
+Separately, the recorded rebuilt-binary pi-pbt `build-run` campaign tested unchanged Browser
+`DownloadTask.createDownloadTask`, with live `DownloadManager` and
+`DownloadRepository` callers: CLI 0, four accepted passing properties, zero bugs,
+and actual device **5 tests, 0 failures/errors, 5 passes**. The official IR tool
+scaffolded one file with zero skipped entries; the campaign filled it and ran
+closeout without supervisor suite edits. Source/caller hashes and original/isolate
+source inode stayed unchanged. It built, signed and installed a new test HAP,
+reusing the already-installed identical base Ability app. This anchors typed
+object construction, optional/literal fields and factory defaults in an app;
+it does not claim production Date/bigint/matrix coverage. Final compiled-JS
+read-only replay accepted the ledger and rejected seventeen in-memory mutations
+plus a wrong source SHA; replay is not another device run.
+
+Object-literal support remains unchanged. With interface, constraint and default completion above,
+the current checklist is **28 supported / 0 partial / 6 not supported**, still 34 rows.
 
 ### Tutorial-complete type aliases
 
@@ -129,10 +675,11 @@ Generation is seeded, with component-owned show/shrink; shrinking is greedy,
 not a universal minimality claim.
 
 Normalization is checker-only. The actual production source, imports, SHA and
-compiled SUT remain authoritative. Aliases cannot hide Date fields/arrays/default
-parameters, inaccessible constructors, inheritance, Sendable or unavailable SDK
-leaves. Class defaults do not replace the explicit generic-instantiation protocol.
-This promotion changes only the alias row, not every underlying partial row.
+compiled SUT remain authoritative. Object fields use the protocol above; aliases
+cannot hide unsupported root Date arrays/default parameters, inaccessible
+constructors, inheritance, Sendable or unavailable SDK
+leaves. Class defaults follow the complete declared-default protocol above.
+The alias milestone changed only that row, not every underlying partial row.
 
 Independent upstream and bundled HAR/HAP conformance on API 26 each passed six
 tests, covering the four tutorial forms, imports/defaults and recursive replay,
@@ -215,8 +762,8 @@ function models drove captured effects through stored real callbacks and public
 lifecycle methods. No SUT, SDK or product manifests were rewritten. This is a
 production delivery anchor, not app proof of every intrinsic/import/return form.
 
-Function support does not promote unrelated domains. With overload and accessor completion below,
-the checklist is **23 supported / 5 partial / 6 not supported**.
+Function support does not promote unrelated domains. With interface, constraint and default completion above,
+the current checklist is **28 supported / 0 partial / 6 not supported**.
 Untyped `Function`, `ESObject`, dynamic imports, unknown native lifecycles,
 Sendable and inaccessible/inherited constructors retain their separate limits.
 Optional/defaulted/composed callback **parameters**, arbitrary generic/async
@@ -262,9 +809,9 @@ An unrelated/older read, uncalled closure/object method, unchecked property,
 discarded result, fixed/mutated/cast input, fake/shared receiver, private-state
 edit or constructor/prototype replacement cannot supply the witness. Unresolved
 inference, opaque factory/drawn receivers, inaccessible/inherited/Sendable owners
-and unavailable underlying types still retire. This does not enable Date-valued
-bag-field generators, Date-array/defaulted inputs, plain static Date fields or
-unsupported callback compositions. Original bindings are proved before host-only
+and unavailable underlying types still retire. Object fields now use the separate
+object-literal protocol above; root Date-array/defaulted inputs, plain static
+Date fields and unsupported callback compositions retain their own limits. Original bindings are proved before host-only
 call projections; those projections never compile or rewrite the SUT. Raw
 import/transcription/SHA guards remain authoritative. Recognition is bounded,
 not whole-program control-flow or purity proof.
@@ -286,7 +833,8 @@ not edit it. No SUT, SDK or product-manifest rewrites. This application anchor
 covers boolean store/read, not Date usage or asynchronous timer semantics.
 Compiled-JS read-only replay accepted the ledger, rejected eighteen in-memory
 accessor mutations and rejected a wrong source SHA. Replay is not another device
-run. Only the getter/setter row is newly promoted: **23/5/6**, still 34 rows.
+run. The getter/setter milestone reached **23/5/6**; the completed features above
+bring the current inventory to **28/0/6**, still 34 rows.
 
 ### Tutorial-complete overloads
 
@@ -309,7 +857,7 @@ literals, enums, supported interface bags/dictionaries/unions, class aliases and
 concrete callbacks use their existing underlying protocols. Classes need fresh
 real public constructor `recordOf(fn, show, shrink)` recipes, not plain objects;
 generated callbacks must consume their `functionModel` results. Returned closures
-must actually be invoked. Explicit generic instantiations, optional/rest/default
+must actually be invoked. Explicit or complete declared-default instantiations, optional/rest/default
 coverage and residual Date/native/Sendable/accessibility limits remain in force.
 This is the tutorial's overload feature, not automatic generation for arbitrary
 higher-arity argument packing or unsupported type cross-products; HAP `property`
@@ -374,8 +922,9 @@ every property, including optional/nullish arguments. Do not mix `dateUnion()`,
 `oneof`, `nullish` or `arkNullish` union-argument recipes into that file. This rule
 is about SUT arguments, not ordinary optional fields inside a bag. An unrelated
 compositor does not impose a union protocol on a non-union scoped signature.
-A valid composition does not bypass retirement of Date fields, arrays or
-defaulted Date parameters elsewhere in the signature.
+A valid composition does not bypass unavailable underlying domains. Verified
+object fields use the object-literal protocol; root Date arrays and defaulted
+Date parameters elsewhere in the signature still retire.
 
 The runtime uses the supplied RNG, checks disjoint case ownership, shrinks in the
 selected arm and formats `label:componentShow`. Predicates must be pure and
@@ -424,14 +973,14 @@ parameter-bound factory shadows, bracket setters and uncalled nested SUT closure
 cannot establish coverage.
 
 These legacy helpers do not add other Date shapes. Compositional cases above
-handle `string | Date` and resolved nullish Date unions. Date-valued bag fields,
-Date-array/defaulted inputs, plain static Date fields and opaque construction
-retain their separate limits. Date getters/setters use the accessor protocol
+handle `string | Date` and resolved nullish Date unions. Date-valued object fields
+and their array components use the object-literal protocol. Root Date-array/defaulted
+inputs, plain static Date fields and opaque construction retain their separate limits. Date getters/setters use the accessor protocol
 above; a real SUT backing field is not arbitrary bag construction.
 Imported/chained Date aliases and generic Date defaults are visible metadata:
 the corresponding Date coverage or unsupported-underlying-domain gate applies.
 These remaining Date limitations do not promote additional rows; the current
-checklist after accessor completion is **23/5/6**.
+checklist after default completion is **28/0/6**.
 
 ### String-literal fields in interface bags
 
@@ -453,10 +1002,10 @@ a distinct drawn callback parameter; the same arbitrary may be reused to draw th
 Casts, conversion helpers, unrestricted `string()`, missing literals, fixed-only
 fields, unused generators, and overwritten inputs are rejected.
 
-This does not add classes, nested/array literal bags, recursive literal-field
-shapes, escaped literal syntax, or unions with undrawable arms. Imported/chained
-literal aliases are normalized without lifting those field restrictions. The
-checklist is **23 supported / 5 partial / 6 not supported** after accessor completion.
+The object-literal protocol above also covers literal-compatible data classes,
+nested/array literal bags and escaped literal syntax. Opaque recursive shapes
+and unavailable union arms still retire. The current checklist is **28 supported /
+0 partial / 6 not supported**.
 
 ## When a tree is a HAP
 
@@ -571,14 +1120,15 @@ The suite is `src/ohosTest/ets/test/*.test.ets`, registered in `List.test.ets`.
 
 | Allowed | Not a test of `--scope` |
 |---|---|
-| A value import that resolves to the scoped checkout file | `declare class` of an image global |
+| A value import resolving to the scoped checkout file, or the registered integrity-checked common copy under `--isolate` | `declare class` of an image global |
 | Retired, if this HAP cannot import `--scope` as it stands | `import type` only, or a comment that mentions the path |
 | For `| null`, `| undefined`, or an optional parameter: include every case with `unionOf` / `unionCase`. Legacy `oneof` + `constant(null)` / `constant(undefined)` only in a test file without `unionOf`. Pass unchanged, with no `as`, `!`, or `??` | Skipping the arm, or narrowing it with `as` / `ESObject` |
 | For an `enum` declared in `--scope`: `constantFrom` of every member, callback typed as that enum, no `as` | `integer()` / `string()` cast to the enum, or a member list that omits one |
 | For `string \| number` and other primitive unions: complete typed `unionOf` / `unionCase`; legacy `oneof` of every arm only in a test file without `unionOf`, no `as` | Drawing only one arm, or casting to one arm |
 | If the scoped function body `throw`s or names `BusinessError`, or calls a same-file helper that does: call it inside `arkThrew` or `try`/`catch` and return a boolean | Happy path only, or an exception that escapes `check()` |
-| A generic: call `name<string>`, `name<number>`, or `name<boolean>` (or a union of those), no `as`. A generic class method is `new CustomStack<string>()` then `stack.push(drawn)` on that instance | An inferred `name(x)` or `new CustomStack()`, `xs.push` on another value, or `name<ESObject>` / `any` / `@Sendable` |
-| For a `struct` declared in `--scope`: `record({ w, h })`, `record({ x, y })`, LTRB `record`, or `recordOf(fn, show, shrinkName)` for any other `number`/`string`/`boolean` bag (or `new StructName`). Flat interface string-literal union fields (inline or resolvable alias chains/imports) use every literal in `constantFrom`, with `optional()` for optional fields. `shrinkName` pushes one-field candidates into its returned array. An optional field uses `optional()`. A nested interface field is `record().generate` or `recordOf().generate` with `as Name` on that result. A `number[]`, `string[]`, or `boolean[]` field is `array().generate`. Callback typed as that struct, no other `as` | `as Rect` / `ESObject` on a plain object, a bag that omits a field, a bare draw of an optional field, `optional()` inside the inner bag standing in for an optional nested field, a class / ArkUI `struct` / `@Sendable` field drawn as a nested bag, `[]` for a `number[]` field, or `recordOf` on a tuple other than `[number, number]` / `number[][]` / unsupported field type (closed string-literal fields are supported as described above) |
+| Generics: matching explicit arguments or complete declared defaults, with their actual underlying recipes and bounds. Fresh genuine receivers, unchanged typed inputs and observed calls; no `as` | Value-based inference without complete defaults, conflicting overrides/annotations, fake receivers, unavailable types or `ESObject` / `any` / `@Sendable` |
+| Source-resolved literal-compatible objects: contextual literals or complete `recordOf(generate, show, shrink)` recipes above. Show every field, shrink one component and keep siblings. Optional fields wrap their whole component. Root bag arrays use `minLength: 1`. Classes requiring behavior use genuine constructors. | Missing/fixed/cast/mutated fields, empty/discarded shrink output, fake constructor identity, or unavailable native/SDK/Sendable/ArkUI/private/inherited leaves |
+| Actual interface contracts: genuine source-owned implementing classes, complete state recipes, matching inherited methods/accessors and observed SUT use | Interface construction, test-local stand-ins, wrong/missing members, private writes, casts, prototype replacement or discarded draws |
 | Concrete function parameter: actual named/arrow/imported/intrinsic callable with complete signature, or a typed closure interpreting a drawn `FunctionModel`; invoke returned closures on the real SUT result | Missing/wrong/unused callbacks, fake receivers, type-only imports, overwritten bindings, casts or an unused model |
 | For overloads in `--scope`: call every complete ordered signature and arity with distinct unchanged typed draws, no `as` | Drawing only the first overload, or collecting unordered primitive arms |
 | For HAR primitives and an interface field bag: legacy `oneof` of every arm only in a test file without `unionOf`; class-instance arms require real constructor cases, no `as` | Drawing only one arm |
@@ -586,7 +1136,7 @@ The suite is `src/ohosTest/ets/test/*.test.ets`, registered in `List.test.ets`.
 | For a branded SDK type (`Length`, `Resource`, a `@kit.*` / `@ohos.*` import not declared in `--scope`): **retire** | `integer()`, or `as Length` |
 | For a one-dimensional branded `T[]` / `Array<T>` (`ImageItem[]`): `[]` or `constant([])` at that argument, no `as` | Constructing `ImageItem`, a non-empty branded array, or retiring `--func` only because the element is branded |
 | For `Name[]` of a `number`/`string`/`boolean` bag, including SDK `FingerInfo[]`: `array(recordOf(fn, show, shrinkName), { minLength: 1 })`, or `record()` for `{ x, y }` / `{ w, h }` / LTRB. Callback typed `Name[]`. Pass that value to `--func`, no `as` | `[]`, a generator that is never passed, `array()` without `minLength: 1`, or `{ id: 0 } as FingerInfo` |
-| For standalone `Date`: `date()`. For the timestamp union: complete `unionOf` / `unionCase`, or `dateUnion()` only in a test file without `unionOf`. Pass unchanged at the matching SUT argument; Date fields/arrays/defaults still retire | A missing arm, a shadowed factory, singleton/opaque Date bounds, bracket mutation, or an uncalled closure |
+| For standalone `Date`: `date()`. For the timestamp union: complete `unionOf` / `unionCase`, or `dateUnion()` only in a test file without `unionOf`. Pass unchanged at the matching SUT argument; object fields use their verified component protocol, while root Date arrays/defaults still retire | A missing arm, a shadowed factory, singleton/opaque Date bounds, bracket mutation, or an uncalled closure |
 | For class/Date/nullish composition: complete typed `unionOf` / `unionCase` recipes, genuine public constructors and unchanged draws. Retire only if an underlying required leaf cannot actually be constructed | A missing arm, a plain-object class substitute, a fake/unused recipe, or an opaque SDK stand-in |
 | For an overload with an unavailable SDK/native/Sendable/inaccessible underlying domain: **retire** | Inventing a stand-in, or `as Length` on one arm |
 | If `--func` calls `getStringByNameSync`: `constantFrom` of every name in that module's `string.json`, and assert `n === n` | `string()`, or a prefixed name that cannot exist |
@@ -650,7 +1200,7 @@ above for every union argument; unrelated non-union signatures are unaffected.
   ([#527](https://github.com/fermat-hkrc/FMBot-PBT/issues/527)); a function
   that throws must be caught inside the property
   ([#529](https://github.com/fermat-hkrc/FMBot-PBT/issues/529)); a generic
-  must be instantiated at `string` / `number` / `boolean`
+  originally required primitive instantiation; constraints and complete declared defaults now use the protocols above
   ([#531](https://github.com/fermat-hkrc/FMBot-PBT/issues/531)); a `struct`
   declared in `--scope` must be constructed (`record` of every field or
   `new StructName`)
@@ -683,7 +1233,14 @@ above for every union argument; unrelated non-union signatures are unaffected.
   `enum` declared in `--scope`, or imported by one relative hop, via `constantFrom` of every member, and
   `string \| number` (and the other unions of those three) via `oneof` of every
   arm, and a union of string literals, numeric literals, or both via `constantFrom` or `oneof` of every literal, and a literal mixed with an open primitive via `oneof` of `constant` and that primitive's generator, and a `[number, number]` parameter via `property2` for one pair or a distinct `numberPair` at each pair argument of the same `property()` call, and a generic instantiated as `name<string>` / `name<number>` /
-  `name<boolean>`, a generic class method via `new CustomStack<string>()` then `stack.push(drawn)` on that instance, and a `struct` declared in `--scope` via `record({ w, h })`, `record({ x, y })`, LTRB `record`, `recordOf(fn, show, shrinkName)` for any other `number`/`string`/`boolean` bag, `optional()` for an optional field, or `new StructName`, a nested interface field via `record().generate` or `recordOf().generate` with `as Name` on that result (a class, ArkUI `struct`, or `@Sendable` field stays out), a `number[]` / `string[]` / `boolean[]` field via `array().generate` (`number[][]` stays out), a `Name[]` of a primitive-field bag including `FingerInfo[]` via `array(recordOf(fn, show, shrinkName), { minLength: 1 })` passed to `--func` (`ImageItem[]` stays `[]`; a bag with a nested field is not that array), and concrete function parameters via genuine matching callable values or generated
+  `name<boolean>`, a generic class method via `new CustomStack<string>()` then
+  `stack.push(drawn)` on that instance, plus complete declared-default and bound-based
+  instantiations under the protocols above, and contextual object literals or complete
+  component recipes as described above. Nested objects, Date/bigint/matrix and
+  fixed tuple fields keep their own construction/show/shrink evidence. Root
+  bag arrays require `minLength: 1`; SDK `FingerInfo[]` keeps its established
+  exception and branded `ImageItem[]` stays `[]`. Concrete function parameters use
+  genuine matching callable values or generated
   `FunctionModel` closures, plus invocation of returned functions, and overloads via a complete ordered typed call per declared signature, and a
   mixed union of those arms via `oneof` of every arm. A Sendable parameter is
   not drawable: retire that `--func`. A branded SDK type (`Length`, `Resource`)
@@ -751,7 +1308,12 @@ function with those values.
    `--scope` is `constantFrom` of its members. A union of `string` / `number` /
    `boolean` is `oneof` of every arm. A scoped function that throws is caught
    with `arkThrew` or `try`/`catch`. A generic is `name<string>`,
-   `name<number>`, or `name<boolean>`. A generic class method is `new CustomStack<string>()` then `stack.push(drawn)` on that instance. A struct declared in `--scope` is `record({ w, h })`, `record({ x, y })`, LTRB `record`, `recordOf(fn, show, shrinkName)` for any other `number`/`string`/`boolean` bag, or `new StructName`. `shrinkName` changes one field per candidate. An optional field uses `optional()`. A nested interface field is `record().generate` or `recordOf().generate` with `as Name` on that result. A class, ArkUI `struct`, or `@Sendable` field stays out. A `number[]`, `string[]`, or `boolean[]` field is `array().generate`. `number[][]` stays out. A `Name[]` of a primitive-field bag, including `FingerInfo[]`, is `array(recordOf(fn, show, shrinkName), { minLength: 1 })` passed to `--func`. `ImageItem[]` stays `[]`. A bag with a nested field is not that array. A `[number, number]` field is `numberPair`. An optional pair is `optional(numberPair(x, y))`. Flat interface fields that are closed string-literal unions, inline or resolvable alias chains/imports, use `constantFrom<Alias>(every literal)` and `optional()` for optional fields. Shrink candidates must be pushed to the returned array, one field changed at a time. Other tuples and unsupported field types are not `recordOf`. Concrete function values use
+   `name<number>`, or `name<boolean>`; complete declared defaults and actual bound-based
+   implementations follow the protocols above, not value-based inference. A generic class method is `new CustomStack<string>()` then `stack.push(drawn)` on that instance. Objects use the complete contextual literal/component protocol above, not a
+   primitive-only or one-level cap. Require every-field display and component-owned
+   shrinking. Root bag arrays require `minLength: 1`; branded arrays and the
+   existing SDK exception keep their own rules. Unavailable leaves still retire.
+   Concrete function values use
    the complete typed-function protocol above, including generated callback behavior and returned closures. Overloads, including method/constructor and semicolonless forms, need a complete ordered typed call per
    signature. A mixed union of those arms is `oneof` of every arm. A Sendable
    parameter is retired ([#543](https://github.com/fermat-hkrc/FMBot-PBT/issues/543)).

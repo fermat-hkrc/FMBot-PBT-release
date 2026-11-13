@@ -100,7 +100,7 @@ A plain CMake project:
 fmbot-pbt build-run --build-cmd "cmake -S . -B build && cmake --build build --target calc_test" --scope src/calc.cpp
 ```
 
-HarmonyOS apps: see the [ArkTS guide](pbt/arkts.md).
+HarmonyOS apps: see the [ArkTS guide](pbt/arkts.md). `--isolate` requires `--scope <file.ets> --func <name>` and generates `<out>/isolate-hap`. It copies the product graph into `entry/src/common` (no hard links or symlinks), retargets the suite import, and replaces `--build-cmd` with the generated HAP's ohosTest build after `ohpm install`. Copies and original dependencies are read-only and hash-checked; a modified or missing graph cannot attest passing/failing. The in-session skill uses this same preparation.
 
 Keeping the JSON event log (stdout carries only events, diagnostics go to stderr; the result is still `report.json`):
 
@@ -205,6 +205,6 @@ Every test entry reads user-provided requirement, API or design documents before
 | `PBT_SCAN_DELEGATION=off` | do not use parallel scan subagents |
 | `PBT_VERDICTS=off` / `PBT_CARRY=off` | do not record / do not reuse earlier verdicts |
 | `PBT_OH_WORKSPACE` | the OpenHarmony source tree; detected automatically when run inside it |
-| `PBT_PHASE_MODELS` | a model per phase, e.g. `{"plan":"anthropic/claude-opus-5-5"}` |
+| `PBT_PHASE_MODELS` / `PBT_DESIGN_THINKING` | a model per phase, e.g. `{"plan":"anthropic/claude-opus-5-5"}` / the Scan and Plan thinking level, default `xhigh` (falling back to `max`, then `high`), never below the session level; `keep` uses the session level |
 | `PBT_MCP_MAX_CONCURRENT` | MCP tests running at once, default 1 |
 | `PI_PBT_RUNS_DIR` | MCP results directory, default `~/.pi-pbt/runs` |

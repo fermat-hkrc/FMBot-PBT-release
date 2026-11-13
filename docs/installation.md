@@ -3,7 +3,6 @@
 [中文](installation.zh.md) · How to use it once installed: [usage guide](usage.md).
 
 ## 1. System requirements
-
 Prepare the project's build, dependency resolution and runtime environment; verify its existing build and test commands work. The release binary embeds its runtime (no separate Node.js). The npm/source channel requires **Node.js 22.x (at least 22.19) or 24.11+**, matching the bundled syntax parser.
 Also prepare any required databases, services, devices or emulators. Basic tools:
 
@@ -14,7 +13,7 @@ Also prepare any required databases, services, devices or emulators. Basic tools
 | Python | `python3` ≥ 3.9 and `pip` |
 | Go | `go` |
 | Java / Kotlin | a JDK and the project's own Maven / Gradle |
-| HarmonyOS apps | DevEco tools, a matching SDK and a connected device or emulator; see the [ArkTS guide](pbt/arkts.md) |
+| HarmonyOS apps | DevEco tools, matching SDK, `ohpm`, Python 3 and device/emulator. HAR builds prefer SDK Node, or PATH Node.js 22+ for standalone SDKs; see the [ArkTS guide](pbt/arkts.md) |
 | OpenHarmony components | a configured OpenHarmony source tree |
 
 ## 2. Download and install
@@ -79,16 +78,17 @@ Put this in `~/.pi-pbt/agent/settings.json` (merge with any existing file); futu
 }
 ```
 
-Other fields: [model configuration reference](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models-configuration.md).
+Scan and Plan, where a campaign decides the contract and designs the properties, run at `xhigh` thinking, falling back to `max`, then `high`; the rest of the campaign uses the level above. pi treats `xhigh` and `max` as supported only when the model's `thinkingLevelMap` maps them (e.g. `"thinkingLevelMap": {"xhigh": "xhigh"}`, with the value the API accepts). `PBT_DESIGN_THINKING` changes or turns this off ([reference](subcommands.md)). Other fields: [model configuration reference](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models-configuration.md).
 Login and built-in provider keys: [provider reference](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md).
 
 HTTPS uses system and bundled roots, with automatic [enterprise certificate compatibility](network.md) for Huawei and official dependencies.
 
 ## 4. Verify
-
 Run `command -v fmbot-pbt`, `fmbot-pbt --version` and `fmbot-pbt --list-models` to check the executable and loaded models.
 
 First test: in a `fmbot-pbt` session type `/skill:pbt-hook-run <sha>` or ask in plain language; unattended, run `fmbot-pbt hook-run <sha>`. Add `--target scope --scope <path>` to test a whole module (`.` for the repository) instead of the change. When the target needs the project build, add `--build-cmd "<command>"` (and `--build-workdir <dir>`) to either; the checkout must be at `<sha>`. Exit codes: `0` no bug, `1` bugs, `2` incomplete, `3` build failed. All flags: [reference](subcommands.md).
+For a single ArkTS function in a large app, `build-run --isolate --scope <file.ets> --func <name>` uses a generated HAP under `<out>/isolate-hap` (still supply `--build-cmd`). The engine copies the product graph into `entry/src/common`, replaces the build command with its ohosTest build, and supplies the exact suite import. Do not edit the copies or originals: both are integrity-checked. The in-session `/skill:pbt-build-run` uses the same behavior. Isolation copies literal `app.string.*` resource entries from the owning source module, including qualifiers and string aliases. Discovery retains calls inside copied ArkUI builder bodies; it does not generate ArkUI tests. Missing, dynamic, unsupported or ambiguous resources stop preparation rather than receiving placeholder values. Resource integrity covers the original owning namespaces and the isolate's `AppScope`, main and ohosTest namespaces, not just existing copied files. Do not add/remove resource files or qualifiers or inject overriding definitions; these changes are blocked and invalidate report acceptance even if the source hashes remain unchanged. Large graphs keep their hash-verified baseline in `isolate-hap/.pbt-isolate-baseline.tsv` instead of an oversized process environment; do not edit or delete that file. Before the initial build, the shared engine builds/installs PandaCheck and resolves all module dependencies (`isolate-setup/build.log`). This setup uses Bash on every platform (Git Bash on Windows); the actual build command keeps its platform shell. Its bootstrap imports the real source graph and framework, so scaffold-only compilation cannot pass the gate; the bootstrap is not a SUT property verdict. HAR rebuilds refresh consumer dependencies and reject stale installed runtime bytes. See the [ArkTS guide](pbt/arkts.md).
+
 ## 5. Upgrade
 Download the new archive and install it as in section 2. The configuration in `~/.pi-pbt/agent/` is kept.
 
