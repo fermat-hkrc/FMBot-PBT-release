@@ -25,15 +25,13 @@ fmbot-pbt 有两类不同的“覆盖率”，不能混为一谈：
 fmbot-pbt scan --dir /path/to/project --out /path/to/project/pbt-out
 ```
 
-它用 `rg`（ripgrep，文本搜索工具）的语言正则启发式匹配函数定义，并写
-`<out>/FUNCTION_INDEX.md`。支持 C/C++、Python、Rust、TypeScript/JavaScript、Go；
-一次运行只选择一种探测到的语言。它不是语法树解析器，因此不能保证找全所有函数，也
-可能误认宏、声明或复杂签名。所谓 `PBT Candidate` 也只是按函数名排除少量已知
-internal/trivial（内部或简单包装）模式后的启发式分类，不表示该函数已经可构建或可测试。
+命令写入 `<out>/FUNCTION_INDEX.md`。对于 C/C++、Python、Rust、TypeScript/JavaScript、Go、Kotlin 和 Java，命令使用 `rg`（ripgrep）的正则启发式匹配函数定义，可能误认宏或遗漏复杂签名。`PBT Candidate` 只是按函数名排除部分内部函数或简单包装后的分类，不代表函数可构建或可测试。
 
-自动语言探测只用 `find -maxdepth 2` 看 `--dir` 下两层；源码更深时应把 `--dir`
-直接指向源码子树，或用 `--lang c/c++|python|rust|typescript|go`。这与
-[子命令文档的说明](subcommands.zh.md#其他命令)一致。
+自动探测用 `rg` 统计 `--dir` 下最多 12 层深度内可识别的源文件，一次只扫描文件数最多的语言。可用 `--lang <语言>` 显式选择语言。
+
+#### ArkTS `.ets`
+
+`fmbot-pbt scan --dir <源码目录> --out <目录> --lang arkts` 用 `rg` 枚举 `.ets` 文件，再解析模块顶层通过 `export function` 直接导出的具名定义。在同一文件中声明 ArkUI 组件不会阻止发现这类函数。表中不列出组件方法，导出函数标记为 `PBT Candidate: no`，因为清单不验证函数能否独立运行。无法读取或解析文件时，保留可用的条目、标记索引不完整、向 stderr 输出诊断并退出 `1`。该操作不修改源码，不需要 SDK 或设备，也不启动测试任务。
 
 `hook-run` 也会尝试预扫描，但当前实现把索引写到
 `<out>/../pbt-out/FUNCTION_INDEX.md`，不一定是 campaign 最终写产物的根目录；扫描失败时
@@ -45,10 +43,10 @@ internal/trivial（内部或简单包装）模式后的启发式分类，不表�
 面向 CI / git hook 的单提交检查：
 
 ```bash
-fmbot-pbt hook-run <sha> --repo . --out ./pbt-out
+fmbot-pbt hook-run <sha> --target . --out ./pbt-out
 ```
 
-`<sha>` 用于读取 diff 并写入 prompt，不会替你 checkout；被编译和测试的是 `--repo`
+`<sha>` 用于读取 diff 并写入 prompt，不会替你 checkout；被编译和测试的是 `--target` 所在仓库的
 当前工作树。完整前提和退出码见[子命令参考的 hook-run](subcommands.zh.md#hook-run)。
 
 命令启动前会清空选定的 `--out` 和工作目录，再尽力预扫描；因此不要把“增量模式”理解为
@@ -105,9 +103,7 @@ fmbot-pbt coverage --diff <sha> --project-dir .
 
 ### `pbt-out/FUNCTION_INDEX.md`
 
-函数索引台账。可由 `fmbot-pbt scan` 的正则启发式生成，也可由 agent 在 campaign 的
-Scan 阶段生成或补充。它只描述已登记的扫描结果；即使表头写着 `Total functions`，也不
-证明编译器意义上的所有函数都已被完整枚举。
+函数索引台账。可由 `fmbot-pbt scan` 生成，也可由 agent 在 campaign 的 Scan 阶段生成或补充。它只描述已登记的扫描结果；即使表头写着 `Total functions`，也不证明编译器意义上的所有函数都已被完整枚举。
 
 **格式：**
 ```markdown
@@ -293,7 +289,7 @@ cd /path/to/project
 fmbot-pbt coverage --list
 
 # 4. 单提交门禁；调用方先保证工作树就是该提交
-fmbot-pbt hook-run <full-sha> --repo /path/to/project --out /path/to/run-output
+fmbot-pbt hook-run <full-sha> --target /path/to/project --out /path/to/run-output
 
 # 5. 如需完整 diff 台账段，手动查询
 fmbot-pbt coverage --diff <full-sha> --project-dir /path/to/project

@@ -2,19 +2,64 @@
 
 [English version](arkts.md)
 
-[返回安装说明](../subcommands.zh.md#build-run) ·
-[子命令](../subcommands.zh.md)
+[首次测试任务前的检查清单](#首次测试任务前的检查清单) ·
+[安装指南](../installation.zh.md) · [子命令](../subcommands.zh.md)
 
 fmbot-pbt 支持的 ArkTS 路径是 **HarmonyOS HAP ohosTest**。性质测试是 Hypium +
 PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 （`import { check, property, integer, double, ieeeDouble, string, boolean, bigint, dictionary, numericDictionary, primitiveUnion, date, dateUnion, array, recursive, functionModel, FunctionModel, unionCase, unionOf } from 'PandaCheck'`），
 用 `hvigorw` 组装，以 `hdc shell aa test` 跑。判定结果看 `OHOS_REPORT_RESULT`。
-用 `make-pandacheck-har.sh` 装到 `libs/PandaCheck.har`。模块 `oh-package.json5` 依赖写 `"PandaCheck": "file:../libs/PandaCheck.har"`。不要把 `Index.ets` 放进 `libs/`。不要 `ohpm install fast-check`。
+用 `make-pandacheck-har.sh` 装到 `libs/PandaCheck.har`。模块 `oh-package.json5` 依赖写 `"PandaCheck": "file:../libs/PandaCheck.har"`。不要把 `Index.ets` 放进 `libs/`。
 
-这不是 Kea。这不是 OpenHarmony GN C++。主机 `es2panda`/`ark`（`PBT_PANDA=1`）
-是**另一条** runner，不要和 ohosTest 混用。
+`PandaCheck.har` 包含用**原生 ArkTS** 编写的 PandaCheck 库。
 
-`--isolate`（配合 `--scope file.ets --func Name`）生成**迷你 HAP**，把真实 `--scope` 文件及其相对 import 复制到 main 与 ohosTest 共用的 `entry/src/common/`。副本是独立普通文件，不是硬链接或符号链接。只有生成器可移除未使用的本地具名导入；函数体及仓库保持不变。构建前记录每份副本和原始依赖的哈希基线；任一侧被修改、删除或重定向时，拒绝 passing/failing 收尾。用来测大应用里的函数（如 Photos），无须编整个应用。import 图必须是公开 kit；系统 API 或整仓 HAR **STOP**。测试任务工作目录是 `<out>/isolate-hap`。从提示指定的 `entry/src/common` 副本导入，例如 `../../../common/default/model/common/DurationFormatter`；不得修改、替换该图，也不得另抄到 main/ets 或 ohosTest，原始依赖图同样只读。`--build-cmd` 换成该 HAP 里 `ohpm install` 之后的 `assembleHap … entry@ohosTest`。隔离 STOP 和 `ohpm install` 失败的退出码是 3。
+这不是 Kea。这不是 OpenHarmony GN C++。主机 `es2panda`/`ark`（`PBT_PANDA=1`，
+使用 `text()`/`bool()` 和 `PANDACHECK_RESULT`）仍由**独立的** `panda-build-run`
+命令卡支持，面向真实主机 Panda 测试树，不是 HAP。工具链、模块源码和结果格式
+须分别处理；主机结果不能证明 HAP 已在设备执行。
+
+## HAP 种子与重放
+
+PandaCheck 先按有符号 32 位转换外部种子（`seed | 0`），再将零替换为 `0xC0FFEE`。
+非零 `2^32` 倍数、截断为零的小数、NaN 和无穷使用该回退随机流，不会冻结 RNG。
+从 HAP 0.1.2 起，非零状态使用全周期 xorshift32（13、17、5）。`CheckResult.seed`
+保留传入种子；旧版本的随机流不同，重放时请使用原来的 HAR 和参数。
+`check` 和 `checkWith` 要求 `numRuns` 为正的安全整数（默认 `100`）；传零会在调用谓词前
+抛错，不会报告通过。可选的 `maxShrinkAttempts` 限制收缩时调用谓词的次数，不影响抽样次数；
+它必须是非负安全整数，零表示跳过收缩。别名种子不能算独立覆盖，有限采样仍不穷尽。CLI 与会话内 skill 共用
+该内置运行库；主机 Panda 种子协议独立。规范 runner 控制覆盖边界、随机流快照、
+整数/IEEE/布尔生成多样性及失败收缩重放；主机控制不代表设备或测试任务证据。
+
+## SUT 修改输入与反例
+
+PandaCheck 在每次谓词调用之前保存组件 `show`，包括通过的抽样。内置原语容器
+（双/三参数、数组、字典、数字字段袋及包装器）收缩时使用独立的类型化副本，操作次数
+回归防止反复重放路径；Date 和用户类仍按该次抽样的 RNG 快照、size 和路径重建候选。合法的 SUT 修改不应让失败的 `Date(100)`
+被报告为调用后的 `Date(0)`。使用纯格式化器及确定性地生成新对象的生成/收缩配方，
+保留真实 class 构造器和方法，不做 JSON 克隆；消费输入前先保存标量预期值。
+若重放显示变化或路径缺失，停止最小化并保留最后实际失败的调用前显示。这不会重置
+外部 SUT 状态，也不会把不完整的显示变成可重放序列化；完整域与原样调用门禁不变。
+规范修改输入套件覆盖 Date、双/三参数、嵌套数组/映射、真实类、异常、零预算和保留值。
+主机一致性测试与实际 HAR/HAP/设备及测试任务证据是不同门禁。
+
+## 隔离要求与限制
+
+`build-run` 默认在原工程中运行测试，使用你提供的 `--build-cmd`。
+`--isolate`（配合 `--target file.ets --func Name`，也接受 `src/main/ets/` 下的 `.ts` 工具文件）生成**迷你 HAP**，把真实 `--target` 文件及其相对 import 复制到 main 与 ohosTest 共用的 `entry/src/common/`。副本是独立普通文件，不是硬链接或符号链接。只有生成器可移除未使用的本地具名导入；函数体及仓库保持不变。构建前记录每份副本和原始依赖的哈希基线；任一侧被修改、删除或重定向时，拒绝 passing/failing 收尾。用来测大应用里的函数（如 Photos），无须编整个应用。import 图必须是公开 kit；系统 API 或整仓 HAR **STOP**。测试任务工作目录是 `<out>/isolate-hap`。从提示指定的 `entry/src/common` 副本导入，例如 `../../../common/default/model/common/DurationFormatter`；不得修改、替换该图，也不得另抄到 main/ets 或 ohosTest，原始依赖图同样只读。`--build-cmd` 换成该 HAP 里 `ohpm install` 之后的 `assembleHap … entry@ohosTest`。隔离 STOP 和 `ohpm install` 失败的退出码是 3。
+
+资源：字面量 `app.string.*` 引用的字符串条目从源码所属模块复制，保留限定词目录和字符串别名；复制源码中 ArkUI 构建器方法体内的资源调用会保留，但不生成 ArkUI 测试。资源缺失、动态引用、类型不支持或有歧义时停止准备，不补造占位值。完整性检查覆盖原所属模块及隔离 HAP 的 `AppScope`、main、ohosTest 资源命名空间：增删资源文件或限定词目录、注入覆盖定义都会被阻止，即使源码哈希未变，报告也不能通过校验。较大的依赖图把哈希校验的基线存在 `isolate-hap/.pbt-isolate-baseline.tsv`，不要修改或删除。首次构建前，引擎安装固定版本的 PandaCheck 字节码 HAR，并解析模块依赖（日志 `isolate-setup/build.log`），这一步在所有平台都用 Bash（Windows 需 Git Bash），构建命令仍用原平台 shell。引导测试导入真实源码依赖图和框架，只编译空测试架无法通过构建门禁；引导检查不算性质结论。HAR 安装过程会校验 OHPM 实际安装的文件，并拒绝陈旧的运行库。
+
+CLI 与 `/skill:pbt-build-run` 共用隔离准备流程。需要 `PATH` 中或 DevEco 内已安装的
+`hvigorw`（通过 `DEVECO_HOME` 或标准安装位置发现）；生成 HAP 转发到该启动器，
+不复制被测项目的 wrapper 或其 CI 专用配置。
+
+模块内路径会向上检查应用元数据，不会被直接当成应用根；原资源位于 `--target` 所在仓库外或应用根
+有歧义时停止准备。暂不支持原 AppScope 定义的被引用字符串或别名目标：请省略 `--isolate`，
+在原 HAP 中测试，不得替换成优先级较低的模块值。
+
+明确发现的原模块/AppScope 资源命名空间（包括尚不存在的根目录）及隔离命名空间均被冻结，
+不会仅因工作区祖先目录名为 `resources` 就将其冻结。隔离暂不投射 OHPM/HAR 裸模块依赖：
+准备阶段即停止，并区分未安装与已安装但尚不支持的包；此类依赖请在原 HAP 中测试。
 
 ## 特性清单
 
@@ -24,7 +69,7 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 
 `let`、`const`、类型推断、`void`、运算符、`if` / `switch` / 循环和 `this` 是语法，不计入。性质不抽取它们。
 
-这份 34 行清单里，**28 项已支持，0 项部分支持，6 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
+这份 34 行清单里，**27 项已支持，1 项部分支持，6 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
 
 | 教程特性 | fmbot-pbt | 含义 |
 | --- | --- | --- |
@@ -46,7 +91,7 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 | `static` 字段或方法 | 已支持 | 参数为 `number`、`string` 或 `boolean` 的 public static 方法必须写成 `Class.method(drawn)`。这些类型的 public static 字段，包括未标注的 `= 0`、`= 'albumType'`、`= true`，要在同一 property 回调里 `Class.field = drawn` 再读取 `Class.field`。readonly 字段只读取。private、protected、非精确类型和 `Date` 字段不在此门禁内。 |
 | getter / setter | 已支持 | 教程的 `Person4.age`、只有 getter/只有 setter 的形态，以及 Date 和已支持底层域。校验真实 public 实例/static 归属、新 receiver、带类型的构造/赋值抽取值、同一实例的可观察读取、有界返回类型推断及逐操作异常捕获。private 状态、替身和不可用底层域不算覆盖。 |
 | 继承、`super`、抽象类 | 不支持 | 不构造。 |
-| `private` / `protected` 字段 | 不支持 | 套件不得改 `--scope` 来暴露它。 |
+| `private` / `protected` 字段 | 不支持 | 套件不得改 `--target` 来暴露它。 |
 | 对象字面量 | 已支持 | 教程的上下文初始化、赋值、实参、带类型返回、数组元素与嵌套字段，使用源码解析出的真实 interface/public 数据类。直接/简写字面量保留带类型抽取值；组合 `recordOf(generate, show, shrink)` 支持可用的嵌套字段、Date/bigint/矩阵、字面量/enum、固定元组字段、可选值及真实构造器叶子。检查全部字段的生成/显示及逐组件收缩；不替代构造器、不合成 private/ArkUI/Sendable/native 值、不改写源码。 |
 | `Record<K, V>` | 已支持 | 字符串键用 `dictionary(string(), values)`，数字键用 `numericDictionary(integer(), values)`。完整类型化值包括教程 `PersonInfo` 字段袋、原语、Date/bigint、数组及嵌套映射。别名和受支持包装保留原样类型化 SUT 实参、完整组件显示/收缩、键上限与冲突安全。精确边界及真实 HAR/HAP/设备和 `build-run` 交付证据见下方。 |
 | interface | 已支持 | 实际本地/导入方法、访问器属性及接口扩展使用真实可访问的源码实现类，保持完整状态配方；纯继承字段袋保留字面量配方。精确边界及真实 HAR/HAP、未改动可调用源码的交付证据见下方。 |
@@ -57,7 +102,7 @@ PandaCheck，落在 `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 | nullish，`T` 或 `null` / `undefined` | 已支持 | 完整 `unionOf` / `unionCase`；既有 `arkNullish` 仅用于没有 `unionOf` 的测试文件。调用不得用 `!` 或 `??` 丢掉该臂。 |
 | `--func` 的具名导入 | 已支持 | `passing` / `failing` 必须导入该文件并调用该符号。 |
 | 导入别名或命名空间 | 已支持 | `id as ident` 和 `ids.id(...)` 算。调用兄弟符号不算。 |
-| 默认导出 | 已支持 | 默认导出的函数必须按默认导入并调用。class 或值的默认导出不是这个绑定。 |
+| 默认导出 | 部分支持 | 默认导出的函数已支持：必须按默认导入并调用。教程的 class/值默认导出形态（如 `export default new Demo()`）不抽取。 |
 | 动态 `import()` | 不支持 | 结果是 `ESObject`。 |
 | `throw` / `try` | 已支持 | `--func`、同文件被调、直接导入，以及最多四跳的 throw 必须捕获。第五跳看不见。 |
 | `@interface` 注解 | 不支持 | 不是值。 |
@@ -97,17 +142,17 @@ PandaCheck 保留 `recordOf(generate, show, shrink?)`；**活动**配方仍要�
 runner 仍是贪心且有预算，不保证任意谓词的全局最小值或任意有限预算内收敛。
 
 内置数字卡为 `references/numbers.md`。`hap/UPSTREAM.json` 记录 PandaCheck
-规范版本 `f46b330bbae6a81e409f0bdf442c6ffffaff6e3d` 及未修改运行库/IEEE 控制文件
-的 SHA-256，离线校验不依赖兄弟仓库。Node 控制、真实 HAR/HAP/Hypium、新的
+的确切提交、字节码 HAR 及各成员的 SHA-256，以及私有测试输入的哈希。
+实现源码仅供可移植测试使用，不随包分发。Node 控制、真实 HAR/HAP/Hypium、新的
 `fmbot-pbt build-run` 活动、报告/独立活动 review、PR/CI 是不同门禁。
 pin 显式声明 `adapterDifferences: []`：无运行库补丁，更严格的活动策略留在代理中。
-`npm run check:pandacheck` 在两种 check 门禁中核验实际源码字节；构建另查 `dist`
-打包树，binary smoke 核验新 binary 实际解包的运行库和 pin，而不只信清单。
+`npm run check:pandacheck` 在两种 check 门禁中核验仓库内的 HAR 和一致性测试文件；
+构建另查 `dist` 打包树，binary smoke 核验实际解包的 HAR 和 pin，而不只信清单。
 在线来源验证用 `node scripts/check-pandacheck.mts --upstream`，通过已认证 `gh`
 获取精确提交的允许列表文件并计算哈希。离线 CI 无需兄弟检出或跨仓 token；在线
 读取权限缺失会报错，不算核验成功。
 
-下方 #710 仍是历史证据，并未使用 `ieeeDouble`。清单仍为 **28/0/6**：
+下方 #710 仍是历史证据，并未使用 `ieeeDouble`。清单仍为 **27/1/6**：
 本次扩展数字采样，不增加语言特性行。
 
 2026-11-11，新重建的 fmbot-pbt binary 对未修改的
@@ -126,9 +171,9 @@ pin 显式声明 `adapterDifferences: []`：无运行库补丁，更严格的活
 
 源码 SHA-256 保持
 `a4e315f1a2df6ae0d5a75f122023b46e60cf041960873de9d2587322d246e0ca`；三份给定套件
-逐字节不变，已安装运行库与上游固定哈希一致。新的独立 review 检查全部 8 条性质，
-**0 finding**；报告及 required-review 重验通过。这是预先准备的 `--no-isolate`
-可调用夹具，不是新的隔离 E2E、生产应用/native 生命周期或实测行/分支覆盖证明。
+逐字节不变，已安装运行库匹配 IEEE 阶段版本
+`f46b330bbae6a81e409f0bdf442c6ffffaff6e3d`，不是后续更新版本。新的独立 review 检查全部 8 条性质，
+**0 finding**；报告及 required-review 重验通过。这是原工程中的可调用夹具，已预先准备好，不是新的隔离 E2E、生产应用/native 生命周期或实测行/分支覆盖证明。
 
 ### 覆盖固定教程的泛型默认值
 
@@ -192,9 +237,8 @@ string/number/boolean 覆盖及独立读取交错。加上七条给定用例和�
 
 源码 SHA-256 保持
 `a4e315f1a2df6ae0d5a75f122023b46e60cf041960873de9d2587322d246e0ca`，给定套件逐字节
-不变，报告及 required 独立 review 校验通过。这是预先准备的 `--no-isolate` 可调用
-夹具，不是新的 CLI 隔离 E2E、生产应用/native 生命周期或实测代码覆盖率证明。
-本次仅升级泛型默认值行：**28/0/6**，仍是 34 行。
+不变，报告及 required 独立 review 校验通过。这是原工程中的可调用夹具，已预先准备好，不是新的 CLI 隔离 E2E、生产应用/native 生命周期或实测代码覆盖率证明。
+本次仅升级泛型默认值行：**27/1/6**，仍是 34 行。
 
 ### 覆盖固定教程的泛型约束
 
@@ -275,8 +319,7 @@ receiver 隔离和前缀不变性。此前六条更宽域性质设备执行通�
 
 源码 SHA-256 保持
 `4744d65b4dcdd85381fac401dc44ef2de135a709a3d68449e2e203afc99e641e`，给定套件逐字节
-不变。报告校验与 required review 校验通过，监督会话未手改生成测试。这是预先准备的
-`--no-isolate` 可调用夹具，不是新的 CLI 隔离 E2E、生产应用/native 生命周期或实测
+不变。报告校验与 required review 校验通过，监督会话未手改生成测试。这是原工程中的可调用夹具，已预先准备好，不是新的 CLI 隔离 E2E、生产应用/native 生命周期或实测
 代码覆盖率证明。该阶段只升级泛型约束；泛型默认值交付另见上方。
 
 ### 覆盖固定教程的接口
@@ -310,7 +353,7 @@ const rectangles = recordOf((rng: Random, size: number): RectangleSize =>
 ```
 
 接口不是工厂。教程原样的 `RectangleSize` 只有初始化为零的私有尺寸、没有公开
-初始化/读取 API 时，仍缺少状态配方；不得向硬性 `--scope` 添加这些 API。
+初始化/读取 API 时，仍缺少状态配方；不得向硬性 `--target` 添加这些 API。
 每个构造实参及状态字段都要生成、显示并逐组件收缩；收缩保留真实实例、方法及兄弟
 状态，默认值不等于开放字段抽取。边界性质里的常量/零宽度组件同样不能替代完整变化
 状态；先调用 SUT、保留通用 Oracle，再按抽取值条件加强。ArkTS 以
@@ -376,7 +419,7 @@ entry/ohosTest HAP，签名并安装两者，逐字节不变地执行给定的
 `numericDictionary(integer(), values)`，需要小数键时用 `double()`。
 宽范围有限键可用 `ieeeDouble({ includeNaN: false, includeInfinity: false })`；
 未禁用全部特殊值的 IEEE 键会被拒绝。值可用完整 IEEE 模式，保持组件显示/收缩。
-HAP `double()` 无参数，不能传 fast-check 的 `min`/`max` 选项。数字键必须有限，
+HAP `double()` 无参数，不接受 `min` 或 `max` 选项。数字键必须有限，
 运行时存成规范字符串属性名，`-0` 变为 `0`。值沿用自身完整类型化配方。教程的真实
 导入类型 `PersonInfo { age: number; salary: number; }` 先按下方对象协议构造完整
 `recordOf(generate, show, shrink)` 的 `peopleValues`，再组合：
@@ -484,7 +527,7 @@ public 纯数据类可用字面量；需要构造行为、方法或 private 状�
 可选/字面量字段及工厂默认值，不声称生产 Date/bigint/矩阵覆盖。最终编译后 JS
 只读重验接纳性质清单，拒绝十七种内存变异及错误源码 SHA；重验不是新设备执行。
 
-对象字面量能力保持不变；加上上方接口、约束及默认值完成，当前为 **28 已支持 / 0 部分支持 / 6 不支持**，仍是 34 行。
+对象字面量能力保持不变；加上上方接口、约束及默认值完成，当前为 **27 已支持 / 1 部分支持 / 6 不支持**，仍是 34 行。
 
 ### 覆盖固定教程的类型别名
 
@@ -589,7 +632,7 @@ scoped 工厂返回闭包时，每条性质必须调用其真实结果；仅创�
 产品清单。这证明生产交付链路，不声称全部内建/导入/返回形态均已在应用中执行。
 
 函数能力不升级其它底层域；加上接口、约束及默认值能力后，当前清单是
-**28 已支持 / 0 部分支持 / 6 不支持**。无具体签名的 `Function`、
+**27 已支持 / 1 部分支持 / 6 不支持**。无具体签名的 `Function`、
 `ESObject`、动态导入、未知 native 生命周期、Sendable、不可访问/继承构造器仍有各自
 限制。可选/默认/组合回调**参数**、任意泛型/异步组合和不透明递归函数生成仍需自身
 底层协议。组合回调域无论直接标注还是经别名引用都同样 retired；一个函数臂不等于
@@ -642,7 +685,7 @@ PBT 加 Ability）。生产源码/调用者 SHA 及原始/isolate 源码 inode �
 收尾流程生成套件，监督会话未手改；未改 SUT、SDK 或产品清单。应用证据针对
 boolean 存取，不代表 Date 应用场景或异步定时器语义。编译后 JS 只读重验接纳该
 性质清单，并拒绝十八种内存中的 accessor 变异及错误源码 SHA；重验不是新设备执行。
-getter/setter 阶段达到 **23/5/6**；上方特性完成使当前清单达到 **28/0/6**，仍是 34 行。
+getter/setter 阶段达到 **23/5/6**；上方特性完成使当前清单达到 **27/1/6**，仍是 34 行。
 
 ### 覆盖固定教程的重载
 
@@ -752,11 +795,11 @@ nullish Date 联合。Date 对象字段及其数组组件使用独立对象字�
 数组/默认实参、普通 static Date 字段和不透明构造仍保留限制。Date getter/setter 使用上方 accessor 协议；真实 SUT 的
 backing field 不等于任意字段袋构造。导入/链式 Date 别名与泛型 Date 默认值是可见
 元数据，适用对应 Date 覆盖或不支持底层域门禁。这些残余限制不升级其它行；
-默认值完成后的当前清单是 **28/0/6**。
+默认值完成后的当前清单是 **27/1/6**。
 
 ### interface 字段袋中的字符串字面量字段
 
-`--scope` 中的扁平 interface 可包含必选或可选的封闭字符串字面量联合字段，
+`--target` 中的扁平 interface 可包含必选或可选的封闭字符串字面量联合字段，
 可以直接写联合（允许换行），也可以引用可解析的本地/导入别名链。例如
 `type Status = 'pending' | 'running'` 和 `status?: Status` 使用
 `const statusArb = optional(constantFrom<Status>('pending', 'running'));`。
@@ -772,7 +815,7 @@ backing field 不等于任意字段袋构造。导入/链式 Date 别名与泛�
 和覆盖输入字段都会被拒绝。
 
 上方对象字面量协议也支持兼容字面量的数据类、嵌套/数组字段袋及转义字面量。
-不透明递归形态和不可用联合臂仍 retired。当前清单为 **28 已支持 / 0 部分支持 /
+不透明递归形态和不可用联合臂仍 retired。当前清单为 **27 已支持 / 1 部分支持 /
 6 不支持**。
 
 ## 什么时候算 HAP
@@ -782,36 +825,75 @@ backing field 不等于任意字段袋构造。导入/链式 Date 别名与泛�
 `hvigorw`（项目包装、`PATH`、或 DevEco 安装）。只在 `PATH` 上有 `hvigorw`
 不会把当前目录变成 HAP 根。
 
-OpenHarmony 组件上 `--scope` 以 `.ets` 结尾就是 ArkTS，即使没有 HAP。不要因为缺
+OpenHarmony 组件上 `--target` 以 `.ets` 结尾就是 ArkTS，即使没有 HAP。不要因为缺
 hvigor 根就 retired。从该文件导入 `--func`，只复用用户 `--build-cmd` 重建(主机
 `es2panda`/`ark`，或 `ohos_arkts_unittest`)。不要把 SUT 抄进另一个 HAP 的
 `ohosTest/ets/sut/`。`--lang` 是文案语言(`zh` / `en`)，不是 C++ 还是 ArkTS。
 
-## 跑之前（前置条件）
+## 首次测试任务前的检查清单
 
-在 `fmbot-pbt build-run` **之前**做完下面每一步。漏一步，门禁必须点名失败
-（`BUILD FAILED — PBT not started`）。fmbot-pbt 不会发明 HAP、改写
-`compileSdkVersion` / `runtimeOS`、或创建 `ohosTest`。
+默认在原工程中运行源码测试任务。先完成以下检查，再启动
+`fmbot-pbt build-run`。`--isolate` 由引擎准备 HAP、`ohosTest` 目标和依赖，
+但仍需要匹配的工具、SDK 和设备；引导构建不算性质测试结论。
 
-1. 当前用户**可写**的 DevEco SDK。`hvigor` 可能拒绝不可写的 `/opt/devecostudio/sdk`。
-   把 `local.properties` 的 `sdk.dir`（以及 `DEVECO_SDK_HOME`）指到你钉住的 API
-   真正所在的用户 SDK（例如 `26.0.0`）。
-2. HAP 或 HAR 根：`oh-package.json5` + `build-profile.json5`。`--repo` 与 `--workdir`
-   必须是**同一份 git** 检出。
-3. 工程的 `compileSdkVersion` / `compatibleSdkVersion` / `runtimeOS` / hvigor
-   `modelVersion` **对齐**该 SDK。自己改。装额外 SDK 或抬高工程版本号是操作者的事。
-4. 要测的模块已有 `src/ohosTest/module.json5`。示例里的 `module=entry@ohosTest`
-   假定这个目录存在。
-5. 在 `--workdir` 里 `ohpm install` 退出 0。必须能解析 `@ohos/hypium`。仓库里 404 的钉
-   （例如失效的 `@ohos/hamock` 版本）删掉或改钉。
-6. `--build-cmd` 在 `--workdir` 里**已经退出 0**：
-   - HAP（`hapTasks` / `type: hap`）：`hvigorw assembleHap --mode module -p module=<name>@ohosTest -p product=default --no-daemon`
-   - HAR（`harTasks` / `type: har`）：`hvigorw genOnDeviceTestHap --mode module -p module=<name>@ohosTest -p product=default --no-daemon`
-   纯 HAR 工程上没有 `assembleHap` 任务（hvigor 00306054）。
-7. 再传 `--scope path/to/file.ets --func ABC`，且 `--func` 在 `--scope` **后面**。
-   `--lang` 只有 `zh` / `en`（文案语言，不是 C++ 还是 ArkTS）。
+- [ ] **模型：** 配置服务商和凭据，用 `fmbot-pbt --list-models` 确认所选模型已加载（[模型配置](../installation.zh.md#3-配置模型)）。列出模型不代表 API 可访问，还须检查服务商认证。
+- [ ] **工具：** 安装 DevEco 或项目支持的命令行工具，包括 `hvigorw`、`ohpm`、`hdc`、Bash、签名所需 Java 和 ZIP 解包工具。HAR 准备需要 SDK 内置 Node 或 PATH 中的 Node.js 22+（[系统要求](../installation.zh.md#1-系统要求)）。
+- [ ] **工程与 SDK：** 找到 HAP/HAR 根（`oh-package.json5` + `build-profile.json5`），与 `--target`/`--build-dir` 同属一份 git 检出。对照 SDK 清单检查 `compileSdkVersion`、`compatibleSdkVersion`、`targetSdkVersion`、`runtimeOS` 和 hvigor `modelVersion`，同时核对 API 级别、SDK 类型（HarmonyOS/OpenHarmony、公开/系统 API）、访问权限及设备镜像。安装或选择匹配 SDK，不要盲目提高版本或修改 `runtimeOS`。
+- [ ] **SDK 路径发现：** 让工程的 Hvigor 插件能找到该 SDK，而不只是让 fmbot-pbt 辅助工具找到，见下方 [SDK 路径发现](#hvigor-sdk-路径发现)。
+- [ ] **依赖：** 在实际构建目录执行项目规定的安装命令（常见为 `ohpm install --all`），包括 `@ohos/hypium` 在内须退出 0。仓库、认证或锁文件错误应与项目维护者解决，不要为了通过准备而删除依赖。
+- [ ] **模块与构建：** 确认实际模块的 `src/ohosTest/module.json5`、product 和 task。不要假定模块名是 `entry`，也不要把 `common` 中的范围默认归给 `phone`。原样 `--build-cmd` 必须已在 `--build-dir` 退出 0。以下只是任务形态，名称和启动器以工程为准：
+  - HAP：`hvigorw assembleHap --mode module -p module=<name>@ohosTest -p product=<product> --no-daemon`
+  - HAR：`hvigorw genOnDeviceTestHap --mode module -p module=<name>@ohosTest -p product=<product> --no-daemon`
+  纯 HAR 工程没有 `assembleHap` 任务（hvigor 00306054）。
+- [ ] **签名：** product 引用了 `signingConfig` 时，根 `build-profile.json5` 的 `app.signingConfigs` 中须有同名配置，且证书、profile、密钥库可用。核对包名、权限、设备 UDID 和信任关系。无签名构建不代表可安装（[签名指南](../arkts-device.zh.md#本地签名)）。
+- [ ] **设备冒烟测试：** `hdc list targets` 须显示预期且已解锁的设备/模拟器。安装需要的签名 HAP，在该目标执行**已有 Hypium 冒烟测试套件**，取得测试数大于零、无失败或错误的完整终态结果（[设备执行](../arkts-device.zh.md#设备结果)）。这只验证环境，不验证新生成的性质。
 
-写完套件后，设备 `aa test` 仍需要 `hdc` 和可签名的 HAP。GN `*_abc` 不是这条 runner。
+这些检查说明**环境已准备好**，不代表测试任务成功，也不保证支持每个被测 API。
+启动后仍须真实构建、设备执行和报告校验。构建门禁失败时 CLI 退出 **3**
+（`BUILD FAILED — PBT not started`），该门禁没有运行 PBT 或模拟器测试。
+GN `*_abc` 不是这条 HAP runner。
+
+### Hvigor SDK 路径发现
+
+Linux 安装器生成的 `~/.pi-pbt/deveco.env` 导出 `DEVECO_HOME`、`DEVECO_SDK_HOME`
+和 `PATH`，**不导出** `OHOS_BASE_SDK_HOME`。加载它能找到工具，不代表满足每个
+工程的 SDK 路径发现规则。
+
+遇到以下 Hvigor 错误时：
+
+```text
+00303208 Configuration Error
+Unable to find 'sdk.dir' in 'local.properties' or 'OHOS_BASE_SDK_HOME'
+```
+
+在**工程根目录**的 `local.properties` 设置 `sdk.dir`，指向该工程插件接受、
+包含所需 API 的 SDK 根目录。保留其它属性；已有错误条目时修改它，不要重复追加：
+
+```properties
+sdk.dir=/absolute/path/to/project-compatible-sdk
+```
+
+也可针对该错误所指的 OpenHarmony 路径，在构建进程所在 shell 中把
+`OHOS_BASE_SDK_HOME` 导出为匹配的 SDK 根目录。先检查已有 `sdk.dir`，错误的工程
+路径可能覆盖环境选择。Windows 路径使用正斜杠，本机路径不要提交到 git。
+
+`DEVECO_SDK_HOME` 为 fmbot-pbt 辅助工具选择 DevEco 集成 SDK，根目录通常含
+`default/openharmony`；独立 OpenHarmony SDK 的布局可能不同。不要把所有 SDK
+变量指向任意 `ets/` 目录，也不要假定 SDK 26 能构建要求 SDK 23 的工程。配置后
+重跑**同一条**工程构建命令，不通过修改 API 要求来解决路径发现问题。
+
+### 准备错误与处理
+
+| 现象 | 重试前处理 |
+|---|---|
+| 缺少 `sdk.dir` / `OHOS_BASE_SDK_HOME`（00303208） | 按上方说明在构建工程或 shell 配置匹配的 SDK 根目录。仅有 `DEVECO_SDK_HOME` 可能不满足该插件。 |
+| 所需 SDK/API 不存在，`runtimeOS` 或 hvigor 版本不匹配 | 安装或选择所需版本及类型，配套匹配的构建工具和设备镜像。版本迁移需要维护者单独批准，不是测试任务的自动修复。 |
+| `signingConfig: "default"` 找不到同名配置 | 用项目授权的签名材料或 DevEco 签名设置配置 `app.signingConfigs`。不要添加空 `material`，不要删除签名配置后声称设备已就绪，也不要假定 `--sign-profile` 能修复 Hvigor 配置。 |
+| 依赖失败或缺少 `ohosTest` 任务/模块 | 与维护者修复依赖访问，或准备真实测试目标；使用工程的 HAP/HAR 任务，不猜模块，不用空操作构建。 |
+| 安装、启动失败或冒烟结果不完整 | 检查证书/profile 信任、UDID、权限、目标和解锁状态，保留日志。构建通过或部分测试日志不代表冒烟测试通过。 |
+
+SDK 路径发现失败发生在后续门禁之前，不能据此认定签名或设备执行可用。
+反馈故障时保留构建日志和 fmbot-pbt/工具版本。
 
 `build-run` 碰到 HAP 根会为该进程设 `PBT_HAP=1`。不要把 `PBT_HAP` 写进
 shell profile：残留的 `1` 会把之后的 C++ 测试任务也逼进 HAP 模式。树是
@@ -820,18 +902,17 @@ ArkTS 但缺清单、又要用自由入口 `fmbot-pbt` / `-p` 时，只在**这�
 
 ## 怎么跑
 
-`--repo` 是被测模块（扫描树、`--scope`、默认 `pbt-out/`）。`--workdir` 是
-`--build-cmd` 的执行目录。两者必须在**同一份 git 检出**里。`--workdir` 常常是
-HAP 工程；`--repo` 可以是同时装着 `.ets` / `.ts` SUT 和该 HAP 的上级组件。
+`--target` 是被测的 `.ets` / `.ts` 文件（或装着它们的目录）；它所在的 git
+仓库存放生成的测试和默认的 `pbt-out/`。`--build-dir` 是 `--build-cmd` 的执行
+目录，通常是 HAP 或 HAR 工程。两者必须在**同一份 git 检出**里。
 
-两个路径都是 HAP 本身时：
+SUT 在 HAP 工程内时：
 
 ```bash
 fmbot-pbt build-run \
   --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon" \
-  --repo /path/to/hap \
-  --workdir /path/to/hap \
-  --scope entry/src/main/ets/common/Utils.ets \
+  --build-dir /path/to/hap \
+  --target /path/to/hap/entry/src/main/ets/common/Utils.ets \
   --func deepCopyInter \
   --lang zh
 ```
@@ -841,9 +922,8 @@ HAR 模块（库，`harTasks`）——不要用 `assembleHap`：
 ```bash
 fmbot-pbt build-run \
   --build-cmd "hvigorw genOnDeviceTestHap --mode module -p module=<har>@ohosTest -p product=default --no-daemon" \
-  --repo /path/to/component \
-  --workdir /path/to/component/.../the-har-project \
-  --scope path/from/repo/to/file.ets \
+  --build-dir /path/to/component/.../the-har-project \
+  --target /path/to/component/path/to/file.ets \
   --func myFunc \
   --lang zh
 ```
@@ -853,16 +933,15 @@ SUT 文件在 HAP 目录外、但仍在同一检出内时：
 ```bash
 fmbot-pbt build-run \
   --build-cmd "hvigorw assembleHap --no-daemon" \
-  --repo /path/to/component \
-  --workdir /path/to/component/.../the-hap \
+  --build-dir /path/to/component/.../the-hap \
+  --target /path/to/component/path/to/file.ts \
   --out /path/to/component/pbt-out-myfunc \
-  --scope path/from/repo/to/file.ts \
   --func myFunc \
   --lang zh
 ```
 
-`--func` 必须带 `--scope`，且写在 `--scope` **后面**。`--out` 可选（默认
-`<repo>/pbt-out`）。自定义 `--out` 目录可以放 `REPORT.md`。
+`--func` 要求 `--target` 指向一个文件。`--out` 可选（默认是 `--target` 所在仓库
+中的 `pbt-out`）。自定义 `--out` 目录可以放 `REPORT.md`。
 
 `--build-cmd` 是操作者输入。失败则测试任务不启动（`BUILD FAILED — PBT not started`）。
 `true` 这类空操作不能证明 `passing` / `failing`。HAP 测试任务不要加 `--prompt`，
@@ -875,23 +954,23 @@ fmbot-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor �
 ## `passing` / `failing` 性质必须满足什么
 
 套件是 `src/ohosTest/ets/test/*.test.ets`，并登记到 `List.test.ets`。
-`report.json` 的 `sourceFile` / `functionName` 钉在硬性 `--scope` / `--func` 上。
+`report.json` 的 `sourceFile` / `functionName` 钉在硬性 `--target` / `--func` 上。
 
-| 允许 | 不是在测 `--scope` |
+| 允许 | 不是在测 `--target` |
 |---|---|
 | 值导入能解析到检出里的 scoped 文件，或 `--isolate` 注册并通过完整性检查的 common 副本 | 对镜像全局做 `declare class` |
-| 若本 HAP 无法按现状导入 `--scope`，则 `retired` | 仅 `import type`，或注释里提一下路径 |
+| 若本 HAP 无法按现状导入 `--target`，则 `retired` | 仅 `import type`，或注释里提一下路径 |
 | 签名含 `| null`、`| undefined` 或可选参数时：用完整 `unionOf` / `unionCase`；既有 `oneof` + `constant(null)` / `constant(undefined)` 仅用于没有 `unionOf` 的测试文件。原样传入，不用 `as`、`!`、`??` | 丢掉该臂，或用 `as` / `ESObject` 收窄 |
-| `--scope` 里声明的 `enum`：`constantFrom` 列出每个成员，回调类型为该 enum，不用 `as` | 用 `integer()` / `string()` 再 `as` 成 enum，或漏掉一个成员 |
+| `--target` 里声明的 `enum`：`constantFrom` 列出每个成员，回调类型为该 enum，不用 `as` | 用 `integer()` / `string()` 再 `as` 成 enum，或漏掉一个成员 |
 | `string \| number` 等原语联合：完整带类型的 `unionOf` / `unionCase`；每臂 `oneof` 仅用于没有 `unionOf` 的测试文件，不用 `as` | 只抽一臂，或 `as` 成其中一臂 |
 | 源码解析出的兼容字面量对象：上下文字面量或上方完整 `recordOf(generate, show, shrink)` 配方。显示全部字段、逐组件收缩并保留其它字段；可选字段包裹整个组件。根字段袋数组用 `minLength: 1`；需要行为的类用真实构造器。 | 缺失/固定/cast/修改字段、空或丢弃收缩结果、伪造构造器身份，或不可用 native/SDK/Sendable/ArkUI/private/继承叶子 |
 | 泛型：匹配的显式实参或完整声明默认值，保留实际底层配方/约束、新建真实 receiver、原样类型化输入及调用观察 | 无完整默认值的值推断、冲突覆盖/标注、假 receiver、不可用类型或 `ESObject` / `any` / `@Sendable` |
 | 实际接口约定：真实源码实现类、完整状态配方、匹配的继承方法/访问器及可观察 SUT 使用 | 接口构造、测试本地替身、错误/缺失成员、private 写入、强转、原型替换或丢弃抽取值 |
 | 具体函数参数：签名匹配的真实具名/箭头/导入/内建函数值，或解释已抽取 `FunctionModel` 的类型化闭包；工厂返回函数须调用真实结果 | 缺失/错误/未用回调、假接收者、仅类型导入、覆盖绑定、强转或未使用模型 |
-| `--scope` 重载：用独立、未修改且带类型的抽取值调用每个完整有序签名和元数，不用 `as` | 只抽第一个签名，或只收集无序原语臂 |
+| `--target` 重载：用独立、未修改且带类型的抽取值调用每个完整有序签名和元数，不用 `as` | 只抽第一个签名，或只收集无序原语臂 |
 | HAR 原语与 interface 字段袋联合：每臂 `oneof` 仅用于没有 `unionOf` 的测试文件；class 实例臂要求真实构造器 case，不用 `as` | 只抽一臂 |
 | Sendable 参数（`@Sendable` 类、`SendableMap` / `ISendable`、`collections.Array`）：**retired** | `integer()`，或本线程上的 `new Box(n)` |
-| 品牌 SDK 类型（`Length`、`Resource`、未在 `--scope` 声明的 `@kit.*` / `@ohos.*` 导入）：**retired** | `integer()`，或 `as Length` |
+| 品牌 SDK 类型（`Length`、`Resource`、未在 `--target` 声明的 `@kit.*` / `@ohos.*` 导入）：**retired** | `integer()`，或 `as Length` |
 | 一维品牌 `T[]` / `Array<T>`（`ImageItem[]`）：该实参只传 `[]` 或 `constant([])`，不用 `as` | 构造 `ImageItem`、非空品牌数组，或仅因元素是品牌类型就对该 `--func` retired |
 | 原语字段袋的 `Name[]`，包括 SDK `FingerInfo[]`：`array(recordOf(fn, show, shrinkName), { minLength: 1 })`；`{ x, y }` / `{ w, h }` / LTRB 也可用 `record()`。回调类型为 `Name[]`，把该值传给 `--func`，不用 `as` | `[]`、画出了却没传入、没有 `minLength: 1` 的 `array()`，或 `{ id: 0 } as FingerInfo` |
 | 独立 `Date` 用 `date()`；时间戳联合用完整组合配方，或仅在没有 `unionOf` 的测试文件中用 `dateUnion()`。原样传入对应实参；对象字段用独立组件协议，根 Date 数组/默认参数仍 retired | 缺臂、工厂遮蔽、单值/不透明 Date 边界、下标修改或未调用的闭包 |
@@ -899,13 +978,13 @@ fmbot-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor �
 | 含不可用 SDK/native/Sendable/不可访问底层域的重载：**retired** | 编造替身或对一臂 `as Length` |
 | `--func` 调用 `getStringByNameSync`：`constantFrom` 该模块 `string.json` 里的每个 name，并断言 `n === n` | `string()`，或加前缀以致不可能存在的名字 |
 | `--func` 调用同文件会 `throw` 的 helper：在性质里用 `arkThrew` / `try`/`catch` 接住 | 只走快乐路径，或让异常逃出 `check()` |
-| | 拷贝/硬链到 `ohosTest/` 下（`ets/sut/`、`scope_utils/`、假的 `--scope` 树） |
+| | 拷贝/硬链到 `ohosTest/` 下（`ets/sut/`、`scope_utils/`、假的 `--target` 树） |
 | | 把 `@kit.ArkUI` / `@ohos.arkui*` 当成 koala / `arkts_frontend` 的 sourceFile |
-| | 改 `--scope` 好让导入通过（`export class`、放宽 `private`） |
+| | 改 `--target` 好让导入通过（`export class`、放宽 `private`） |
 | | Node / 主机 `es2panda` 镜像，或 Linux Previewer 上的 `hvigorw test` |
 | | `testFile` 不在 `ohosTest/ets/test/*.test.ets` |
 
-目录形式的 `--scope` 是路径前缀。每条性质的导入必须是**该条**在目录下的
+目录形式的 `--target` 是路径前缀。每条性质的导入必须是**该条**在目录下的
 `sourceFile`，不能是任意兄弟文件。
 
 若 HAP 编不过 scoped 文件，**retired**。不要靠改生产文件让它可导入。
@@ -915,20 +994,19 @@ fmbot-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor �
 | 树 | 为什么 HAP PBT 跑不起来 |
 |---|---|
 | koala / `arkoala-arkts` / `#generated` | `@koalaui/*`。那边的测试是 Panda `make`，不是 `aa test`。 |
-| `state_mgmt` 的 `utils.ts` 等未导出框架 TS | unittest HAP 按现状编不进该文件。既有 UT 对镜像全局 `declare class`；那不是 `--scope`。 |
+| `state_mgmt` 的 `utils.ts` 等未导出框架 TS | unittest HAP 按现状编不进该文件。既有 UT 对镜像全局 `declare class`；那不是 `--target`。 |
 | `test/component_test` 与许多 `examples/` HAP | 常钉在本机没有的 SDK。门禁失败。不要在 fmbot-pbt 里更换测试目标。 |
-| OpenHarmony GN `build.sh` / `ohos_unittest` | C++ 产品路径。`.ets` 的 `--scope` 不是那条路。 |
+| OpenHarmony GN `build.sh` / `ohos_unittest` | C++ 产品路径。`.ets` 的 `--target` 不是那条路。 |
 
 ## 证据
 
 `hdc shell aa test` 与完整的 `OHOS_REPORT_RESULT` 行。对 `modules.abc` 做
 `strings` 只说明 SUT 被链进，不说明性质跑过。ohosTest 没有原生行覆盖。
 
-不要 `ohpm install fast-check`。ArkTS 框架是 PandaCheck。
-
 ## 当前进度
 
-这是主机 `ark` 上的 PandaCheck。跟踪议题：
+本节记录原生 ArkTS PandaCheck 的 HAP ohosTest 路径。主机 `panda-build-run`
+路径仍独立支持，不替代 HAP runner。跟踪议题：
 [#366](https://github.com/fermat-hkrc/FMBot-PBT/issues/366)。
 
 ### 已支持
@@ -941,19 +1019,19 @@ fmbot-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor �
 - 泛型实参可明确给出或由声明默认值完整确定；使用上方实际约束、底层配方及逐调用门禁，不从值推断缺失类型。
 - public getter/setter（含 Date 与有界推断）在新建真实 receiver 上使用实际属性、
   带类型抽取值与可观察结果，见上方 accessor 协议；不代表 private 字段或 SDK 对象合成。
-- `--repo`（扫描 / `--scope`）与 `--workdir`（构建）可分离，同一 git 检出。
+- `--target`（被测代码）与 `--build-dir`（构建）可分离，同一 git 检出。
   自定义 `--out` 可放 `REPORT.md`。
 - HAP **拥有** scoped `.ets` 且能导入时：执行该符号并记 `passing` / `failing`。
 - 已落地的诚实门禁：禁止 `ohosTest/ets/sut/` 抄写；禁止用 `@kit.ArkUI` 冒充
-  koala；`sourceFile` / `functionName` 钉在硬性 `--scope` / `--func`；
-  `declare class` 不算导入；禁止改写 `--scope` 好让导入通过；目录
-  `--scope` 按路径前缀且按该条性质的 `sourceFile` 匹配；空值签名必须保留该臂
-  （[#523](https://github.com/fermat-hkrc/FMBot-PBT/issues/523)）；`--scope`
+  koala；`sourceFile` / `functionName` 钉在硬性 `--target` / `--func`；
+  `declare class` 不算导入；禁止改写 `--target` 好让导入通过；目录
+  `--target` 按路径前缀且按该条性质的 `sourceFile` 匹配；空值签名必须保留该臂
+  （[#523](https://github.com/fermat-hkrc/FMBot-PBT/issues/523)）；`--target`
   里声明的 enum 必须抽出每个成员
   （[#525](https://github.com/fermat-hkrc/FMBot-PBT/issues/525)）。
-- 若本 HAP 无法按现状导入 `--scope`，**retired**。真实 `hvigorw` 成功后全
+- 若本 HAP 无法按现状导入 `--target`，**retired**。真实 `hvigorw` 成功后全
   `retired` 的 `report.json` 可通过校验
-  （[#533](https://github.com/fermat-hkrc/FMBot-PBT/issues/533)）。`--scope` 里声明的
+  （[#533](https://github.com/fermat-hkrc/FMBot-PBT/issues/533)）。`--target` 里声明的
   对象使用上方完整上下文字面量/组件协议，支持可用的嵌套、Date/bigint/矩阵和固定
   元组字段，要求全部字段显示及组件收缩。根字段袋数组用 `minLength: 1`；SDK
   `FingerInfo[]` 保留既有例外，品牌 `ImageItem[]` 仍是 `[]`
@@ -974,8 +1052,8 @@ fmbot-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor �
 
 ### 不支持
 
-两张表。第一张是 HAP runner。第二张是 **`fast-check.har` 喂不了的 ArkTS SUT**。
-任一列要关掉，都需要新的 fmbot-pbt 工作。
+两张表分别记录 HAP runner/工程限制，以及当前 HAP PandaCheck 配方和测试任务
+门禁无法驱动的 **SUT 类型与生命周期**。支持的类型化配方以上方特性清单为准。
 
 #### Runner / 树
 
@@ -985,23 +1063,23 @@ fmbot-pbt **不会**静默改写 `compileSdkVersion`、`runtimeOS` 或 hvigor �
 | 未导出框架 `.ts`（如 `state_mgmt` `utils.ts`） | ohosTest 导不进该类。既有 UT 对镜像全局 `declare class`。诚实收尾是全 `retired`；`report.json` 可通过校验。 | 继续 retired（当前诚实结果），或在**不改文件**的前提下把它编译进来。 |
 | SDK / hvigor / `runtimeOS` 不匹配 | 门禁失败，或工具链被推迟。fmbot-pbt 不改清单。 | 大声报出期望的 SDK 字段。操作者预检，不要静默改靶。 |
 | `test/component_test` 与许多 `examples/` HAP | 常是 API 12 / HarmonyOS 5.x；本机 SDK 26 树装不了。 | 同上：大声失败。不要改写 `compatibleSdkVersion`。 |
-| OpenHarmony GN `build.sh` | 独立的 C++ 产品路径。`.ets` 的 `--scope` 不是那条路。 | 保持拆分。ArkTS `--scope` 不要起 GN。 |
+| OpenHarmony GN `build.sh` | 独立的 C++ 产品路径。`.ets` 的 `--target` 不是那条路。 | 保持拆分。ArkTS `--target` 不要起 GN。 |
 | 原生行覆盖 | ohosTest 链不上 `coverage_gaps`。证据是 `aa test` 加 abc 字符串。 | 若工具链能产出 ArkTS 覆盖再做；不要伪造 C++ lcov。 |
-| 兄弟导出 / 私有字段绕行 | 套件可导入 `--scope` 里已导出的 helper，再在活实例上调未导出方法。这不是改写，导入检查会放行。 | 决定 `passing` 是否要求导入**符号**，而不只是定义它的文件。 |
-| 主机 `es2panda` / PandaCheck | 已移除。不要当 HAP 替身加回来。 | 仅当真实 Panda 测试树就是 SUT，并自有 runner。 |
+| 兄弟导出 / 私有字段绕行 | 套件可导入 `--target` 里已导出的 helper，再在活实例上调未导出方法。这不是改写，导入检查会放行。 | 决定 `passing` 是否要求导入**符号**，而不只是定义它的文件。 |
+| 主机 `es2panda` / PandaCheck | 通过独立的 `panda-build-run` 支持真实主机 Panda 测试树，不属于 HAP 执行。 | 区分主机与 HAP 的工具链、模块和结果格式，不能用主机结果替代 HAP 设备判定。 |
 | Kea GUI | `fmbot-pbt kea` 是另一模式（黑盒 UI）。 | 与源码级 ArkTS 分开。 |
 
-#### ArkTS SUT 与 `fast-check.har`
+#### 当前 HAP PandaCheck 配方之外的 SUT 特性
 
-HAR 是转换后的 JS（对 npm fast-check 做 `ohpm convert`）。它生成 JS 的
-`number` / `string` / `boolean` / `Array` / 普通对象。性质文件是 ArkTS
-（命名导入、`(x: number)`、无 `any`、无解构、`check()` 而非 `fc.assert`）。
-当 ohosTest 无法用这些值调用该函数时，该 SUT 特性就不支持。
+`PandaCheck.har` 从规范 PandaCheck 源码构建，内容是原生 ArkTS。
+Hypium 套件从 `PandaCheck` 具名导入所需 API，并调用 `check(property(...))`。生成、显示和收缩支持的类型见上方特性清单，不限于 JavaScript
+原语。当 ohosTest 无法编译、导入真实被测函数，或无法以所需真实类型值和生命
+周期调用它时，该特性仍不支持。
 
 | SUT 特性 | 现在会怎样 | 要改进什么 |
 |---|---|---|
 | `@Sendable` / 并发类型 | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。本线程上的 `new Box(n)` 不是 Sendable。 | 能构造 Sendable 值的 runner。不要硬撑 HAR。 |
-| 未导出 `class` / `private` 字段 | 不改 `--scope` 就无法 `import` 或 `new`。 | 不改写 SUT 也能编/导，或 retired。 |
+| 未导出 `class` / `private` 字段 | 不改 `--target` 就无法 `import` 或 `new`。 | 不改写 SUT 也能编/导，或 retired。 |
 | 不支持类型的联合 | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。只抽 `string()` 不是含必需 class/native 臂的联合。 | 每个可构造臂用带类型的 `unionCase`；真正不可用的 SDK/native 叶子仍需自己的构造/生命周期支持。 |
 | 品牌/不透明 SDK 类型 | 裸 `Length` / `Resource`：`passing` / `failing` 被拒绝。诚实收尾是 `retired`。`as Length` 不是该类型。一维品牌 `T[]` 可以是 `[]` / `constant([])`（[#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)）。 | 非空品牌值的类型化构造。不要硬撑 HAR。 |
 | 含不可用底层域的重载 | 必需 native/SDK/Sendable/不可访问值仍须 retired；支持的 class/数组/Date/回调不因非原语而 retired。 | 增加底层构造/生命周期协议，不用 cast 或漏签名。 |
@@ -1009,7 +1087,9 @@ HAR 是转换后的 JS（对 npm fast-check 做 `ohpm convert`）。它生成 JS
 | `getStringByNameSync` | 未抽出 `string.json` 里每个 name 时，`passing` / `failing` 被拒绝。`string()` 只打到 throw 路径。 | 对这些 name 用 `constantFrom`。断言有限。`NaN` 是失败结果，不是成功的 number。 |
 | 约束到不支持类型的泛型 | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。`name<string>` 不是 `T extends SomeStruct`。 | 对该 `--func` retired。 |
 | 无具体签名的函数/互操作域（`Function`、`ESObject`） | `passing` / `failing` 被拒绝。诚实收尾是 `retired`。具名 stub 不是 `Function` 或 `ESObject`。 | 对该 `--func` retired。 |
-| `@Component` / `@Observed` / UI | 需要 UI 运行时。 | 不是 HAP fast-check。Kea 或 UI runner。 |
+| `@Component` / 界面行为 | 不属于源码级 HAP PandaCheck 的测试范围。 | 使用 Kea 或其他界面测试工具。 |
+| `@Observed` / `@ObservedV2` 模型 | 已验证 [Browser V1](arkts.md#v1-model-validation-browser) 和 [HanZi V2](arkts.md#v2-model-validation-hanzi) 的有限模型用例。 | 只测试真实实例的同步方法及受影响的公开状态，不生成装饰类实例，也不验证界面绑定或通知分发。 |
+| 测试独占的 `LocalStorage` | [AppRecovery 验证](arkts.md#localstorage-isolation-apprecovery)：在谓词每次执行时新建接收者和存储；普通抽样、收缩和同种子重放均通过设备测试。 | 仅验证无界面的 `restoreLocalStorage`，不涉及恢复流程、`AppStorage` 或 `PersistentStorage`。 |
 | koala / `@koalaui` | 另一套编译器。HAR 永远装不上。 | Panda/koala runner，不是 ohosTest。 |
 | Native / NAPI / 仅 `ESObject` 的 API | `ESObject` 能编过，但丢掉 ArkTS 类型。 | 类型化绑定，或 retired。 |
 
@@ -1019,14 +1099,14 @@ HAR 是转换后的 JS（对 npm fast-check 做 `ohpm convert`）。它生成 JS
    不改 SUT 树。
 2. 符号级导入：`passing` / `failing` 必须绑定 `--func`，不能只值导入碰巧定义
    它的文件。
-3. Koala / Panda：文档化的非 HAP runner，或继续对 koala `--scope` retired。
+3. Koala / Panda：文档化的非 HAP runner，或继续对 koala `--target` retired。
 4. **ArkTS SUT 类型：** 本项既有联合实参配方仅用于没有 `unionOf` 的测试文件；
-   否则每个联合参数使用完整带类型的 case。不要在 `.ets` 里硬撑 TS fast-check。nullish 用套件里的
-   `arkNullish`，不 fork fast-check。`--scope` 里的 enum 用成员的 `constantFrom`。对象使用上方完整上下文字面量/组件协议，不再只有原语或一层嵌套；要求每个字段
+   否则每个联合参数使用完整带类型的 case。使用 PandaCheck 原生类型化配方，不用转换后的 npm
+   生成器；既有 nullish 使用套件的 `arkNullish`。`--target` 里的 enum 用成员的 `constantFrom`。对象使用上方完整上下文字面量/组件协议，不再只有原语或一层嵌套；要求每个字段
    的显示及组件收缩。根字段袋数组用 `minLength: 1`，品牌数组与既有 SDK 例外保留自身
-   规则；不可用叶子仍 retired。具体函数参数使用上方完整协议，包括真实导入/内建函数值、生成回调行为和返回闭包调用。重载（含方法、构造器和无分号形式）的每个签名都要按完整参数顺序带类型调用。这些臂的混合联合用每一臂的 `oneof`。Sendable 参数应 retired（[#543](https://github.com/fermat-hkrc/FMBot-PBT/issues/543)）。品牌 SDK 类型（`Length`、`Resource`）应 retired（[#545](https://github.com/fermat-hkrc/FMBot-PBT/issues/545)）。品牌 `T[]`（`ImageItem[]`）用 `[]` 或 `constant([])`（[#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)）。含不可抽臂的联合应 retired（[#547](https://github.com/fermat-hkrc/FMBot-PBT/issues/547)）。含不可用底层域的重载仍应 retired（[#549](https://github.com/fermat-hkrc/FMBot-PBT/issues/549)）；支持的非原语不再统一 retired。同文件被调函数里的 throw 应捕获（[#551](https://github.com/fermat-hkrc/FMBot-PBT/issues/551)）。约束到不支持类型的泛型应 retired。`name<string>` 不是 `T extends SomeStruct`。泛型类方法是 `new CustomStack<string>()` 再在该实例上 `stack.push(drawn)`。`Function` 或 `ESObject` 回调应 retired。具名 stub 只适用于 `(...) =>`。`passing` / `failing` 必须导入并调用 `--func`。只导入文件再调用兄弟符号不是该符号。字符串字面量联合、数字字面量联合，以及二者混合，用每个字面量的 `constantFrom` 或 `oneof(constant(...))`。`string()` / `integer()` 不是该联合。`[number, number]` 一个参数用 `property2` 构造 `[x, y]`，更多的数对用不同的 `numberPair`。不要传入 `Pair`。字面量与开放原语的联合用 `oneof(constant(...), integer()/string())`。四跳之外的 throw 应捕获或 retired。第五跳仍然看不见。缺失的 `hvigorw` / SDK 已经推迟构建门。长期：同
-   `check`/`property` 形态的 ArkTS PBT 库，无 `any`、无 `<const T>`。扫描 scoped
-   签名，只允许匹配的 arbitrary。
+   规则；不可用叶子仍 retired。具体函数参数使用上方完整协议，包括真实导入/内建函数值、生成回调行为和返回闭包调用。重载（含方法、构造器和无分号形式）的每个签名都要按完整参数顺序带类型调用。这些臂的混合联合用每一臂的 `oneof`。Sendable 参数应 retired（[#543](https://github.com/fermat-hkrc/FMBot-PBT/issues/543)）。品牌 SDK 类型（`Length`、`Resource`）应 retired（[#545](https://github.com/fermat-hkrc/FMBot-PBT/issues/545)）。品牌 `T[]`（`ImageItem[]`）用 `[]` 或 `constant([])`（[#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)）。含不可抽臂的联合应 retired（[#547](https://github.com/fermat-hkrc/FMBot-PBT/issues/547)）。含不可用底层域的重载仍应 retired（[#549](https://github.com/fermat-hkrc/FMBot-PBT/issues/549)）；支持的非原语不再统一 retired。同文件被调函数里的 throw 应捕获（[#551](https://github.com/fermat-hkrc/FMBot-PBT/issues/551)）。约束到不支持类型的泛型应 retired。`name<string>` 不是 `T extends SomeStruct`。泛型类方法是 `new CustomStack<string>()` 再在该实例上 `stack.push(drawn)`。`Function` 或 `ESObject` 回调应 retired。具名 stub 只适用于 `(...) =>`。`passing` / `failing` 必须导入并调用 `--func`。只导入文件再调用兄弟符号不是该符号。字符串字面量联合、数字字面量联合，以及二者混合，用每个字面量的 `constantFrom` 或 `oneof(constant(...))`。`string()` / `integer()` 不是该联合。`[number, number]` 一个参数用 `property2` 构造 `[x, y]`，更多的数对用不同的 `numberPair`。不要传入 `Pair`。字面量与开放原语的联合用 `oneof(constant(...), integer()/string())`。四跳之外的 throw 应捕获或 retired。第五跳仍然看不见。缺失的 `hvigorw` / SDK 已经推迟构建门。
+   PandaCheck 已提供原生 ArkTS `check`/`property` 库。进一步支持类型时，须提供
+   匹配被测签名的真实类型化配方和测试任务证据，不是另换后端或退回主机执行。
 
 ## 相关
 

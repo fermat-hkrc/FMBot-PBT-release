@@ -311,7 +311,7 @@ above, it carries:
 |---|---|
 | `summary` | `conclusion`, `changedCode`, `coverageEvidence` (`level`: `line-level` / `file-level` / `none`, `detail`), `followUp` |
 | `properties[].history[]` | written by fmbot-pbt, oldest first: `{ kind: "status", status, at, counterexample? }` for each new status or new witness, `{ kind: "reverified", at, command, output }` for the same counterexample re-run on the real implementation. A property that failed and is now passing or retired needs a `reverified` entry after its last failure, or a failing `discrimination` |
-| `properties[].discrimination` | `baseline`, `command`, `result` (`fails` / `passes`), `output`: the property run against the pre-change baseline |
+| `properties[].discrimination` | `baseline`, `command`, `result` (`fails` / `passes`), `output`: the property run against the pre-change baseline. For a failing baseline that accounts for a caveat, include its exact `counterexample` |
 | `modules[]` | `name`, `tests`, `bugs`, `oracles[]` (the Modules Tested table) |
 | `caveats[]` | `id`, `claim`, `docEvidence` (`file` absolute, `line`, `quote` verbatim), `classification` (`input-domain-restriction` / `does-not-constrain`), optional `note` |
 | `remarks[]` | `category` (`environment` / `build` / `budget` / `coverage` / `tooling` / `other`), `text`: why the result is weaker than it should be; not a caveat, not reviewed |
@@ -332,7 +332,7 @@ a refused call changes nothing and names the field to fix:
 | `record_run` | `run`, `build` | `generator`, `schemaVersion` |
 | `record_property` | one property's result, a re-verification (`reverified`), a baseline run (`discrimination`) | name, `formal`, oracle, function and test file from its `PROPERTIES.md` entry; `history` |
 | `record_bug` | one bug | `formal` and the counterexample from its property; that property's `bugId`; a `reportPath` from the id and summary |
-| `record_caveat` | one design note; its quote is checked at the cited line | — |
+| `record_caveat` | one design note; its quote is checked at the cited line. `withdraw: true` removes only the named note | — |
 | `record_remark` | one remark | — |
 | `record_summary` | `summary`, `modules`, `testFiles`, `reproduction`; REPORT.md is rendered from then on | — |
 
@@ -341,6 +341,46 @@ every prose field (a bug's summary, law, impact, expected, actual, root cause
 and fix; a note's claim; a remark; the summary) must be Chinese and pass the
 typography and jieba dictionary checks, or the record is refused. Fields that
 quote documentation, evidence, framework output or code are exempt.
+
+If a passing property's notes describe a failure made to pass, the summary refusal
+names the ledger entry and gives the correction steps even if the review is stale.
+Restore the strict test and replay the original witness before rewriting the
+ledger, unless the evidence establishes a baseline-only failure, an independently
+grounded test mistake, or a documented input exclusion. Record a baseline-only
+failure as `discrimination` with `record_property`.
+For a test-side mistake, use a `tooling` remark to preserve the old assertion, its
+exact counterexample, the failing run, and the replay of that input with the
+corrected test. Do not attach the old failure to the current design.
+Once the evidence is saved, replace the triggering wording with the current design
+and an evidence reference using `record_design`. Record the final result after the
+design update if needed. Use `reverified` only when replaying a failing witness
+already in the property's history. Then rerun `closeout_review` if required and
+answer outstanding findings before retrying `record_summary`. A review waiver
+skips re-review, not responses to findings from finished shares.
+The tool result also gives the names in `details.correction.properties`
+and the ordered `{ tool, instruction }` entries in `details.correction.steps`
+(`structuredContent.correction` over the ACP MCP bridge). The refusal does not
+change `report.json` or the correction limits. Once that correction is parked
+or the campaign is stopped, no retry plan is returned.
+
+If a stored Design Caveat blocks `record_summary`, correct that record first.
+For failure prose or a cited limitation, the original claim or note must name
+one recorded witness: the exact function call, or an explicit reference such
+as “property `p1`” and the exact counterexample (including any line breaks)
+in backticks. The correction cannot introduce this link. Keep
+the failing property and its bug (a secondary witness also qualifies), or
+record the same-witness re-verification. If only the baseline failed, record
+the passing property with `discrimination.result: "fails"` and its exact
+`discrimination.counterexample`. Then withdraw only the caveat, e.g.
+`{ "id": "c1", "withdraw": true, "propertyId": "p1" }`.
+
+For a documented exclusion, correct and re-verify the property for that input
+before replacing the caveat with the same property ID and a verified quote
+excluding the input. A quote alone cannot account for a failure. For a missing
+citation with no failure evidence, correct the quote or withdraw the note.
+If the original witness cannot be identified, leave the finding unresolved.
+A rejected summary saves the original caveats and citations in
+`rejected-records.jsonl`; rewording the summary does not reset the budget.
 
 fmbot-pbt renders `REPORT.md` and every `bug_reports/<slug>.md` from it and
 overwrites them. `REPORT.md` appears only once `summary` is recorded, because

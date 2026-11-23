@@ -21,6 +21,10 @@ tar -xJf fmbot-pbt-linux-x64.tar.xz && cd fmbot-pbt-linux-x64 && ./install.sh
 
 Then configure a model: [installation guide](docs/installation.md).
 
+The links above always fetch the latest stable release. Test builds (`v0.5.0-beta.1` and similar) are marked
+**Pre-release** on the [releases page](https://github.com/fermat-hkrc/FMBot-PBT-release/releases) and are never
+served as the latest.
+
 ## Two modes
 
 - **While you develop:** invoke `/skill:pbt-build-run` with documents, scope, build command and effort; see the [usage guide](docs/usage.md).
@@ -46,6 +50,9 @@ tar -xJf fmbot-pbt-linux-x64.tar.xz && cd fmbot-pbt-linux-x64 && ./install.sh
 ```
 
 接着配置模型，见[安装指南](docs/installation.zh.md)。
+
+上表链接始终下载最新的正式版。测试版（如 `v0.5.0-beta.1`）在[发布页](https://github.com/fermat-hkrc/FMBot-PBT-release/releases)标为
+**Pre-release**，不会作为最新版下发。
 
 两种用法：
 

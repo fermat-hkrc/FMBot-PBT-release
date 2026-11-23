@@ -2,22 +2,66 @@
 
 [中文版 / Chinese version](arkts.zh.md)
 
-[Back to installation](../subcommands.md#build-run) ·
-[Subcommands](../subcommands.md)
+[Before your first campaign](#before-your-first-campaign) ·
+[ArkUI support roadmap](#arkui-support-roadmap) ·
+[Installation](../installation.md) · [Subcommands](../subcommands.md)
 
 fmbot-pbt supports ArkTS as **HarmonyOS HAP ohosTest**. A property is Hypium +
 PandaCheck in `src/ohosTest/ets/test/<Name>Pbt.test.ets`
 (`import { check, property, integer, double, ieeeDouble, string, boolean, bigint, dictionary, numericDictionary, primitiveUnion, date, dateUnion, array, recursive, functionModel, FunctionModel, unionCase, unionOf } from 'PandaCheck'`),
 assembled with `hvigorw`, and run with `hdc shell aa test`. The verdict is
 `OHOS_REPORT_RESULT`. Install the library with `make-pandacheck-har.sh` into
-`libs/PandaCheck.har`. Depend on `"PandaCheck": "file:../libs/PandaCheck.har"` from the module `oh-package.json5`. Do not copy `Index.ets` into `libs/`. Do not `ohpm install fast-check`.
+`libs/PandaCheck.har`. Declare the archive relative to the test module's `oh-package.json5` (`file:../libs/PandaCheck.har` for `entry`, `file:../../libs/PandaCheck.har` for `product/entry`). Do not copy `Index.ets` into `libs/`.
+
+`PandaCheck.har` contains the canonical **native ArkTS** PandaCheck library.
 
 This is not Kea. This is not OpenHarmony GN C++. Host `es2panda`/`ark`
-(`PBT_PANDA=1`, `text()`/`bool()`, `PANDACHECK_RESULT`) is a **separate** runner
-for compiler `.ets` that is not a HAP. Do not mix the two.
+(`PBT_PANDA=1`, `text()`/`bool()`, `PANDACHECK_RESULT`) remains supported through
+the **separate** `panda-build-run` cards for real host Panda test trees, not HAPs.
+Keep their toolchains, module sources and verdicts separate; a host result does
+not establish HAP device execution.
 
-`--isolate` (with `--scope file.ets --func Name`) builds a **mini HAP** that
-copies the real `--scope` file and its relative imports into `entry/src/common/`,
+## HAP seeds and replay
+
+PandaCheck normalizes external seeds with signed 32-bit coercion (`seed | 0`),
+then replaces zero with `0xC0FFEE`. Nonzero multiples of `2^32`, fractions
+truncating to zero, NaN and infinities use that fallback instead of freezing the
+RNG. Starting with HAP 0.1.2, nonzero states use full-period xorshift32 (13, 17, 5).
+`CheckResult.seed` retains the supplied seed; replay with the original HAR and
+parameters because older versions produce a different stream. `check` and `checkWith`
+require `numRuns` to be a positive safe integer (default `100`); zero throws
+before the predicate runs rather than reporting a pass. The optional
+`maxShrinkAttempts` caps shrink predicate calls, not trials: it must be a
+nonnegative safe integer, and zero skips shrinking. Aliased seeds are not
+independent coverage, and finite sampling is still not exhaustive.
+The CLI and in-session skill use this same bundled runtime; host Panda seeds
+are separate. Canonical runner controls cover boundaries, stream snapshots,
+integer/IEEE/boolean diversity and failure shrinking/replay; host controls are
+not device or campaign evidence.
+
+## Mutable SUT inputs and counterexamples
+
+PandaCheck captures component-owned `show` before each predicate call, including
+passing trials. Built-in primitive containers use independent typed copies during
+shrinking, including pairs/triples, arrays, dictionaries, numeric bags and wrappers;
+operation-count controls prevent repeated path replay. Dates and user classes still
+reconstruct candidates from the trial's RNG snapshot, size and shrink path. Legitimate SUT mutation must not turn a failing
+`Date(100)` into a reported post-call `Date(0)`. Use pure formatters and fresh,
+deterministic generator/shrinker recipes; real class constructors and methods
+survive without JSON cloning. Snapshot scalar expectations before a consuming call.
+A changed replay display or missing path stops minimization at the last observed
+pre-call failing display. This does not reset external SUT state or make incomplete
+formatting a replay serialization. Complete-domain and unchanged-call requirements
+remain in force. The canonical mutation suite covers Dates, pairs/triples, nested
+arrays/maps, real classes, throws, zero budget and retained values; host conformance
+is separate from actual HAR/HAP/device and campaign evidence.
+
+## Isolation requirements and limits
+
+By default, `build-run` tests in the original project using your `--build-cmd`.
+`--isolate` (with `--target file.ets --func Name`, or a `.ts` utility scope under
+`src/main/ets/`) builds a **mini HAP** that copies the real `--target` file and its
+relative imports into `entry/src/common/`,
 shared by main and ohosTest. These are independent regular files, never hard links
 or symlinks. Only unused named local imports may be stripped by the generator;
 function bodies and the checkout stay unchanged. Every generated file and original
@@ -25,13 +69,43 @@ dependency is hash-baselined before the build. Passing/failing close-out rejects
 changes, missing files or redirected paths on either side. Use it to test a
 function in a large app (Photos) without compiling the entire app. The import graph must be public kits (`@ohos.hilog`, `@ohos.i18n`, …).
 System APIs (`systemParameterEnhance`, `photoAccessHelper`, …) or a graph bigger than a
-function **STOP**. `--isolate` does not edit HARD `--scope`. The campaign cwd is `<out>/isolate-hap`.
+function **STOP**. `--isolate` does not edit HARD `--target`. The campaign cwd is `<out>/isolate-hap`.
 Import that generated file under `entry/src/common` (the prompt names the specifier,
 for example `../../../common/default/model/common/DurationFormatter`). Do not edit
 it, replace it with a symlink, or author another copy under main/ets or ohosTest.
 The original graph is also read-only. `--build-cmd` is
 replaced by `assembleHap … entry@ohosTest` after `ohpm install` in that HAP.
 Isolate STOP and a failed `ohpm install` exit 3, same as a failed build gate.
+
+Resources: literal `app.string.*` entries are copied from the owning source module, with
+qualifiers and string aliases; calls inside copied ArkUI builder bodies are kept, but no
+ArkUI tests are generated. Missing, dynamic, unsupported or ambiguous resources stop
+preparation instead of getting placeholder values. Integrity covers the original owning
+resource namespaces and the isolate's `AppScope`, main and ohosTest namespaces: adding or
+removing resource files or qualifiers, or injecting overriding definitions, is blocked
+and fails report acceptance even when source hashes are unchanged. Large graphs keep
+their hash-verified baseline in `isolate-hap/.pbt-isolate-baseline.tsv`; do not edit or
+delete it. Before the first build the engine installs the pinned PandaCheck bytecode HAR and resolves
+module dependencies (`isolate-setup/build.log`), always under Bash (Git Bash on Windows);
+the build command keeps its platform shell. The bootstrap imports the real source graph
+and framework, so a scaffold-only compile cannot pass the gate; it is not a property
+verdict. HAR installation verifies the files OHPM installed and rejects stale runtime bytes.
+
+The CLI and `/skill:pbt-build-run` share isolate preparation. It requires an installed
+`hvigorw` on `PATH` or in DevEco (`DEVECO_HOME` or a standard install location). The
+generated HAP forwards to that launcher without copying the SUT's project wrapper
+or its CI-only configuration.
+
+Module-local paths are checked against ancestor application metadata, not treated as
+application roots. Out-of-repo resources or ambiguous application roots stop preparation.
+Referenced original AppScope strings or alias targets are unsupported: use the original
+HAP without `--isolate`. Do not substitute lower-priority module values.
+
+Explicitly discovered original module/AppScope resource namespaces (including absent
+roots) and isolate namespaces are frozen; arbitrary checkout ancestors named `resources`
+are not. Bare OHPM/HAR imports are not projected: isolation stops before setup and
+distinguishes missing packages from installed-but-unsupported packages. Use the original
+HAP for these dependencies.
 
 ## Feature inventory
 
@@ -43,7 +117,7 @@ types, call shapes, and modules. It is not a percent of ArkTS.
 `let`, `const`, inference, `void`, operators, `if` / `switch` / loops, and
 `this` are syntax. They are not in the count. A property does not draw them.
 
-**28 supported, 0 partial, 6 not supported** on this 34-row checklist.
+**27 supported, 1 partial, 6 not supported** on this 34-row checklist.
 Supported means a passing or failing property can use that form, and a
 close-out gate requires it. Partial means only some forms of that tutorial
 heading are drawn or caught. Not supported means we do not draw it, or the
@@ -69,7 +143,7 @@ honest close is `retired`.
 | `static` field or method | supported | A public static method with a `number`, `string`, or `boolean` parameter must be called as `Class.method(drawn)`. A public static field of those types, including an unannotated `= 0`, `= 'albumType'`, or `= true`, is `Class.field = drawn` and a read of `Class.field` in that property callback. A readonly field is read. A private or protected field, a non-exact type, and a field of `Date` stay outside. |
 | getter / setter | supported | Tutorial `Person4.age`, getter-only and setter-only forms, plus Date and supported underlying domains. Actual public instance/static ownership, fresh receivers, typed constructor/setter draws, same-receiver observed reads, bounded getter inference and per-operation catches are checked. Private state, substitutes and unavailable underlying domains do not count. |
 | inheritance, `super`, abstract class | not supported | Not constructed. |
-| `private` / `protected` field | not supported | The suite must not edit `--scope` to expose it. |
+| `private` / `protected` field | not supported | The suite must not edit `--target` to expose it. |
 | object literal | supported | Tutorial contextual initialization, assignment, arguments, typed returns, array elements and nested fields use actual source-resolved interface/public data-class types. Direct/shorthand literals retain typed draws; composed `recordOf(generate, show, shrink)` recipes support available nested fields, Date/bigint/matrices, literals/enums, fixed tuple fields, optional values and real constructor leaves. Complete field generation/display and one-component shrinking are checked. No constructor substitution, private/ArkUI/Sendable/native synthesis or source rewriting. |
 | `Record<K, V>` | supported | String keys use `dictionary(string(), values)`; numeric keys use `numericDictionary(integer(), values)`. Complete typed values include tutorial `PersonInfo` bags, primitives, Date/bigint, arrays and nested maps. Aliases and supported wrappers retain unchanged typed SUT arguments, complete component display/shrinking, key caps and collision safety. See the exact boundaries and real HAR/HAP/device plus `build-run` delivery evidence below. |
 | interface | supported | Actual local/imported methods, accessor properties and interface extension use genuine accessible source-owned implementing classes with complete state recipes. Pure inherited field bags retain literal recipes. See the exact boundaries and real HAR/HAP plus unchanged-callable delivery evidence below. |
@@ -80,11 +154,11 @@ honest close is `retired`.
 | nullish `T` or `null` / `undefined` | supported | Complete `unionOf` / `unionCase` cases; legacy `arkNullish` only in a test file without `unionOf`. The call must not use `!` or `??` to drop the arm. |
 | named import of `--func` | supported | A passing or failing property must import the file and call that symbol. |
 | import alias or namespace | supported | `id as ident` and `ids.id(...)` count. A sibling call does not. |
-| default export | supported | A default-exported function must be imported as the default and called. A class or value default is not this binding. |
+| default export | partial | A default-exported function is supported: it must be imported as the default and called. The tutorial's class/value defaults (for example, `export default new Demo()`) are not drawn. |
 | dynamic `import()` | not supported | The result is `ESObject`. |
 | `throw` / `try` | supported | A throw in `--func`, a same-file callee, a direct import, or up to four hops must be caught. A fifth hop is invisible. |
 | `@interface` annotation | not supported | Not a value. |
-| ArkUI | not supported | Declarative UI is not this runner. |
+| ArkUI | not supported | Declarative UI is not this runner. See the [ArkUI support roadmap](#arkui-support-roadmap) for planned work on independently callable ArkTS logic. |
 
 `@Sendable` is in the kit overview, not in this tutorial. A Sendable parameter
 is `retired`. Do not add it to this count.
@@ -129,21 +203,21 @@ the runner remains greedy/budget-limited: no arbitrary-predicate global minimum
 or convergence within every finite budget is promised.
 
 The bundled numeric card is `references/numbers.md`. `hap/UPSTREAM.json` records
-canonical PandaCheck revision `f46b330bbae6a81e409f0bdf442c6ffffaff6e3d` and SHA-256
-hashes of the unchanged runtime and IEEE controls; offline tests need no sibling
-checkout. Node controls, real HAR/HAP/Hypium execution, a new `fmbot-pbt build-run`
+the exact PandaCheck revision, bytecode HAR and member hashes, and hashes of
+the private test inputs. The implementation source is for portable tests only;
+it is not packaged. Node controls, real HAR/HAP/Hypium execution, a new `fmbot-pbt build-run`
 campaign, report/independent campaign review and PR/CI remain separate gates.
 The pin explicitly declares `adapterDifferences: []`: there are no runtime
 patches; stricter campaign policy stays outside PandaCheck.
-`npm run check:pandacheck` verifies the actual source bytes in both `check` gates. Builds
-also verify staged `dist` assets, and binary smoke verifies the freshly extracted
-runtime and pin rather than trusting the manifest alone. For online provenance,
+`npm run check:pandacheck` verifies the tracked HAR and conformance files in both
+`check` gates. Builds also verify staged `dist` assets, and binary smoke checks the
+extracted HAR and pin rather than trusting the manifest alone. For online provenance,
 `node scripts/check-pandacheck.mts --upstream` hashes the allow-listed files at
 the exact GitHub revision using authenticated `gh`. Offline CI needs no sibling
 checkout or cross-repo token; missing online read access is an error, not success.
 
 The older #710 evidence below remains historical; it did not use `ieeeDouble`.
-The inventory stays **28/0/6**: this extends number sampling, not a new language row.
+The inventory stays **27/1/6**: this extends number sampling, not a new language row.
 
 On 2026-11-11 a newly rebuilt fmbot-pbt binary drove `build-run` on unchanged
 `hap_defaults_types.ets#read`. It authored `DefaultBoxReadIeeePbt.test.ets` with
@@ -164,10 +238,11 @@ failures are framework controls, not SUT bugs.
 
 Source SHA-256 stayed
 `a4e315f1a2df6ae0d5a75f122023b46e60cf041960873de9d2587322d246e0ca`; all three supplied
-suites stayed byte-identical, and installed runtime bytes match the upstream pin.
+suites stayed byte-identical, and installed runtime bytes matched IEEE milestone
+revision `f46b330bbae6a81e409f0bdf442c6ffffaff6e3d` (not later runtime refreshes).
 Fresh independent review covered all eight properties with **zero findings**;
 report and required-review revalidation passed. This is a preprovisioned
-`--no-isolate` callable fixture, not a new isolation E2E, production app/native
+callable fixture in the original project, not a new isolation E2E, production app/native
 lifecycle or measured line/branch coverage proof.
 
 ### Tutorial-complete generic defaults
@@ -245,9 +320,9 @@ syntax was corrected by the campaign, not hand-repaired by the supervisor.
 Scoped SHA-256 remained
 `a4e315f1a2df6ae0d5a75f122023b46e60cf041960873de9d2587322d246e0ca`;
 the supplied suite stayed byte-identical. Report and required independent-review
-validation passed. This preprovisioned `--no-isolate` callable fixture is not a new
+validation passed. This preprovisioned callable fixture in the original project is not a new
 CLI-isolation E2E, production-app/native-lifecycle proof or measured code coverage.
-Only the generic-default row is newly promoted: **28/0/6**, still 34 rows.
+Only the generic-default row is newly promoted: **27/1/6**, still 34 rows.
 
 ### Tutorial-complete generic constraints
 
@@ -352,7 +427,7 @@ Scoped source SHA-256 remained
 `4744d65b4dcdd85381fac401dc44ef2de135a709a3d68449e2e203afc99e641e`;
 the supplied suite was byte-identical. Report attestation and required review
 validation passed. The supervisor did not hand-repair generated tests. This was a
-preprovisioned `--no-isolate` callable fixture, not a new CLI-isolation E2E,
+preprovisioned callable fixture in the original project, not a new CLI-isolation E2E,
 production-app/native-lifecycle proof or measured code coverage. That milestone
 promoted only constraints; generic-default delivery is recorded separately above.
 
@@ -391,7 +466,7 @@ const rectangles = recordOf((rng: Random, size: number): RectangleSize =>
 
 The interface is not a factory: the exact tutorial's private zero-initialized
 `RectangleSize`, without public initialization/read APIs, still needs an available
-state recipe; do not add those APIs to HARD `--scope`. Every constructor argument
+state recipe; do not add those APIs to HARD `--target`. Every constructor argument
 and state field must be generated, displayed and component-shrunk. Real instances,
 methods and sibling state survive shrinking; defaults do not cover open fields.
 Neither do constant/zero-width components in an edge-only property: draw the full
@@ -480,7 +555,7 @@ That delivery promoted only the interface row.
 Wide finite keys may use `ieeeDouble({ includeNaN: false, includeInfinity: false })`;
 unrestricted or partly disabled IEEE keys are rejected. Values may use the full
 IEEE mode, with component-owned display/shrinking. HAP `double()` takes zero
-arguments, not fast-check `min`/`max` options.
+arguments; it does not accept `min` or `max`.
 Numeric names are canonical finite numbers stored as string property keys; `-0`
 becomes `0`. Values use their own complete typed recipe. For the tutorial's actual
 imported `PersonInfo { age: number; salary: number; }`, construct `peopleValues`
@@ -631,7 +706,7 @@ read-only replay accepted the ledger and rejected seventeen in-memory mutations
 plus a wrong source SHA; replay is not another device run.
 
 Object-literal support remains unchanged. With interface, constraint and default completion above,
-the current checklist is **28 supported / 0 partial / 6 not supported**, still 34 rows.
+the current checklist is **27 supported / 1 partial / 6 not supported**, still 34 rows.
 
 ### Tutorial-complete type aliases
 
@@ -763,7 +838,7 @@ lifecycle methods. No SUT, SDK or product manifests were rewritten. This is a
 production delivery anchor, not app proof of every intrinsic/import/return form.
 
 Function support does not promote unrelated domains. With interface, constraint and default completion above,
-the current checklist is **28 supported / 0 partial / 6 not supported**.
+the current checklist is **27 supported / 1 partial / 6 not supported**.
 Untyped `Function`, `ESObject`, dynamic imports, unknown native lifecycles,
 Sendable and inaccessible/inherited constructors retain their separate limits.
 Optional/defaulted/composed callback **parameters**, arbitrary generic/async
@@ -834,7 +909,7 @@ covers boolean store/read, not Date usage or asynchronous timer semantics.
 Compiled-JS read-only replay accepted the ledger, rejected eighteen in-memory
 accessor mutations and rejected a wrong source SHA. Replay is not another device
 run. The getter/setter milestone reached **23/5/6**; the completed features above
-bring the current inventory to **28/0/6**, still 34 rows.
+bring the current inventory to **27/1/6**, still 34 rows.
 
 ### Tutorial-complete overloads
 
@@ -980,11 +1055,11 @@ above; a real SUT backing field is not arbitrary bag construction.
 Imported/chained Date aliases and generic Date defaults are visible metadata:
 the corresponding Date coverage or unsupported-underlying-domain gate applies.
 These remaining Date limitations do not promote additional rows; the current
-checklist after default completion is **28/0/6**.
+checklist after default completion is **27/1/6**.
 
 ### String-literal fields in interface bags
 
-A flat interface in `--scope` may have required or optional closed string-literal
+A flat interface in `--target` may have required or optional closed string-literal
 union fields, inline (including wrapped lines) or through resolvable local/imported alias chains. For
 `type Status = 'pending' | 'running'` and `status?: Status`, bind
 `const statusArb = optional(constantFrom<Status>('pending', 'running'));`.
@@ -1004,8 +1079,8 @@ fields, unused generators, and overwritten inputs are rejected.
 
 The object-literal protocol above also covers literal-compatible data classes,
 nested/array literal bags and escaped literal syntax. Opaque recursive shapes
-and unavailable union arms still retire. The current checklist is **28 supported /
-0 partial / 6 not supported**.
+and unavailable union arms still retire. The current checklist is **27 supported /
+1 partial / 6 not supported**.
 
 ## When a tree is a HAP
 
@@ -1015,39 +1090,82 @@ wrapper is optional: the toolchain is whichever `hvigorw` resolves first
 (project wrapper, `PATH`, or a DevEco install). `hvigorw` only on `PATH` does
 not make the current directory a HAP root.
 
-An OpenHarmony component `--scope` that ends in `.ets` is ArkTS even when there
+An OpenHarmony component `--target` that ends in `.ets` is ArkTS even when there
 is no HAP. Do not retire for a missing hvigor root. Import `--func` from that
 file and rebuild only with the user `--build-cmd` (host `es2panda`/`ark`, or
 `ohos_arkts_unittest`). Do not copy the SUT into another HAP `ohosTest/ets/sut/`.
 `--lang` is the write-up language (`zh` / `en`), not C++ vs ArkTS.
 
-## Before you run (prerequisites)
+## Before your first campaign
 
-Follow this list **before** `fmbot-pbt build-run`. If a step is skipped, the gate
-must fail naming that step (`BUILD FAILED — PBT not started`). fmbot-pbt does not
-invent a HAP, rewrite `compileSdkVersion` / `runtimeOS`, or create `ohosTest`.
+For a source campaign in the original project (the default), complete this checklist
+before `fmbot-pbt build-run`. Under `--isolate`, the engine supplies its own HAP,
+`ohosTest` target and dependencies, but still needs compatible tools, SDK and a
+device; its bootstrap build is not a property-test result.
 
-1. A DevEco SDK **this user can write**. `hvigor` may refuse `/opt/devecostudio/sdk`
-   when it is not writable. Point `local.properties` `sdk.dir` (and `DEVECO_SDK_HOME`)
-   at a user-owned SDK that actually contains the API you pin (for example `26.0.0`).
-2. A HAP or HAR root: `oh-package.json5` + `build-profile.json5`. `--repo` and
-   `--workdir` are the **same git** checkout.
-3. The project's `compileSdkVersion` / `compatibleSdkVersion` / `runtimeOS` /
-   `hvigor` `modelVersion` **match** that SDK. Align by hand. An extra SDK, or
-   raising the project's numbers, is operator work.
-4. The module you will test has `src/ohosTest/module.json5`. The sample
-   `module=entry@ohosTest` assumes that folder exists.
-5. `ohpm install` in `--workdir` exits 0. `@ohos/hypium` must resolve. Drop or
-   repin registry-404 packages (for example a dead `@ohos/hamock` version).
-6. `--build-cmd` **already exits 0** in `--workdir`:
-   - HAP (`hapTasks` / `type: hap`): `hvigorw assembleHap --mode module -p module=<name>@ohosTest -p product=default --no-daemon`
-   - HAR (`harTasks` / `type: har`): `hvigorw genOnDeviceTestHap --mode module -p module=<name>@ohosTest -p product=default --no-daemon`
-   `assembleHap` is not a task on a HAR-only project (hvigor 00306054).
-7. Then pass `--scope path/to/file.ets --func ABC` with `--func` **after** `--scope`.
-   `--lang` is `zh` / `en` only (the write-up language, not C++ vs ArkTS).
+- [ ] **Model:** configure a provider and credentials, then verify the selected model with `fmbot-pbt --list-models` ([model setup](../installation.md#3-configure-a-model)). Listing a model does not verify API access; check the provider's authentication too.
+- [ ] **Tools:** install DevEco or the project's supported command-line tools: `hvigorw`, `ohpm`, `hdc`, Bash, Java for signing, and ZIP extraction. HAR preparation needs SDK Node or PATH Node.js 22+ ([system requirements](../installation.md#1-system-requirements)).
+- [ ] **Project and SDK:** identify the HAP/HAR root (`oh-package.json5` + `build-profile.json5`) in the same git checkout as `--target`/`--build-dir`. Compare `compileSdkVersion`, `compatibleSdkVersion`, `targetSdkVersion`, `runtimeOS` and hvigor `modelVersion` with the installed SDK manifests. Check API level **and flavor** (HarmonyOS/OpenHarmony, public/system APIs), access permissions and device image. Install/select the matching SDK; do not blindly raise versions or change `runtimeOS`.
+- [ ] **SDK discovery:** make that SDK visible to the project's Hvigor plugin, not just to fmbot-pbt's helpers; see [SDK discovery](#hvigor-sdk-discovery) below.
+- [ ] **Dependencies:** from the actual project build directory, run its documented dependency installation (often `ohpm install --all`) and require exit 0, including `@ohos/hypium`. Resolve registry/authentication/lockfile errors with the project owner; do not delete dependencies to pass preparation.
+- [ ] **Module and build:** confirm the actual module's `src/ohosTest/module.json5`, product and task. Do not assume `entry` or that a scope in `common` belongs to `phone`. The exact `--build-cmd` must already exit 0 in `--build-dir`. Typical task shapes, with project-specific names/launcher:
+  - HAP: `hvigorw assembleHap --mode module -p module=<name>@ohosTest -p product=<product> --no-daemon`
+  - HAR: `hvigorw genOnDeviceTestHap --mode module -p module=<name>@ohosTest -p product=<product> --no-daemon`
+  `assembleHap` is not a task on a HAR-only project (hvigor 00306054). If the source is in a HAR but the build selects a consuming HAP, use that HAP's `ohosTest` and import the original library export. Keep companion targets (e.g. `entry@default@ohosTest`) in the rebuild.
+- [ ] **Signing:** if a product names a `signingConfig`, ensure a matching entry exists in `app.signingConfigs` in root `build-profile.json5`, with usable certificate/profile/keystore material. Verify bundle, permissions and device UDID/trust. An unsigned build is not installation readiness ([signing guide](../arkts-device.md#local-signing)).
+- [ ] **Device smoke:** `hdc list targets` must show the intended unlocked device/emulator. Install the required signed HAP(s) and run an **existing Hypium smoke suite** on that target, with complete terminal counts: positive tests and zero failures/errors ([device runner](../arkts-device.md#device-results)). This verifies the environment, not newly generated properties.
 
-Device `aa test` still needs `hdc` and a signable HAP after the suite is written.
-A GN `*_abc` target is not this runner.
+These checks establish **environment readiness**, not campaign success or support
+for every scoped API. After launch, the generated properties still need real
+build/device execution and accepted report evidence. A failed build gate returns
+CLI **3** (`BUILD FAILED — PBT not started`); no PBT or emulator test ran at that gate.
+A GN `*_abc` target is not this HAP runner.
+
+### Hvigor SDK discovery
+
+`~/.pi-pbt/deveco.env` from the Linux installer exports `DEVECO_HOME`,
+`DEVECO_SDK_HOME` and `PATH`, **not** `OHOS_BASE_SDK_HOME`. Sourcing it makes tools
+available but does not satisfy every project's SDK discovery rules.
+
+For this Hvigor error:
+
+```text
+00303208 Configuration Error
+Unable to find 'sdk.dir' in 'local.properties' or 'OHOS_BASE_SDK_HOME'
+```
+
+Set `sdk.dir` in the **project root's** `local.properties` to the SDK root accepted
+by that project's plugin, containing the required API (preserve other properties;
+replace a stale entry rather than appending duplicates):
+
+```properties
+sdk.dir=/absolute/path/to/project-compatible-sdk
+```
+
+Alternatively, for the OpenHarmony discovery path named in this error, export
+`OHOS_BASE_SDK_HOME` to that compatible SDK root in the shell running the build.
+Check an existing `sdk.dir` first; a stale project path can override environment
+selection. Use forward slashes for Windows paths and keep local machine paths out of git.
+
+`DEVECO_SDK_HOME` selects the integrated DevEco SDK for fmbot-pbt helpers; that
+root commonly contains `default/openharmony`. A standalone OpenHarmony SDK may
+have a different layout. Do not point all SDK variables at an arbitrary `ets/`
+directory or assume SDK 26 can build an SDK-23 project. Re-run the **same** project
+build command after configuration; do not change its API requirements to fix discovery.
+
+### Preparation errors and fixes
+
+| Symptom | What to fix before retrying |
+|---|---|
+| Missing `sdk.dir` / `OHOS_BASE_SDK_HOME` (00303208) | Configure the compatible SDK root as above, in the build's project/shell. `DEVECO_SDK_HOME` alone may not satisfy this plugin. |
+| Requested SDK/API absent, `runtimeOS` or hvigor version mismatch | Install/select the required version and flavor, with compatible build tools and device image. Version migration is a separate owner-approved change, not an automatic campaign repair. |
+| `signingConfig: "default"` but no matching configuration | Configure `app.signingConfigs` using the project's authorized signing material (or DevEco signing setup). Do not add an empty `material`, remove signing to claim device readiness, or assume `--sign-profile` fixes Hvigor configuration. |
+| Dependencies fail or `ohosTest` task/module absent | Fix dependency access or prepare the project's real test target with its owner. Use its HAP/HAR task, not a guessed module or a no-op build. |
+| Install/launch fails or smoke result is incomplete | Check certificate/profile trust, UDID, permissions, target and unlock state; retain logs. A build or partial test log is not a passing smoke test. |
+
+An SDK-discovery failure occurs before later gates: it does not establish that
+signing or device execution works. Keep the build log and fmbot-pbt/tool versions
+when reporting a failure.
 
 `build-run` on a HAP root sets `PBT_HAP=1` for that process. Do not export
 `PBT_HAP` in a shell profile: a leftover `1` forces HAP mode on later C++
@@ -1056,19 +1174,18 @@ ArkTS but missing the manifests, set `PBT_HAP=1` **on that command only**.
 
 ## How to run it
 
-`--repo` is the module under test (scan tree, `--scope`, default `pbt-out/`).
-`--workdir` is where `--build-cmd` runs. They must be the **same git
-checkout**. `--workdir` is often the HAP project; `--repo` may be a parent
-component that contains both the `.ets` / `.ts` SUT and that HAP.
+`--target` is the `.ets` / `.ts` file under test (or a directory of them);
+its git repository receives the tests and the default `pbt-out/`.
+`--build-dir` is where `--build-cmd` runs, usually the HAP or HAR project.
+Both must be in the **same git checkout**.
 
-When both paths are the HAP itself:
+When the SUT is inside the HAP project:
 
 ```bash
 fmbot-pbt build-run \
   --build-cmd "hvigorw assembleHap --mode module -p module=entry@ohosTest -p product=default --no-daemon" \
-  --repo /path/to/hap \
-  --workdir /path/to/hap \
-  --scope entry/src/main/ets/common/Utils.ets \
+  --build-dir /path/to/hap \
+  --target /path/to/hap/entry/src/main/ets/common/Utils.ets \
   --func deepCopyInter \
   --lang en
 ```
@@ -1078,9 +1195,8 @@ HAR module (library, `harTasks`) — not `assembleHap`:
 ```bash
 fmbot-pbt build-run \
   --build-cmd "hvigorw genOnDeviceTestHap --mode module -p module=<har>@ohosTest -p product=default --no-daemon" \
-  --repo /path/to/component \
-  --workdir /path/to/component/.../the-har-project \
-  --scope path/from/repo/to/file.ets \
+  --build-dir /path/to/component/.../the-har-project \
+  --target /path/to/component/path/to/file.ets \
   --func myFunc \
   --lang en
 ```
@@ -1090,16 +1206,15 @@ When the SUT file lives outside the HAP directory but in the same checkout:
 ```bash
 fmbot-pbt build-run \
   --build-cmd "hvigorw assembleHap --no-daemon" \
-  --repo /path/to/component \
-  --workdir /path/to/component/.../the-hap \
+  --build-dir /path/to/component/.../the-hap \
+  --target /path/to/component/path/to/file.ts \
   --out /path/to/component/pbt-out-myfunc \
-  --scope path/from/repo/to/file.ts \
   --func myFunc \
   --lang en
 ```
 
-`--func` requires `--scope` and must come after it. `--out` is optional
-(defaults to `<repo>/pbt-out`). A custom `--out` directory may hold
+`--func` requires `--target` to be a file. `--out` is optional (defaults to
+`pbt-out` in the repository of `--target`). A custom `--out` directory may hold
 `REPORT.md`.
 
 `--build-cmd` is operator input. If it fails, the campaign does not start
@@ -1115,38 +1230,38 @@ let the campaign fail loud.
 ## What a `passing` or `failing` property must do
 
 The suite is `src/ohosTest/ets/test/*.test.ets`, registered in `List.test.ets`.
-`report.json` `sourceFile` / `functionName` stay pinned to HARD `--scope` /
+`report.json` `sourceFile` / `functionName` stay pinned to HARD `--target` /
 `--func`.
 
-| Allowed | Not a test of `--scope` |
+| Allowed | Not a test of `--target` |
 |---|---|
 | A value import resolving to the scoped checkout file, or the registered integrity-checked common copy under `--isolate` | `declare class` of an image global |
-| Retired, if this HAP cannot import `--scope` as it stands | `import type` only, or a comment that mentions the path |
+| Retired, if this HAP cannot import `--target` as it stands | `import type` only, or a comment that mentions the path |
 | For `| null`, `| undefined`, or an optional parameter: include every case with `unionOf` / `unionCase`. Legacy `oneof` + `constant(null)` / `constant(undefined)` only in a test file without `unionOf`. Pass unchanged, with no `as`, `!`, or `??` | Skipping the arm, or narrowing it with `as` / `ESObject` |
-| For an `enum` declared in `--scope`: `constantFrom` of every member, callback typed as that enum, no `as` | `integer()` / `string()` cast to the enum, or a member list that omits one |
+| For an `enum` declared in `--target`: `constantFrom` of every member, callback typed as that enum, no `as` | `integer()` / `string()` cast to the enum, or a member list that omits one |
 | For `string \| number` and other primitive unions: complete typed `unionOf` / `unionCase`; legacy `oneof` of every arm only in a test file without `unionOf`, no `as` | Drawing only one arm, or casting to one arm |
 | If the scoped function body `throw`s or names `BusinessError`, or calls a same-file helper that does: call it inside `arkThrew` or `try`/`catch` and return a boolean | Happy path only, or an exception that escapes `check()` |
 | Generics: matching explicit arguments or complete declared defaults, with their actual underlying recipes and bounds. Fresh genuine receivers, unchanged typed inputs and observed calls; no `as` | Value-based inference without complete defaults, conflicting overrides/annotations, fake receivers, unavailable types or `ESObject` / `any` / `@Sendable` |
 | Source-resolved literal-compatible objects: contextual literals or complete `recordOf(generate, show, shrink)` recipes above. Show every field, shrink one component and keep siblings. Optional fields wrap their whole component. Root bag arrays use `minLength: 1`. Classes requiring behavior use genuine constructors. | Missing/fixed/cast/mutated fields, empty/discarded shrink output, fake constructor identity, or unavailable native/SDK/Sendable/ArkUI/private/inherited leaves |
 | Actual interface contracts: genuine source-owned implementing classes, complete state recipes, matching inherited methods/accessors and observed SUT use | Interface construction, test-local stand-ins, wrong/missing members, private writes, casts, prototype replacement or discarded draws |
 | Concrete function parameter: actual named/arrow/imported/intrinsic callable with complete signature, or a typed closure interpreting a drawn `FunctionModel`; invoke returned closures on the real SUT result | Missing/wrong/unused callbacks, fake receivers, type-only imports, overwritten bindings, casts or an unused model |
-| For overloads in `--scope`: call every complete ordered signature and arity with distinct unchanged typed draws, no `as` | Drawing only the first overload, or collecting unordered primitive arms |
+| For overloads in `--target`: call every complete ordered signature and arity with distinct unchanged typed draws, no `as` | Drawing only the first overload, or collecting unordered primitive arms |
 | For HAR primitives and an interface field bag: legacy `oneof` of every arm only in a test file without `unionOf`; class-instance arms require real constructor cases, no `as` | Drawing only one arm |
 | For a Sendable parameter (`@Sendable` class, `SendableMap` / `ISendable`, `collections.Array`): **retire** | `integer()`, or `new Box(n)` on this thread |
-| For a branded SDK type (`Length`, `Resource`, a `@kit.*` / `@ohos.*` import not declared in `--scope`): **retire** | `integer()`, or `as Length` |
+| For a branded SDK type (`Length`, `Resource`, a `@kit.*` / `@ohos.*` import not declared in `--target`): **retire** | `integer()`, or `as Length` |
 | For a one-dimensional branded `T[]` / `Array<T>` (`ImageItem[]`): `[]` or `constant([])` at that argument, no `as` | Constructing `ImageItem`, a non-empty branded array, or retiring `--func` only because the element is branded |
 | For `Name[]` of a `number`/`string`/`boolean` bag, including SDK `FingerInfo[]`: `array(recordOf(fn, show, shrinkName), { minLength: 1 })`, or `record()` for `{ x, y }` / `{ w, h }` / LTRB. Callback typed `Name[]`. Pass that value to `--func`, no `as` | `[]`, a generator that is never passed, `array()` without `minLength: 1`, or `{ id: 0 } as FingerInfo` |
 | For standalone `Date`: `date()`. For the timestamp union: complete `unionOf` / `unionCase`, or `dateUnion()` only in a test file without `unionOf`. Pass unchanged at the matching SUT argument; object fields use their verified component protocol, while root Date arrays/defaults still retire | A missing arm, a shadowed factory, singleton/opaque Date bounds, bracket mutation, or an uncalled closure |
 | For class/Date/nullish composition: complete typed `unionOf` / `unionCase` recipes, genuine public constructors and unchanged draws. Retire only if an underlying required leaf cannot actually be constructed | A missing arm, a plain-object class substitute, a fake/unused recipe, or an opaque SDK stand-in |
 | For an overload with an unavailable SDK/native/Sendable/inaccessible underlying domain: **retire** | Inventing a stand-in, or `as Length` on one arm |
 | If `--func` calls `getStringByNameSync`: `constantFrom` of every name in that module's `string.json`, and assert `n === n` | `string()`, or a prefixed name that cannot exist |
-| | A copy or hardlink under `ohosTest/` (`ets/sut/`, `scope_utils/`, a fake `--scope` tree) |
+| | A copy or hardlink under `ohosTest/` (`ets/sut/`, `scope_utils/`, a fake `--target` tree) |
 | | `@kit.ArkUI` / `@ohos.arkui*` attested as koala / `arkts_frontend` |
-| | Editing `--scope` so the import compiles (`export class`, widening `private`) |
+| | Editing `--target` so the import compiles (`export class`, widening `private`) |
 | | A Node / host `es2panda` mirror, or `hvigorw test` on Linux Previewer |
 | | `testFile` outside `ohosTest/ets/test/*.test.ets` |
 
-A directory `--scope` is a path prefix. Each property's import must be **that
+A directory `--target` is a path prefix. Each property's import must be **that
 property's** `sourceFile` under the directory, not any sibling.
 
 If the HAP cannot compile the scoped file, **retire**. Do not make it importable
@@ -1157,9 +1272,9 @@ by changing the production file.
 | Tree | Why HAP PBT does not execute it |
 |---|---|
 | koala / `arkoala-arkts` / `#generated` | `@koalaui/*`. Tests there are Panda `make`, not `aa test`. |
-| `state_mgmt` `utils.ts` and other unexported framework TS | The unittest HAP does not compile that file unless ohosTest can import it as it stands. Existing UTs `declare class` the image global; that is not `--scope`. |
+| `state_mgmt` `utils.ts` and other unexported framework TS | The unittest HAP does not compile that file unless ohosTest can import it as it stands. Existing UTs `declare class` the image global; that is not `--target`. |
 | `test/component_test` and many `examples/` HAPs | Often pinned to an SDK this machine does not have. Gate fails. Do not retarget in fmbot-pbt. |
-| OpenHarmony GN `build.sh` / `ohos_unittest` | C++ product path. A `.ets` `--scope` is not that path. |
+| OpenHarmony GN `build.sh` / `ohos_unittest` | C++ product path. A `.ets` `--target` is not that path. |
 
 ## Evidence
 
@@ -1167,11 +1282,11 @@ by changing the production file.
 `modules.abc` shows the SUT was linked, not that a property ran. Native line
 coverage is not available for ohosTest.
 
-Do not `ohpm install fast-check`. The ArkTS framework is PandaCheck.
-
 ## Current progress
 
-This is the HAP ohosTest path with PandaCheck instead of fast-check. Open issue: [#366](https://github.com/fermat-hkrc/FMBot-PBT/issues/366).
+This section tracks the HAP ohosTest path with native ArkTS PandaCheck. The host
+`panda-build-run` path is supported separately, not a replacement for this HAP
+runner. Open issue: [#366](https://github.com/fermat-hkrc/FMBot-PBT/issues/366).
 
 ### Supported
 
@@ -1184,17 +1299,17 @@ above for every union argument; unrelated non-union signatures are unaffected.
 - Public getters/setters, including Date and bounded inference, use the actual
   property on fresh real receivers with typed draws and observed results; see
   the accessor protocol above. This is not private-field or SDK-object synthesis.
-- `--repo` (scan / `--scope`) separate from `--workdir` (build), same git
+- `--target` (the code under test) separate from `--build-dir` (build), same git
   checkout. Custom `--out` may hold `REPORT.md`.
 - A HAP that **owns** the scoped `.ets` and can import it: execute that symbol
   and attest `passing` or `failing`.
 - Honesty gates already shipped: no `ohosTest/ets/sut/` copy; no `@kit.ArkUI`
-  stand-in for koala; `sourceFile` / `functionName` pinned to HARD `--scope` /
-  `--func`; `declare class` is not an import; do not rewrite `--scope` so the
-  import compiles; a directory `--scope` matches by path prefix and by that
+  stand-in for koala; `sourceFile` / `functionName` pinned to HARD `--target` /
+  `--func`; `declare class` is not an import; do not rewrite `--target` so the
+  import compiles; a directory `--target` matches by path prefix and by that
   property's `sourceFile`; a nullish signature must keep that arm
   ([#523](https://github.com/fermat-hkrc/FMBot-PBT/issues/523)); an enum
-  declared in `--scope` must be drawn from every member
+  declared in `--target` must be drawn from every member
   ([#525](https://github.com/fermat-hkrc/FMBot-PBT/issues/525)); a union of
   `string` / `number` / `boolean` must draw every arm
   ([#527](https://github.com/fermat-hkrc/FMBot-PBT/issues/527)); a function
@@ -1202,7 +1317,7 @@ above for every union argument; unrelated non-union signatures are unaffected.
   ([#529](https://github.com/fermat-hkrc/FMBot-PBT/issues/529)); a generic
   originally required primitive instantiation; constraints and complete declared defaults now use the protocols above
   ([#531](https://github.com/fermat-hkrc/FMBot-PBT/issues/531)); a `struct`
-  declared in `--scope` must be constructed (`record` of every field or
+  declared in `--target` must be constructed (`record` of every field or
   `new StructName`)
   ([#535](https://github.com/fermat-hkrc/FMBot-PBT/issues/535)); a function-typed
   parameter must be a genuine matching callable; see the typed-function protocol above
@@ -1225,12 +1340,12 @@ above for every union argument; unrelated non-union signatures are unaffected.
   ([#551](https://github.com/fermat-hkrc/FMBot-PBT/issues/551)); a successful
   HAP build may close with every property `retired`
   ([#533](https://github.com/fermat-hkrc/FMBot-PBT/issues/533)).
-- If this HAP cannot import `--scope` as it stands, **retire**. `report.json`
+- If this HAP cannot import `--target` as it stands, **retire**. `report.json`
   then validates.
 - **SUT types PandaCheck can drive:** exported functions of `number` / `string` /
   `boolean` / arrays of those, plain objects you can write as `.ets` literals,
   `T | null` / `T | undefined` / optional parameters via `arkNullish`, and an
-  `enum` declared in `--scope`, or imported by one relative hop, via `constantFrom` of every member, and
+  `enum` declared in `--target`, or imported by one relative hop, via `constantFrom` of every member, and
   `string \| number` (and the other unions of those three) via `oneof` of every
   arm, and a union of string literals, numeric literals, or both via `constantFrom` or `oneof` of every literal, and a literal mixed with an open primitive via `oneof` of `constant` and that primitive's generator, and a `[number, number]` parameter via `property2` for one pair or a distinct `numberPair` at each pair argument of the same `property()` call, and a generic instantiated as `name<string>` / `name<number>` /
   `name<boolean>`, a generic class method via `new CustomStack<string>()` then
@@ -1254,8 +1369,9 @@ above for every union argument; unrelated non-union signatures are unaffected.
 
 ### Not supported
 
-Two lists. The first is the HAP runner. The second is **ArkTS in the SUT** that
-`fast-check.har` cannot feed. Closing either means new fmbot-pbt work.
+Two lists: HAP runner/tree limitations, then **SUT types and lifecycles** that
+the current HAP PandaCheck recipes and campaign gates cannot drive. The supported
+inventory above defines the available typed recipes.
 
 #### Runner / tree
 
@@ -1265,24 +1381,25 @@ Two lists. The first is the HAP runner. The second is **ArkTS in the SUT** that
 | Unexported framework `.ts` (e.g. `state_mgmt` `utils.ts`) | ohosTest cannot import the class. Existing UTs `declare class` the image global. Honest close is all `retired`; `report.json` validates. | Either retire (current honest result) or a way to compile that file **without** editing it. |
 | SDK / hvigor / `runtimeOS` mismatch | Gate fails, or the toolchain is deferred. fmbot-pbt does not rewrite manifests. | Fail loud with the expected SDK fields. Operator preflight, not a silent retarget. |
 | `test/component_test` and many `examples/` HAPs | Often API 12 / HarmonyOS 5.x; this SDK 26 tree does not assemble them. | Same: fail loud. Do not rewrite `compatibleSdkVersion`. |
-| OpenHarmony GN `build.sh` | Separate C++ product path. An `.ets` `--scope` is not that path. | Keep the split. Do not spawn GN for ArkTS `--scope`. |
+| OpenHarmony GN `build.sh` | Separate C++ product path. An `.ets` `--target` is not that path. | Keep the split. Do not spawn GN for ArkTS `--target`. |
 | Native line coverage | `coverage_gaps` is not linked for ohosTest. Evidence is `aa test` plus abc strings. | ArkTS coverage if the toolchain can produce it; do not fake C++ lcov. |
 | Sibling export / private-field walk | `passing` / `failing` is rejected unless the suite imports and calls `--func`. Calling a sibling is not that symbol. | Retire if ohosTest cannot bind the symbol. |
-| Host `es2panda` / PandaCheck | Removed. Do not bring it back as a stand-in for HAP. | Only if a real Panda test tree is the SUT, as its own runner. |
+| Host `es2panda` / PandaCheck | Supported separately through `panda-build-run` for real host Panda test trees; not HAP execution. | Keep host and HAP toolchains, modules and result formats separate. Never substitute a host result for a HAP device verdict. |
 | Kea GUI | `fmbot-pbt kea` is a different mode (black-box UI). | Keep it separate from source-level ArkTS. |
 
-#### ArkTS SUT vs `fast-check.har`
+#### SUT features outside the current HAP PandaCheck recipes
 
-The HAR is converted JS (`ohpm convert` of npm fast-check). It generates JS
-`number` / `string` / `boolean` / `Array` / plain objects. The property file is
-ArkTS (named imports, `(x: number)`, no `any`, no destructuring, `check()` not
-`fc.assert`). A SUT feature is unsupported when ohosTest cannot call that
-function with those values.
+`PandaCheck.har` contains native ArkTS, built from canonical PandaCheck source.
+The Hypium suite uses typed named imports from `PandaCheck` and calls
+`check(property(...))`. Supported types, generation, display and shrinking are
+described in the feature inventory above, not limited to JavaScript primitives.
+A feature remains unsupported when the real scoped function cannot be compiled,
+imported or called in ohosTest with the required genuine typed inputs/lifecycle.
 
 | SUT feature | What happens now | What to improve |
 |---|---|---|
 | `@Sendable` / concurrent types | `passing` / `failing` is rejected. `retired` is the honest close. `new Box(n)` on this thread is not Sendable. | A runner that can construct a Sendable value. Do not stretch HAR. |
-| Unexported `class` / `private` fields | Cannot `import` or `new` without editing `--scope`. | Compile/import without rewriting the SUT, or retire. |
+| Unexported `class` / `private` fields | Cannot `import` or `new` without editing `--target`. | Compile/import without rewriting the SUT, or retire. |
 | Union of unsupported types | `passing` / `failing` is rejected. `retired` is the honest close. Drawing only `string()` is not a required class/native arm. | Typed `unionCase` factories for every constructible arm. A genuinely unavailable SDK/native leaf still needs its own construction/lifecycle support. |
 | branded/opaque SDK types | Bare `Length` / `Resource`: `passing` / `failing` is rejected. `retired` is the honest close. `as Length` is not that type. One-dimensional branded `T[]` may be `[]` / `constant([])` ([#630](https://github.com/fermat-hkrc/FMBot-PBT/issues/630)). | Typed constructors for non-empty branded values. Do not stretch HAR. |
 | Overloads with an unavailable underlying domain | Required native/SDK/Sendable/inaccessible values still force `retired`; supported classes/arrays/Date/callbacks do not. | Add the underlying construction/lifecycle protocol, not a cast or missing signature. |
@@ -1290,9 +1407,386 @@ function with those values.
 | `getStringByNameSync` | `passing` / `failing` is rejected unless every `string.json` name is drawn. `string()` only hits the throw path. | `constantFrom` of those names. Assert finite. `NaN` is a failing result, not a successful number. |
 | Generic constrained to an unsupported type | `passing` / `failing` is rejected. `retired` is the honest close. `name<string>` is not `T extends SomeStruct`. | Retire that `--func`. |
 | Untyped callable/interoperability domains (`Function`, `ESObject`) | `passing` / `failing` is rejected. `retired` is the honest close. A named stub is not `Function` or `ESObject`. | Retire that `--func`. |
-| `@Component` / `@Observed` / UI | Needs the UI runtime. | Not HAP fast-check. Kea or a UI runner. |
+| `@Component` / UI behavior | Not exercised by source-level HAP PandaCheck. | Use Kea or a UI runner. |
+| V1 `@Observed` business method | Browser's exported `BookmarksViewModel.toggleSelect(id)` ran without mounting the component. See the [Browser validation](#v1-model-validation-browser). | This tests public model state, not ArkUI notifications or rendering. |
+| V2 `@ObservedV2` business method | [HanZi validation](#v2-model-validation-hanzi): a real `build-run` tested fresh default construction, synchronous calls and affected public `@Trace` scalar state. | Receiver-only recipe; no decorated class arbitraries, injected constructor dependencies, async predicates, or UI dispatch. |
 | koala / `@koalaui` | Different compiler. HAR never loads. | Panda/koala runner, not ohosTest. |
 | Native / NAPI / `ESObject`-only APIs | `ESObject` compiles and leaves ArkTS typing. | Typed bindings, or retire. |
+
+### ArkUI support roadmap
+
+ArkUI apps often keep models and business logic alongside components. Testing
+that code without mounting UI would let fmbot-pbt cover more of the app.
+These are **feasibility checks, not support commitments**. The maintainer
+tracker is [#808](https://github.com/fermat-hkrc/FMBot-PBT/issues/808).
+
+Start with the V1 model and export discovery. Use those results to guide the
+follow-ups; finding an export does not establish that it can run on a device.
+
+| Work item | What to validate |
+|---|---|
+| [#809: `@Observed` V1](https://github.com/fermat-hkrc/FMBot-PBT/issues/809) | [CommunicationSetting validation](#v1-model-validation-communicationsetting): blocked at SDK setup, before any property ran. |
+| [#811: Export discovery](https://github.com/fermat-hkrc/FMBot-PBT/issues/811) | Compare `fmbot-pbt scan` results for the same plain export with and without a component in its `.ets` file. Do not promote component methods to callable targets. |
+| [#812: `@ObservedV2` and `@Trace`](https://github.com/fermat-hkrc/FMBot-PBT/issues/812) | [HanZi validation](#v2-model-validation-hanzi): three accepted properties passed on the emulator for [#830](https://github.com/fermat-hkrc/FMBot-PBT/issues/830). The earlier [Photos attempt](#v2-model-validation-openharmony-photos) remains blocked and is not a prerequisite. |
+| [#813: Logic used by builders or watchers](https://github.com/fermat-hkrc/FMBot-PBT/issues/813) | [HanZi builder helper](#hanzi-builder-helper-validation): the original stroke-duration helper passed three properties on the emulator. The separate [Players watcher attempt](#players-watcher-helper-validation) remains blocked at build time. |
+| [#814: Storage isolation](https://github.com/fermat-hkrc/FMBot-PBT/issues/814) | [AppRecovery validation](#localstorage-isolation-apprecovery): fresh, test-owned `LocalStorage` per predicate invocation, including shrink and same-seed replay. The [Photos picker](#localstorage-isolation-photos-picker) remains a separate blocked target. |
+
+Before marking an execution target supported, require a scoped `fmbot-pbt build-run`
+with the owning project's real build command, unchanged source and decorators,
+a signed and installed `ohosTest` HAP, and completed Hypium cases tied to that
+artifact and the source/test inputs. Record the SDK and the first blocker if
+validation stops. A host run or aggregate smoke pass is not enough.
+
+Component mounting, rendering, lifecycle, watcher dispatch and
+`@Provide`/`@Consume` propagation stay with [Kea](../kea.md) or a UI runner.
+
+#### LocalStorage isolation: AppRecovery
+
+**Verified on the emulator.** A source-scoped `fmbot-pbt build-run` recorded three
+passing properties for OpenHarmony AppRecovery's unchanged
+[`SecondAbility.restoreLocalStorage(want: Want)`](https://gitcode.com/openharmony/applications_app_samples/blob/a136cc211f1ea19d5aa2f539fc6cd32bed08ab91/code/BasicFeature/DFX/AppRecovery/entry/src/main/ets/ability/SecondAbility.ets#L27-L37).
+Its public `storage` field lets the predicate inject `new LocalStorage()` into
+a freshly constructed receiver. Only the helper runs, not `onCreate` or window
+restoration. No UI, application-global storage or persistent data is involved.
+
+| Case | What was verified |
+|---|---|
+| Saved values | 150 draws, seed `0x814`: both target keys and a fixed sentinel start absent; the helper restores the drawn string and integer without changing the seeded sentinel. Writes stay in the discarded store. |
+| No parameters | 150 draws, seed `0x815`: neither target key appears, and the unrelated drawn sentinel survives. |
+| Shrink and replay | Two checks in one Hypium case deliberately fail on `n >= 2` **after** validating the real helper. The assertions outside `check` require a smaller failing candidate, clean and validated entries on every invocation, identical ordered traces and the same minimized counterexample (integer `2`). An unexpected exception cannot stand in for the intentional failure. |
+
+The `pbt814` product compiled the unmodified PandaCheck HAR and test suite with
+OpenHarmony API 26 while retaining compatibility with API 10. The headless runner
+ran all three named cases against one installed signed HAP, SHA-256
+`31910de1694764da468dc9dd02d64b2613892a0b5faa5a4d7f5bd2a9ab3f0d8d`.
+Device run `9d0cef90-4a4b-496b-bf31-ab93d5b1ae80` returned 3 passes, 0 failures and
+0 errors. The source, suite, registration and runner hashes matched the receipt.
+The shrink trace was checked inside the passing case; it was not printed in the
+retained Hypium output. The executable suite, setup and stdout are in the
+source checkout at `test/fixtures/arkts/app-recovery-local-storage/`.
+
+This establishes isolation for **this test-owned store**, not arbitrary
+`UIAbility` constructors, recovery flows, `AppStorage` or `PersistentStorage`.
+
+#### LocalStorage isolation: Photos picker
+
+**Blocked before execution.** In OpenHarmony Photos at `83e97845a6e26b844dc2978634a74d0af30a7051`,
+[`clearAnimatePlayHistory(storage: LocalStorage)`](https://gitcode.com/openharmony/applications_photos/blob/83e97845a6e26b844dc2978634a74d0af30a7051/feature/thirdselect/src/main/ets/default/view/PickerSelectTip.ets#L30-L32)
+deletes `Constants.PICKER_SHIELD_ANIMATE_PLAYED_FLAG` from its argument. The
+[phone picker page](https://gitcode.com/openharmony/applications_photos/blob/83e97845a6e26b844dc2978634a74d0af30a7051/product/phone/src/main/ets/pickerability/view/PickerBasePage.ets#L180-L182)
+passes its shared store; a property could import that function and pass its own
+store without mounting the page. By contrast, [`PickerInstanceUtil.createPickerInstance`](https://gitcode.com/openharmony/applications_photos/blob/83e97845a6e26b844dc2978634a74d0af30a7051/common/src/main/ets/default/utils/PickerInstanceUtil.ets#L19-L32)
+also increments a private static counter. A new store does not reset that counter.
+
+**Build result.** From the pinned Photos root, using OHPM `26.0.0.630`, Hvigor `6.26.4`
+and a [configured OpenHarmony SDK](#hvigor-sdk-discovery) (`26.0.0.105`):
+
+```sh
+ohpm install --all &&
+hvigorw assembleHap --mode module -p module=phone_photos@default@ohosTest -p product=default --no-daemon
+```
+
+Dependency installation succeeded. Both the standalone build and `fmbot-pbt build-run`
+(`0.5.0-beta.4` at `bd5a49779`, original project, `--func clearAnimatePlayHistory`,
+`--target feature/thirdselect/src/main/ets/default/view/PickerSelectTip.ets`)
+failed in `phone_photos:ohosTest@OhosTestCompileArkTS`. Rollup `00305015` could
+not resolve `../../../../main/ets/MovingPhotoExtension/SpliceUtils` from the existing
+`browser/SpliceUtils.test.ets`. Hvigor exited 255; `build-run` exited 3. The helper
+was unchanged. No test HAP was produced or installed and no Hypium case ran.
+
+**A green build alone would not make this safe to run.** The [phone test runner](https://gitcode.com/openharmony/applications_photos/blob/83e97845a6e26b844dc2978634a74d0af30a7051/product/phone/src/ohosTest/ets/testrunner/OpenHarmonyTestRunner.ets#L40-L69)
+starts `TestAbility`, whose [window-stage callback](https://gitcode.com/openharmony/applications_photos/blob/83e97845a6e26b844dc2978634a74d0af30a7051/product/phone/src/ohosTest/ets/TestAbility/TestAbility.ets#L39-L49)
+loads a page and writes `AppStorage.setOrCreate('abilityContext', this.context)`.
+Selecting one Hypium case does not bypass that startup. Retry only with a passing
+Photos build and a test-only runner that calls Hypium without starting the ability
+or touching shared or persistent data.
+
+**Isolation checks for that retry (not run):**
+
+1. Allocate `new LocalStorage()` **inside every PandaCheck predicate call**. Check
+   that both the history flag and a fixed sentinel key are absent. Set the flag
+   and write a drawn integer to the sentinel. Verify both writes, call the
+   original helper, then check that the flag is absent and the sentinel still
+   holds the integer. Leave the sentinel in that store. Neither Hypium `beforeEach`
+   nor a fresh `aa test` separates the draws inside one `check`.
+2. In a separate control, deliberately fail after those checks on a shrinkable,
+   nonminimal draw. Record the input, clean entry and helper result for each call.
+   Assert **outside** the expected failure that a smaller candidate ran after the
+   first failure, every call started clean and all helper checks passed. Repeat
+   `check` in the same process with the same seed and settings; require clean
+   entries again and the same minimized counterexample. The deliberate failure
+   is not a Photos bug.
+3. Require a scoped `build-run` and [completed device cases](../arkts-device.md#device-results)
+   bound to the original source, generated suite, registration and installed signed
+   test HAP. Shared `AppStorage` and `PersistentStorage` remain deferred; do not
+   clear or mock them to make these tests pass.
+
+#### V1 model validation: CommunicationSetting
+
+**Blocked before ArkTS compilation (2026-11-18).** The target was the exported
+[`SystemAndServiceTraffic`](https://gitcode.com/openharmony/applications_call/blob/19ba9d3de45abdc1afc7365737bf26f36fc90d2a/CommunicationSetting/entry/src/main/ets/data/Traffic.ets)
+in the `entry` HAP. Its constructor takes a `NetworkType`; `isMobile()` returns a
+boolean without mounting UI. `Traffic.ets`, including `@Observed`, had SHA-256
+`7a81d5a5e6647c9e322d07ae1c53edc72cc33c6e9dc37418850b71b8f5a2348f` before and after both attempts.
+
+The `fmbot-pbt` binary was built from `49a8b8fde73550bf641a0a66b3d9ad82bc7981b7`
+(`0.5.0-beta.1`). The project requests OpenHarmony compile API 23. `ohpm install`
+succeeded; the installed DevEco SDK was 26.0.0.105, Hvigor was 6.26.4, and `hdc`
+listed an API-26 emulator. The project's `build.sh` supplies the build command below.
+
+| Attempt | First observed blocker |
+|---|---|
+| Installed SDK root | Hvigor `00308018`: `The path <sdk> is not writable`. It executed 0 build tasks and exited 255; `build-run` exited 3 (`PBT not started`). |
+| Writable copy of the same SDK | `build-run` warned that the project compiles against API 23 but the installed SDK is API 26. Hvigor reported `expected <sdk>/26.0.0/ets`, found `<sdk>/default/openharmony/ets`. The external 650-second timeout expired during SDK setup; there was no final Hvigor verdict. |
+
+Neither attempt produced a test HAP, installed one, or recorded a completed case.
+This does not show that the decorator works **or** that it fails.
+
+**Build preflight.** From `applications_call/CommunicationSetting` at the linked
+revision, select a writable, project-compatible OpenHarmony API-23 SDK (see
+[Hvigor SDK discovery](#hvigor-sdk-discovery)). Keep the project's SDK targets,
+`runtimeOS`, signing configuration and model unchanged.
+
+The `release` signing configuration references `signature/OpenHarmony.p12` and
+`signature/OpenHarmony.cer`, neither of which is in the pinned checkout. The two
+attempts did not reach signing. Ask the project owner to provision the matching,
+authorized files at those paths locally. Do not commit the keystore or bypass
+signing. If the material is unavailable, stop here.
+
+The retry below requires the unchanged project command to exit 0 and produce
+an `entry@ohosTest` HAP whose signature verifies.
+
+**Separate recorder blocker.** The host-side recorder check at FMBot-PBT
+`c5d797fcc` rejected a property that imported the original class, constructed it
+with a drawn `NetworkType`, and checked that `isMobile()` was true only for
+`MOBILE`. The diagnostic was:
+
+```text
+isMobile: execution witness: unavailable constrained receiver construction
+```
+
+The [Browser validation](#v1-model-validation-browser) covers `toggleSelect(id)`,
+not this enum-taking constructor and no-argument boolean method. A passing
+Hypium case alone would not make the rejected property count in `build-run`.
+
+Once a newer recorder accepts the property, use that FMBot-PBT build for the
+retry. Set `OUT` to a fresh output directory, `DEVICE` to the selected `hdc`
+target and `HAP_SIGN_TOOL` to the compatible SDK's `toolchains/lib/hap-sign-tool.jar`.
+Start with clean build outputs. If your Hvigor version uses a different output
+path, set `test_hap` below to the expected signed **test** HAP for `entry@ohosTest`.
+Run the whole Bash block from the pinned project directory:
+
+```bash
+(
+  : "${OUT:?Set OUT to a fresh campaign directory}" \
+    "${DEVICE:?Set DEVICE to the selected hdc target}" \
+    "${HAP_SIGN_TOOL:?Set HAP_SIGN_TOOL to the SDK hap-sign-tool.jar}"
+  build_cmd='hvigorw --mode module -p module=entry@ohosTest -p debuggable=false -p ohos-test-coverage=true assembleHap packageTesting --parallel --incremental --no-daemon --stacktrace'
+  test_hap='entry/build/default/outputs/ohosTest/entry-ohosTest-signed.hap'
+  if [[ -e "$test_hap" || -L "$test_hap" ]]; then
+    printf 'Existing test HAP: %s. Start with clean build outputs.\n' "$test_hap" >&2
+    exit 1
+  fi
+  ohpm install || exit
+  bash -c "$build_cmd" || exit
+  if [[ ! -f "$test_hap" || ! -s "$test_hap" || -L "$test_hap" ]]; then
+    printf 'Build did not produce the expected test HAP: %s\n' "$test_hap" >&2
+    exit 1
+  fi
+  proof_dir=$(mktemp -d) || exit
+  printf 'Signature verification output: %s\n' "$proof_dir"
+  "${JAVA:-java}" -jar "$HAP_SIGN_TOOL" verify-app -inFile "$test_hap" \
+    -outCertChain "$proof_dir/certchain.cer" -outProfile "$proof_dir/profile.p7b" || exit
+  if [[ ! -s "$proof_dir/certchain.cer" || ! -s "$proof_dir/profile.p7b" ]]; then
+    printf 'Signature verification did not export the certificate chain and profile.\n' >&2
+    exit 1
+  fi
+  fmbot-pbt build-run --build-dir "$PWD" --out "$OUT" \
+    --target entry/src/main/ets/data/Traffic.ets --func isMobile \
+    --build-cmd "$build_cmd" \
+    --device-target "$DEVICE" --effort quick --lang en --no-coverage
+)
+```
+
+The preflight HAP is not test evidence. Do not pass it with `--test-hap` to
+`build-run`: the campaign must rebuild after generating its property.
+
+To claim a positive result, exercise the original constructor and `isMobile()`
+for all three `NetworkType` values (`DEFAULT`, `MOBILE`, `WLAN`). Keep the
+generated test source, build/sign/install evidence and the
+[device receipt](../arkts-device.md#device-results) tying the named completed
+case to the source, test inputs and installed test HAP. This would validate only
+that method, not V2 or UI observation behavior.
+
+#### HanZi builder helper validation
+
+HanZi's [`@Builder canvasCard()`](https://github.com/Monkey0803/HanZi/blob/073fc8539233a5597adc66d1feb48c886ebcd25d/entry/src/main/ets/views/practice/PracticeView.ets#L161-L180)
+passes `StrokeSpeed.durationOf(appSettings.strokeSpeed)` to `StrokeCanvas`.
+A scoped campaign in the original project imported the unchanged
+[`StrokeSpeed.durationOf(id: string)`](https://github.com/Monkey0803/HanZi/blob/073fc8539233a5597adc66d1feb48c886ebcd25d/entry/src/main/ets/common/constants/StrokeConstants.ets#L31-L47)
+from HanZi's `entry` module. Its [speed settings](https://github.com/Monkey0803/HanZi/blob/073fc8539233a5597adc66d1feb48c886ebcd25d/entry/src/main/ets/model/SettingsOptions.ets#L124-L128)
+give an oracle independent of the timing constants: durations must be finite
+and positive, and fast must take less time than standard, standard less than
+slow. A separate property checked that unknown strings use the standard
+duration, including `''` and `'汉字'`.
+
+On the API-26 emulator, Hypium completed **3 named cases, 3 passes, 0 failures
+or errors**. Run `54b32ab0-9bf9-421f-ae38-b4eea4e2ff36` bound the helper,
+caller, suite, registration and runner to the installed signed test HAP
+(SHA-256 `9f496c388d12b53ad6a3ff8bbd16ffbde61ba423431f1f614fa3e861f8525d85`).
+`build-run` accepted all three properties. The test runner started no UI
+ability. This verifies the helper, not the builder, animation, rendering or
+watcher dispatch. The source checkout contains the campaign command, executed
+suite and Hypium stdout in `test/fixtures/arkts/hanzi-stroke-speed/`.
+
+#### Players watcher helper validation
+
+**Blocked before property execution.** In OpenHarmony Players at
+`63f1fb4c8f9fa50b00e82474e982385b4f87d42d`, [`PlaybackQueueListRow.ets`](https://gitcode.com/openharmony/applications_players/blob/63f1fb4c8f9fa50b00e82474e982385b4f87d42d/feature/player/src/main/ets/component/PlaybackQueueListRow.ets)
+registers `@Watch('onEntryPropChange')` on `entry` (line 29). The handler calls
+`refreshDisplay()`, which calls `buildSubtitle()`. At line 136, `buildSubtitle()`
+passes positive file sizes to the exported class's static
+[`MediaFormatUtil.formatFileSizeDecimal`](https://gitcode.com/openharmony/applications_players/blob/63f1fb4c8f9fa50b00e82474e982385b4f87d42d/common/src/main/ets/utils/MediaFormatUtil.ets).
+The proposed property would call only that original method.
+
+**Proposed oracle.** The helper's comment promises decimal file-manager units.
+For positive whole bytes below 1 TB, choose the largest of B, KB, MB and GB
+that does not exceed the input, before rounding. Parse the displayed amount:
+bytes must round-trip exactly, while scaled amounts must have two decimal
+places and reconstruct the input within 0.005 of the selected unit (allowing
+for floating-point error). Alongside seeded draws, check each unit boundary
+at 1,000, 1,000,000 and 1,000,000,000 bytes and one byte on either side. The
+caller skips nonpositive sizes. The property does not check the row's subtitle.
+
+On Linux, OHPM `26.0.0.630` installed the project dependencies. With Hvigor
+`6.26.4` and OpenHarmony SDK `26.0.0.105` (API 26), the baseline build and then
+`build-run` from FMBot-PBT revision `3d14b84c4d31a517acf69dc177400274a0a0b8df`
+failed in `ohosTest@OhosTestCompileArkTS` (Hvigor exit `255`, CLI exit `3`):
+
+- `10505001`: `@ohos.filemanagement.userFileManager` could not be resolved in
+  `common/src/main/ets/listener/FileSyncEngine.ets:24`.
+- `10505001`: the existing `entry/src/ohosTest/ets/test/database/MtimeSort.test.ets:18`
+  could not resolve `@ohos/common/src/main/ets/const/Constant`.
+
+Run from the pinned Players checkout. Set `OHOS_BASE_SDK_HOME` to the SDK
+root as described under [Hvigor SDK discovery](#hvigor-sdk-discovery), set
+`$contract` to a Markdown file with the proposed oracle, and use a fresh `$out`:
+
+```sh
+ohpm install --all --metadata_cache &&
+fmbot-pbt build-run --build-dir . --lang en \
+  --build-cmd 'hvigorw assembleHap --mode module -p module=phone@ohosTest -p product=default --no-daemon' \
+  --target common/src/main/ets/utils/MediaFormatUtil.ets --func formatFileSizeDecimal \
+  --spec "$contract" --out "$out"
+```
+
+The formatter's SHA-256 stayed
+`86b90bd1a7362c188d95334b45a0cbcfe3bfc86f12fbacfff1c6a1d0fe1e82da`; the caller and
+other tracked files also remained unchanged. No test HAP, installation or
+Hypium case receipt was produced. Retry after the original project build
+passes with the required SDK declarations and test dependencies. Require a
+completed case bound to the signed test HAP and its source and test inputs
+before claiming the helper was exercised. No ArkUI support rating changes.
+
+#### V2 model validation: HanZi
+
+A real `build-run` on 2026-11-19 exercised the unchanged
+[`CatalogDataSource#setShowPinyin`](https://github.com/Monkey0803/HanZi/blob/073fc8539233a5597adc66d1feb48c886ebcd25d/entry/src/main/ets/viewmodel/CatalogDataSource.ets#L40-L97).
+The catalog's pinyin switch calls this synchronous method. Each trial constructs
+`new CatalogDataSource()` with its real default provider, passes drawn booleans,
+and checks the affected public `@Trace showPinyin` field. The test-only runner
+invokes Hypium without starting a UI ability. The model, project SDK pins and
+existing suites were unchanged.
+
+The CLI was built from `3b69882c0` plus the V2 receiver fix. With DevEco SDK
+`26.0.0.105` (API 26), Hvigor `6.26.4` and OHPM `26.0.0.630`, HanZi's own build
+command exited 0 before the campaign and after generating the properties:
+
+```bash
+hvigorw assembleHap --mode module -p product=default -p module=entry@ohosTest --no-daemon
+```
+
+The API-26 x86_64 emulator completed **three passing cases** in `CatalogPinyinPbt`:
+`default_and_single_request`, `two_independent_requests`, and `repeated_request`
+(100 trials each; seeds `83001`, `83002`, `83003`). Receipt
+`28da31d7-8b81-4a12-b3cf-4ed74c0c7050` binds the model, generated suite,
+registration and runner to the installed signed test HAP (SHA-256
+`3cf15708b40578853739286f2a496216b78ae4eea3131f8224b26a7124f3ebb7`). All three
+properties were accepted; no bug was found. This validates that narrow V2
+receiver recipe, not observation dispatch, UI bindings or async properties.
+
+#### V2 model validation: OpenHarmony Photos
+
+**Earlier attempt, blocked at the project build gate (2026-11-18).** The target was the exported
+[`BackgroundViewController`](https://gitcode.com/thanhtoantnt/applications_photos/blob/893381722a43786a5377b93ec60b5866f9774cb4/feature/browserlibrary/src/main/ets/model/background/BackgroundViewController.ets)
+in `browserlibrary`, a dependency of the `phone_photos` HAP. The constructor
+accepts an optional boolean. `updateBrowserViewEnabled` takes two booleans and
+updates `browserViewEnable`, a `@Trace` field, without mounting UI. The original
+file, including `@ObservedV2` and `@Trace`, kept SHA-256
+`31bbc8fc7b0e31440bb597e1ffff8479b745434dfa05e695533a1656872dfa2e`.
+Neither the CommunicationSetting V1 build blocker nor the Browser V1
+result establishes V2 support.
+
+The binary was built from `3d14b84c4d31a517acf69dc177400274a0a0b8df`
+(`0.5.0-beta.2`). Photos requests OpenHarmony `26.0.0`. The build used the
+DevEco-integrated SDK's `default/openharmony` tree (API 26, `26.0.0.105`),
+Hvigor `6.26.4` and OHPM `26.0.0.630`. `ohpm install --all` succeeded. `build-run`
+warned about the DevEco SDK flavor but continued. The first failing task was
+`phone_photos:ohosTest@OhosTestCompileArkTS`: Rollup `00305015` could not resolve
+`../../../../main/ets/MovingPhotoExtension/SpliceUtils` from the existing
+`product/phone/src/ohosTest/ets/test/browser/SpliceUtils.test.ets`. The same task
+also reported missing kit exports, including `systemParameterEnhance` from
+`@kit.BasicServicesKit`. Hvigor exited 255; `build-run` exited 3 (`PBT not started`).
+No HAP was produced, signed, or installed, and no Hypium case ran. This result
+neither verifies V2 support nor shows that the decorators caused the failure.
+
+To retry, start at the pinned Photos revision. Restore the missing `SpliceUtils`
+dependency with the project owner and select a compatible OpenHarmony SDK with
+the required kit exports (see [SDK discovery](#hvigor-sdk-discovery)). Keep the
+model and SDK pins unchanged. Confirm the Hvigor command below exits 0 before
+starting PBT. From the Photos root, set `OUT` to a fresh absolute output path:
+
+```bash
+ohpm install --all && fmbot-pbt build-run --build-dir "$PWD" --out "${OUT:?}" \
+  --target feature/browserlibrary/src/main/ets/model/background/BackgroundViewController.ets \
+  --func updateBrowserViewEnabled --lang en \
+  --prompt 'Use the phone_photos ohosTest harness. Put the generated suite in product/phone/src/ohosTest/ets/test and register it in its List.test.ets. Import the original model from browserlibrary.' \
+  --build-cmd 'hvigorw assembleHap --mode module -p module=phone_photos@default@ohosTest -p product=default --no-daemon'
+```
+
+Use the bare method name: the recorded CLI version does not resolve the dotted
+name for this method. The unchanged build command selects the phone test target;
+`--prompt` tells the agent to put the suite there instead of in `browserlibrary`.
+The `@ohos/browserlibrary` package entry does not re-export the class. If the
+phone suite cannot import the original source, record the blocker rather than
+copying or editing the model.
+
+A passing result needs a generated Hypium case that constructs the original
+class and checks that `isFromPhotoBrowser` defaults to `false` and preserves
+explicit `true` and `false`. With `isFromCamera` left at its default `false`,
+call the method with drawn booleans and assert that `browserViewEnable` is true
+exactly when both inputs are false. Keep the build/sign/install evidence and
+[completed case receipt](../arkts-device.md#device-results) tied to the signed
+HAP and the source and test inputs. Observation dispatch and UI bindings stay
+out of scope.
+
+#### V1 model validation: Browser
+
+On an OpenHarmony API-26 emulator, Browser `889c7fb13` was tested with FMBot
+`d41a6ee19` plus the consumer-harness patch (binary SHA-256
+`ea3c930c24e1c169078fac38f35f36213468a14251aa12b856a852f9626d478b`). The unchanged
+`entry@default@ohosTest` build produced the project-signed `entry_test` HAP,
+SHA-256 `4273eb29a60a7e06fd2311b53a38877dba350dcfa17e755b91be8ba137029dae`.
+Receipt `2b933365-a7d3-4a01-9854-2c7e37320ccc` names all six passing cases and
+fingerprints the source, suite, registration and installed artifact.
+
+`ToggleSelectPbt#twice_restores_selection` imported `BookmarksViewModel` from
+`bookmark` and checked selection after each of two toggles on a fresh instance
+(1,000 trials, seed `80903`). The original recorder rejected the receiver and
+exited 2. The recorder fix accepted those six results in an offline replay; this
+is not a completed `build-run` with the fix. A later seven-case suite had no
+completed receipt. This validates the original V1 method's public state, not
+component mounting, notification dispatch, or V2 behavior.
 
 ### Improve next
 
@@ -1300,12 +1794,12 @@ function with those values.
    plugin and stop, without editing the SUT tree.
 2. Symbol-level import: `passing` / `failing` must bind the `--func`, not only
    a value import of the file that happens to define it.
-3. Koala / Panda: a documented non-HAP runner, or keep retiring koala `--scope`.
+3. Koala / Panda: a documented non-HAP runner, or keep retiring koala `--target`.
 4. **ArkTS SUT types:** the legacy union-argument recipes in this item apply only
    to test files without `unionOf`; otherwise use complete typed cases for every
-   union argument. Do not stretch TS fast-check inside `.ets`. Nullish is
-   `arkNullish` in the suite, not a fast-check fork. An enum declared in
-   `--scope` is `constantFrom` of its members. A union of `string` / `number` /
+   union argument. Use PandaCheck's native typed recipes, not converted npm
+   generators. Legacy nullish uses `arkNullish` in the suite. An enum declared in
+   `--target` is `constantFrom` of its members. A union of `string` / `number` /
    `boolean` is `oneof` of every arm. A scoped function that throws is caught
    with `arkThrew` or `try`/`catch`. A generic is `name<string>`,
    `name<number>`, or `name<boolean>`; complete declared defaults and actual bound-based
@@ -1333,9 +1827,9 @@ function with those values.
    A literal mixed with an open primitive (`'xs' | number`, `0 | string`) is `oneof` of `constant` or `constantFrom` and that primitive's generator. `string()` alone is not that union.
    A throw four hops away is caught or retired. A fifth hop is still invisible.
    Missing `hvigorw` / SDK already defers the build gate. A mismatch is named and does not rewrite the tree.
-   Long term: an ArkTS PBT library with the same `check`/`property` shape, no
-   `any`, no `<const T>`. Scan the scoped signature and only allow arbitraries
-   that match it.
+   PandaCheck already provides the native ArkTS `check`/`property` library.
+   Further type support requires genuine typed recipes and campaign evidence
+   matching the scoped signature, not another backend or a host fallback.
 
 ## Related
 

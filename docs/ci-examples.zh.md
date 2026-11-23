@@ -25,7 +25,7 @@ jobs:
       - run: >
           fmbot-pbt hook-run ${{ github.event.pull_request.head.sha }}
           --base ${{ github.event.pull_request.base.sha }}
-          --repo . --out "$RUNNER_TEMP/pbt-out" --lang zh
+          --target . --out "$RUNNER_TEMP/pbt-out" --lang zh
 
       - if: always()
         uses: actions/upload-artifact@v4
@@ -50,7 +50,7 @@ pbt:
     GIT_DEPTH: "0"
   script:
     - ./build.sh
-    - fmbot-pbt hook-run "$CI_COMMIT_SHA" --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --repo . --out pbt-report --lang zh
+    - fmbot-pbt hook-run "$CI_COMMIT_SHA" --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --target . --out pbt-report --lang zh
   artifacts:
     when: always
     paths:

@@ -32,7 +32,7 @@ Prepare a project that builds and runs. Start `fmbot-pbt` in the project directo
 and supply the inputs for this run:
 
 ```text
-/skill:pbt-build-run --repo /path/to/project --workdir /path/to/project --scope src/parser
+/skill:pbt-build-run --build-dir /path/to/project --target /path/to/project/src/parser
   --spec docs/parser-contract.md --effort standard --lang en
   --build-cmd "cmake -S . -B build && cmake --build build --target parser_test"
 ```
@@ -48,14 +48,24 @@ The terminal equivalent is below. For a host agent, run `fmbot-pbt skill-install
 Claude Code or `$pi-pbt-dev` in Codex to execute it:
 
 ```bash
-fmbot-pbt build-run --repo /path/to/project --workdir /path/to/project \
-  --scope src/parser --spec docs/parser-contract.md --effort standard --lang en \
+fmbot-pbt build-run --build-dir /path/to/project \
+  --target /path/to/project/src/parser --spec docs/parser-contract.md --effort standard --lang en \
   --build-cmd "cmake -S . -B build && cmake --build build --target parser_test"
 ```
 
 Repeat `--spec` for several documents; omit it when none exists. Testing uses the current checkout: do not edit that
 copy until it finishes; keep developing in another checkout. Read `pbt-out/REPORT.md`, review the generated tests in
 the project's test tree, then commit them with the code. MCP delegation parameters: [reference](subcommands.md#mcp).
+
+## Campaign scope and completeness
+
+A `--target` at the repository root selects the whole repository, not a coverage certificate. Above 400 implementation files, the bounded inventory
+cannot certify completeness: manual findings remain partial/inconclusive (exit 2), even with workers disabled. Prefer bounded
+per-module campaigns at the same revision with separate `--out` directories.
+
+The CLI and in-session skill share this gate; `campaign_result` and `finalize` recheck saved scope context too. Nested `pbt-out/`
+reports inherit their parent checkpoint; hook/session fallback layouts retain the original output context. Malformed scope/exemption
+fields or an unavailable recorded source root remain inconclusive (exit 2). Keep the checkpoint with the campaign outputs; never edit it to clear a gate.
 
 ## Mode 2: merge-request gate
 
@@ -65,7 +75,7 @@ the project's test tree, then commit them with the code. MCP delegation paramete
 3. Run the test, with `--base` naming the merge request's base commit and `--spec` passing a requirement document if there is one:
 
    ```bash
-   fmbot-pbt hook-run <MR head commit> --base <base commit> --spec docs/requirements.md --effort standard --repo . --out /tmp/pbt-out
+   fmbot-pbt hook-run <MR head commit> --base <base commit> --spec docs/requirements.md --effort standard --target . --out /tmp/pbt-out
    ```
 
 4. Decide by exit code: `0` pass; `1` bugs found; `2` report missing or incomplete; `3` build failed.

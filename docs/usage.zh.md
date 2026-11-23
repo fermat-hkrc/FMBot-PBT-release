@@ -31,7 +31,7 @@ fmbot-pbt 有两种用法：
 先准备好可构建、可运行的项目。在项目目录运行 `fmbot-pbt`，明确调用内置 skill，并给出本轮测试的输入：
 
 ```text
-/skill:pbt-build-run --repo /path/to/project --workdir /path/to/project --scope src/parser
+/skill:pbt-build-run --build-dir /path/to/project --target /path/to/project/src/parser
   --spec docs/parser-contract.md --effort standard --lang zh
   --build-cmd "cmake -S . -B build && cmake --build build --target parser_test"
 ```
@@ -46,13 +46,22 @@ fmbot-pbt 有两种用法：
 Codex 用 `$pi-pbt-dev` 显式调用 skill，让它执行这条命令：
 
 ```bash
-fmbot-pbt build-run --repo /path/to/project --workdir /path/to/project \
-  --scope src/parser --spec docs/parser-contract.md --effort standard --lang zh \
+fmbot-pbt build-run --build-dir /path/to/project \
+  --target /path/to/project/src/parser --spec docs/parser-contract.md --effort standard --lang zh \
   --build-cmd "cmake -S . -B build && cmake --build build --target parser_test"
 ```
 
 `--spec` 可重复传入；没有文档时省略它。测试在当前检出中运行，结束前不要修改同一份代码；继续开发请用另一份工作区。
 完成后阅读 `pbt-out/REPORT.md`，审阅项目测试目录中生成的测试，再与代码一起提交。通过 MCP 委派的参数见[参考手册](subcommands.zh.md#mcp)。
+
+## 测试范围与完整性
+
+`--target` 指向仓库根目录即选择整个仓库，不代表已验证完整覆盖。超过 400 个实现文件时，有界清单不能认证完整性：手动扫描的发现仍是部分、未完成结果（退出 2），
+关闭扫描子代理也不豁免。大型应用应在同一版本上按模块分别启动有界任务，各用独立的 `--out` 目录。
+
+CLI 与会话内 skill 共用此门禁；`campaign_result` 和 `finalize` 也会复核保存的范围信息。嵌套 `pbt-out/` 报告继承父目录的检查点，
+hook/会话回退目录也保留原输出目录的上下文。范围或豁免字段格式错误、已记录的源码根目录不可用时，结果仍为未完成（退出 2）。
+请将检查点与测试任务输出一并保留，不得修改检查点来绕过门禁。
 
 ## 模式二：MR 门禁
 
@@ -62,7 +71,7 @@ fmbot-pbt build-run --repo /path/to/project --workdir /path/to/project \
 3. 运行测试，`--base` 指定 MR 的基准提交，有需求文档时用 `--spec` 传入：
 
    ```bash
-   fmbot-pbt hook-run <MR 头提交> --base <基准提交> --spec docs/需求.md --effort standard --repo . --out /tmp/pbt-out --lang zh
+   fmbot-pbt hook-run <MR 头提交> --base <基准提交> --spec docs/需求.md --effort standard --target . --out /tmp/pbt-out --lang zh
    ```
 
 4. 按退出码判定：`0` 通过；`1` 发现缺陷；`2` 报告缺失或不完整；`3` 构建失败。

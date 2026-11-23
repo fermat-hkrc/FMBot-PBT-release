@@ -10,6 +10,148 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.5.1 - 2026-11-21
+
+### English
+
+Stable release. Changes since 0.4.0:
+
+- **CLI migration:** `build-run`, `hook-run` and `watch` take `--target` (the file or directory to test) and `--build-dir` (where the build command runs). For `build-run`, replace `--workdir X --repo R --scope S` with `--build-dir X --target R/S`. On `hook-run` and `watch`, rename `--workdir` to `--scratch-dir` (this directory is deleted and recreated) and `--build-workdir` to `--build-dir`. Use `hook-run --whole` instead of `hook-run --target scope`. Both MCP tools, `pbt_start` and `pbt_watch_start`, require `target`. Only `pbt_start` accepts `build_dir` and `whole` (#860).
+- **ArkTS migration:** remove `--no-isolate` to test in the original project; use `--isolate` for a single function in a mini HAP. The CLI and in-session tool reject the old flag with exit `2` before starting a build (#921, #924).
+- ArkTS packages ship PandaCheck 0.1.3 as a checksum-verified bytecode HAR; no separate download or source build is needed. It requires API 26 or later on the SDK, device and consuming product (`compatibleSdkVersion`), and `buildOption.strictMode.useNormalizedOHMUrl: true`. Source campaigns check the SDK, build and device install before designing properties. Existing product settings are not silently raised (#803, #913, #914, #925). New HAP runs preserve multiline counterexamples in device results; older, truncated logs cannot be reconstructed (#936, #938).
+- PandaCheck now rejects zero trials instead of reporting a pass. Its boolean generator no longer gets stuck on `false` for the affected seed. Generated HAP properties preserve element types, exercise their declared length ranges and sample bounded integers across the full interval (#922, #923, #926, #937).
+- `arkts-test` retains named Hypium outcomes even when class-run logs drop case names. Generated isolates include the reporter; existing signed HAPs are not changed. Missing names or conflicting reports are not proof of a pass. Headless Pi source campaigns can opt into `--recover-missing-cases`; `--recover-max-cases` limits eligible attempts (default `3`) (#881, #882, #892, #912, #920).
+- `build-run` and `hook-run` can use Claude Code without a pi provider key via the experimental headless `--engine acp`. In the pi TUI, `/continue` resumes an interrupted campaign. A headless whole-repo run can set aside a blocked record and continue unrelated modules; unresolved findings still prevent verified delivery (exit `2`) (#786, #876, #893, #902).
+- Bug pages now lead with the description, cause, suggested fix and impact. `record_bug` requires `description` and `reachability` for new bugs; older reports still render. The release archives include native clipboard support for the TUI (#820, #822).
+- Embedded pi is 1.6.0; CI and release binaries use Bun 1.4.5 (#906, #915).
+
+### 中文
+
+正式版。自 0.4.0 以来的变化：
+
+- **命令行迁移：**`build-run`、`hook-run` 和 `watch` 用 `--target` 指定被测文件或目录，用 `--build-dir` 指定构建命令的运行目录。`build-run` 的 `--workdir X --repo R --scope S` 改为 `--build-dir X --target R/S`。`hook-run` 和 `watch` 的 `--workdir` 改为 `--scratch-dir`（该目录会被删除后重建），`--build-workdir` 改为 `--build-dir`。`hook-run --target scope` 改为 `hook-run --whole`。MCP 的 `pbt_start` 和 `pbt_watch_start` 都必须传 `target`；只有 `pbt_start` 接受 `build_dir` 和 `whole`（#860）。
+- **ArkTS 迁移：**在原项目中测试时删掉 `--no-isolate`；要在独立的小型 HAP 中测试单个函数，使用 `--isolate`。命令行和会话内工具收到旧参数都会在构建前退出，退出码为 `2`（#921、#924）。
+- 随包提供经校验的 PandaCheck 0.1.3 字节码 HAR，无需另行下载或从源码构建。SDK、设备和使用该包的产品（`compatibleSdkVersion`）均须达到 API 26，并启用 `buildOption.strictMode.useNormalizedOHMUrl: true`。ArkTS 源码测试会先核对 SDK、执行构建并验证设备安装，再设计性质；不会自动调高现有产品的版本配置（#803、#913、#914、#925）。新的 HAP 测试会在设备结果中完整保留多行反例；旧日志中已截断的反例无法还原（#936、#938）。
+- PandaCheck 不再把零次试验判为通过，也修复了特定种子下布尔生成器只取 `false` 的问题。生成的 HAP 测试保留元素类型，按声明的长度范围取样，并在有界整数的整个区间内取样（#922、#923、#926、#937）。
+- `arkts-test` 在按类运行的日志遗漏用例名时仍可保留 Hypium 记录的具名结果。生成的隔离 HAP 自带报告器；已有的签名 HAP 不会被修改。缺少用例名或记录互相冲突，均不能判为通过。无界面 pi 源码测试可用 `--recover-missing-cases` 重跑缺失用例；`--recover-max-cases` 限制符合条件的重跑次数（默认 `3`）（#881、#882、#892、#912、#920）。
+- `build-run` 和 `hook-run` 可通过实验性的无界面参数 `--engine acp` 使用 Claude Code，无需 pi 服务商密钥。pi 交互界面可用 `/continue` 继续中断的测试。无界面整仓测试可暂时搁置一条受阻的记录，继续测试无关模块；只要问题仍未解决，就不能判为测试完成，退出码为 `2`（#786、#876、#893、#902）。
+- 缺陷页面先展示问题描述、根因、修复建议和影响。新缺陷的 `record_bug` 记录须填写 `description` 和 `reachability`；旧报告仍可渲染。发布包内含交互界面的原生剪贴板支持（#820、#822）。
+- 内置 pi 更新至 1.6.0；CI 和发布二进制使用 Bun 1.4.5（#906、#915）。
+
+## 0.5.0-beta.4 - 2026-11-19
+
+### English
+
+Test build (pre-release). The stable download links still serve 0.4.0.
+
+- ArkTS `arkts-test` checks all run-correlated Hypium reports received before the hard deadline, even if the last poll wakes at the cutoff. Conflicting summaries return exit `2` (inconclusive) instead of reusing an earlier pass, and named completions received after the deadline do not count as evidence (#881). The original physical-device report remains open (#875).
+- `build-run --recover-missing-cases --recover-max-cases N` caps eligible ArkTS case recovery attempts (default `3`). Missing or ambiguous routes do not consume the budget or block verified routes. Remaining gaps are grouped, with manual rerun commands where a case can be selected (#882).
+
+### 中文
+
+测试版（预发布）。正式版下载链接仍指向 0.4.0。
+
+- ArkTS `arkts-test` 在最后一次轮询到达总截止时间时，仍会核对截止前收到且能关联到本次运行的全部 Hypium 记录。摘要冲突时退出 `2`（无法判定），不沿用较早的通过结果；超时后收到的具名用例完成记录不计入证据（#881）。最初的真机问题仍待验证（#875）。
+- `build-run --recover-missing-cases --recover-max-cases N` 限制符合条件的 ArkTS 缺失用例重跑次数（默认 `3`）。找不到运行路径或无法确定唯一路径的用例，不占用额度，也不阻止已核验路径的用例重跑。剩余缺口分组列出，可按用例选择时给出手动重跑命令（#882）。
+
+## 0.5.0-beta.3 - 2026-11-19
+
+### English
+
+Test build (pre-release). The stable download links still serve 0.4.0.
+
+- **Breaking: `build-run`, `hook-run` and `watch` take `--build-dir` and `--target`.** `--build-dir` is where the build command runs; `--target` is the directory or file under test, and its git repository is found from it. `--repo`, `--scope`, `--workdir` and `--build-workdir` are removed and refused with the replacement named; hook-run's disposable directory is `--scratch-dir` and `--target scope` is `--whole`. Migrate `--workdir X --repo R --scope S` to `--build-dir X --target R/S`. MCP `pbt_start`/`pbt_watch_start` take `target`, `whole` and `build_dir` and refuse unknown fields (#860).
+- Every path is checked before anything runs: the build directory, the target's repository and `--out` must be readable and writable (proven by creating a file), a `./script` build command must exist and be executable, and the target must not lie inside a directory hook-run cleans. A refused argument exits `2` with the flag, path and reason (#860).
+- A relative `--diff` is looked up in the current directory, the target's repository and the build directory; the error lists the paths checked. The build-run skill maps 构建命令 / 构建目录 / 测试目录 / diff straight to flags instead of exploring (#859, #860).
+- `/continue` resumes an interrupted campaign in the TUI (#876).
+- Headless build-run can reopen the same session after a provider interruption: `--auto-resume-attempts` and `--auto-resume-wait` tune it, the options also work from a terminal, and Ctrl-Z/`fg` suspend and continue the worker with the shell job (#838, #847, #855, #867). Provider stream aborts are told apart from cancellation (#839).
+- ArkTS: `--recover-missing-cases` reruns only missing device cases at close-out; one diagnostic per missing case with a copyable `arkts-test --class` command; stalled device tests time out (`--idle-timeout-ms`); close-out checks verified receipts after resume; V1 `@Observed` models are tested in the consuming HAP; headless `@ObservedV2` properties can be recorded; device-run registrations share one validator (#848, #841, #862, #864, #843, #840, #837, #846, #868).
+- Record tools state the campaign language in every prose field and report every gate in one refusal; a refused summary names the caveat correction without dropping its evidence (#854, #869, #877).
+- Standalone `scan` discovers `.ets` exports (#826).
+- Extracted asset caches unused for two days are removed when a new version extracts (#827).
+- Docs: whole-repository module checkpoints; blocked ArkUI validation records (#842, #845, #821, #828, #829).
+- pi stays at 1.5.2; Bun at 1.4.4.
+
+### 中文
+
+测试版（预发布）。正式版下载链接仍指向 0.4.0。
+
+- **不兼容变更：`build-run`、`hook-run`、`watch` 改用 `--build-dir` 和 `--target`。** `--build-dir` 是构建命令的运行目录；`--target` 是被测目录或文件，所在 git 仓库自动找出。`--repo`、`--scope`、`--workdir`、`--build-workdir` 已移除，使用时报错并给出替代参数；hook-run 会被清空的临时目录改名为 `--scratch-dir`，`--target scope` 改为 `--whole`。迁移示例：`--workdir X --repo R --scope S` 改为 `--build-dir X --target R/S`。MCP 的 `pbt_start`/`pbt_watch_start` 改用 `target`、`whole`、`build_dir`，并拒绝未知字段（#860）。
+- 开跑前检查所有路径：构建目录、被测仓库和 `--out` 必须可读写（实际创建文件确认），`./脚本` 形式的构建命令必须存在且可执行，被测目录不能位于 hook-run 会清空的目录中。参数被拒绝时退出 `2`，并说明参数、路径和原因（#860）。
+- 相对路径的 `--diff` 依次在当前目录、被测仓库和构建目录中查找，找不到时列出查过的路径。build-run skill 直接把构建命令、构建目录、测试目录和补丁对应到参数，不再四处探查（#859、#860）。
+- TUI 中可用 `/continue` 继续中断的测试任务（#876）。
+- 无界面 build-run 遇到服务商中断时可重新打开同一会话：用 `--auto-resume-attempts`、`--auto-resume-wait` 调整，从终端启动也可用；Ctrl-Z/`fg` 会随 shell 作业一起暂停和继续 worker（#838、#847、#855、#867）。服务商流中止与用户取消分开记录（#839）。
+- ArkTS：`--recover-missing-cases` 在收尾时只重跑缺失的设备用例；每个缺失用例给出一条诊断和可直接复制的 `arkts-test --class` 命令；设备测试卡住时超时（`--idle-timeout-ms`）；续跑后收尾按已核验的回执检查；V1 `@Observed` 模型在使用它的 HAP 中测试；可记录无界面的 `@ObservedV2` 性质；设备运行登记共用一个校验器（#848、#841、#862、#864、#843、#840、#837、#846、#868）。
+- 记录工具在每个文字字段中说明测试任务的语言，一次拒绝列出所有未通过的检查；摘要被拒时指出要更正的设计说明，不丢弃其证据（#854、#869、#877）。
+- 独立的 `scan` 能发现 `.ets` 导出（#826）。
+- 新版本解压资源时，删除两天未用的旧解压目录（#827）。
+- 文档：整仓按模块的检查点；ArkUI 验证受阻的记录（#842、#845、#821、#828、#829）。
+- pi 仍为 1.5.2，Bun 仍为 1.4.4。
+
+## 0.5.0-beta.2 - 2026-11-18
+
+### English
+
+Test build (pre-release). The stable download links still serve 0.4.0.
+
+- **Bug reports read the way testers read them.** Each bug now opens with its description, then root cause analysis (with the offending code), suggested fix (text and diff), impact and reachability, then how to reproduce it; the test method (property, contract and caller evidence, framework output) is folded below. REPORT.md adds a bugs-at-a-glance table after the summary and moves depth, build, scope, review and coverage to a "How it was tested" section after the bugs. The conclusion opens with a verdict computed from the records. The formal statement stays in PROPERTIES.md and each bug links to its entry. Chinese bug pages use full-width label colons and translated severity (#822).
+- `record_bug` requires two new fields: `description` (the function, the input or condition, actual against expected, with a `file:line`, no test-method words) and `reachability` (the production scenario, citing a location the caller evidence already gives). Reports recorded before this release still validate and render (#822).
+- **Copy works in the interactive TUI.** Release archives carry the pi-tui clipboard addon under `native/`, beside the executable; `install.sh` installs it there. Before, selecting text in fullscreen mode copied nothing wherever pbcopy/clip/xclip/OSC 52 were unavailable. On macOS run `xattr -dr com.apple.quarantine .` in the extracted directory. `install.sh` also no longer fails on macOS when `/usr/local/bin/tools` does not exist (#820).
+- A provider that denies access to the selected model (`503 auth_unavailable`) is reported as such, and `resume` does not relaunch an unchanged campaign against it (#819).
+- An interrupted campaign says whether to run `fmbot-pbt finalize --out <dir>` after it ends, or what still blocks it (#815).
+- ArkTS: an explicitly requested rerun of an empty selection links to the original run instead of failing it; Hypium failures without a PandaCheck witness keep the case identity and logs; counterexamples survive input mutation; boundary seeds no longer freeze generation; isolation keeps literals while cleaning imports (#817, #818, #795, #799, #793).
+- Campaign phase inference is shared by model routing, compaction and managed runs (#800); shell parsing is its own module (#802).
+- Docs: incremental ArkUI support roadmap (#816).
+- pi stays at 1.5.2; Bun at 1.4.4.
+
+### 中文
+
+测试版（预发布）。正式版下载链接仍指向 0.4.0。
+
+- **缺陷报告按测试人员的阅读顺序排列。** 每个缺陷先写问题描述，然后是根因分析（含问题代码）、修复建议（文字和 diff）、影响范围、可达性分析，再给复现方法；测试方法（对应性质、性质来源、调用方证据、框架原始输出）折叠在最后。REPORT.md 在摘要后加了缺陷一览表，测试深度、构建、改动范围、复核和覆盖证据移到缺陷之后的"测试过程"一节。结论以根据记录算出的判定开头。形式化规约只放在 PROPERTIES.md，每个缺陷链接到对应条目。中文缺陷页的字段标签改用全角冒号，严重性显示为中文（#822）。
+- `record_bug` 新增两个必填字段：`description`（哪个函数、什么输入或条件、实际与应当的行为，带 `file:line`，不写测试方法用语）和 `reachability`（生产环境中的触发场景，引用调用方证据里已有的位置）。本版本之前记录的报告仍能通过校验并正常渲染（#822）。
+- **交互界面可以复制了。** 发布包在可执行文件旁的 `native/` 目录带上 pi-tui 的剪贴板模块，`install.sh` 会一并安装。此前在全屏模式下选中文字，只要 pbcopy、clip、xclip 或 OSC 52 不可用，就什么也复制不到。macOS 上请在解压目录执行 `xattr -dr com.apple.quarantine .`。另外修复了 `install.sh` 在 macOS 上 `/usr/local/bin/tools` 不存在时安装失败的问题（#820）。
+- provider 拒绝访问所选模型（`503 auth_unavailable`）时会明确报出原因，`resume` 不会原样重启 campaign（#819）。
+- campaign 中断时会说明是否应在其结束后运行 `fmbot-pbt finalize --out <目录>`，或者还缺什么（#815）。
+- ArkTS：显式请求的空选择重跑会关联到原运行而不判失败；没有 PandaCheck 反例的 Hypium 失败保留用例标识和日志；输入被修改时反例不丢；边界种子不再卡住生成；隔离清理导入时保留字面量（#817、#818、#795、#799、#793）。
+- 模型路由、上下文压缩和托管运行共用同一份阶段判断（#800）；shell 解析拆成独立模块（#802）。
+- 文档：ArkUI 支持的分阶段路线图（#816）。
+- pi 仍为 1.5.2，Bun 仍为 1.4.4。
+
+## 0.5.0-beta.1 - 2026-11-17
+
+### English
+
+Test build (pre-release). The stable download links still serve 0.4.0.
+
+- **ACP engine (experimental).** `build-run` and `hook-run` take `--engine acp` to drive Claude Code (or a build of it, via `CLAUDE_CODE_EXECUTABLE`) through the `claude-agent-acp` adapter instead of pi. No pi provider key is needed; the model is whatever Claude Code uses (`--model` passes one through). Guards, steers, record tools and close-out gates run the same code as under pi: guards become PreToolUse decisions, steers ride PostToolUse and Stop, the record tools are served over MCP by `fmbot-pbt campaign-tools`, and the close-out review and scan workers run as read-only child sessions. Headless only (no `--tui`/`--mode`); `--thinking` and `PBT_PHASE_MODELS` do not apply; no API performance section. `PBT_ACP_TRACE=<file>` records the protocol traffic. See docs/acp.md (#786).
+- A JS or Python project's own test runner (`npm test`, `npx vitest`, `node --test`, `pytest`, `python -m pytest`, …) now counts as its build/test run, so the COVERAGE.md and close-out gates no longer claim such a campaign "never ran the project's build/test command". `go test`/`go build` count like cargo (#788).
+- **Rendered reports keep their line breaks.** REPORT.md, the bug pages and PROPERTIES.md put every labelled field in its own paragraph, start multi-line and fenced values (the suggested-fix diff) below their label, and keep the lines a value was written with. Before, a Markdown viewer showed the summary and each bug as one run-on paragraph and the fix diff as plain text. Every renderer is now checked against generated values (#796).
+- **AI-flavoured wording is refused.** Chinese and English record prose is checked against a list of model tells (赋能、至关重要、值得注意的是、综上所述、不仅……更……, coinages such as 停驻、撤账; delve, "it's worth noting"); the record tool says what to write instead. Code, quoted text and technical senses (闭环控制) are exempt (#796).
+- Campaigns can no longer terminate their own process tree; stale device evidence is reconciled and a resumed campaign holds a lease on its checkout (#785, #780).
+- Scans fail closed when oversized, and HAP metadata errors name the file (#776).
+- Windows: campaign failures and resumable evidence are preserved, PandaCheck HARs are prepared without Python, and Calculator-style builds are hardened (#769, #764, #766).
+- ArkTS: stricter coverage evidence (positional generators, compound reachability, escaped arrays and aliased fields are rejected as decoys), typed numeric field and generic recipes, renamed default-function imports, default-export inventory scoring, device verdict recovery and system signing, and isolation fixes (`.ts` scopes, installed hvigor, bare imports, AppScope substitution, HAR aliases) (#758, #761–#765, #767, #772, #774, #775, #777, #778, #783).
+- Release tags `vX.Y.Z-<label>` are published as pre-releases here and on the public mirror (#787).
+- Docs: the first test uses the default workflow and build-run; installation verification focuses on the first run; ArkTS prerequisites and backend guidance consolidated (#759, #770, #771, #789).
+- Updated: biome, MCP SDK, fast-xml-parser, mdast, @types/node (#757). pi stays at 1.5.2.
+
+### 中文
+
+测试版（预发布）。正式版下载链接仍指向 0.4.0。
+
+- **ACP 引擎（实验性）。** `build-run` 和 `hook-run` 支持 `--engine acp`，通过 `claude-agent-acp` 适配器驱动 Claude Code（或基于它的改版，用 `CLAUDE_CODE_EXECUTABLE` 指定）代替 pi。无需 pi 的 provider key，模型由 Claude Code 决定（`--model` 可透传）。拦截、引导、记录工具和收尾门禁与 pi 引擎是同一份代码：拦截走 PreToolUse，引导走 PostToolUse 和 Stop，记录工具由 `fmbot-pbt campaign-tools` 以 MCP 提供，收尾审查和扫描 worker 在只读子会话中运行。仅支持无人值守运行（不支持 `--tui`/`--mode`）；`--thinking` 和 `PBT_PHASE_MODELS` 不生效；报告没有 API 性能一节。`PBT_ACP_TRACE=<文件>` 记录协议通信。详见 docs/acp.zh.md（#786）。
+- JS 或 Python 项目自己的测试运行器（`npm test`、`npx vitest`、`node --test`、`pytest`、`python -m pytest` 等）现在算作该项目的构建/测试，COVERAGE.md 和收尾门禁不再误报"没跑过项目的构建/测试命令"。`go test`/`go build` 与 cargo 同等对待（#788）。
+- **渲染出的报告保留换行。** REPORT.md、缺陷页和 PROPERTIES.md 的每个字段单独成段，多行和带代码块的值（修复建议的 diff）从标签下一行开始，值内的换行原样保留。此前在 Markdown 查看器里，摘要和每个缺陷都会挤成一段，修复 diff 显示为普通文字。所有渲染器现在都用自动生成的内容做回归测试（#796）。
+- **拒绝 AI 腔用词。** 中英文记录文字会对照一份模型常用词表检查（赋能、至关重要、值得注意的是、综上所述、不仅……更……，以及停驻、撤账这类生造词；英文如 delve、"it's worth noting"），记录工具会给出替换建议。代码、引文和技术用语（闭环控制）不受影响（#796）。
+- campaign 不会再终止自己的进程树；过期的设备证据会被核对，续跑的 campaign 持有其工作区的租约（#785、#780）。
+- 扫描结果过大时直接失败，HAP 元数据错误会指出具体文件（#776）。
+- Windows：保留 campaign 失败信息和可续跑的证据，PandaCheck HAR 准备不再依赖 Python，Calculator 类构建更稳（#769、#764、#766）。
+- ArkTS：覆盖证据更严格（位置生成器、复合可达性，转义数组和别名字段视为伪证据而拒绝），支持带类型的数值字段和泛型 recipe、重命名的默认函数导入、默认导出清单评分、设备结论恢复和系统签名，以及隔离相关修复（`.ts` 范围、已安装的 hvigor、裸导入、AppScope 替换、HAR 别名）（#758、#761–#765、#767、#772、#774、#775、#777、#778、#783）。
+- `vX.Y.Z-<label>` 形式的 tag 在本仓库和公开镜像都发布为预发布版本（#787）。
+- 文档：首次测试改用默认流程和 build-run；安装验证聚焦首次运行；整合 ArkTS 前置条件和后端说明（#759、#770、#771、#789）。
+- 依赖更新：biome、MCP SDK、fast-xml-parser、mdast、@types/node（#757）。pi 仍为 1.5.2。
+
 ## 0.4.0 - 2026-11-13
 
 ### English
