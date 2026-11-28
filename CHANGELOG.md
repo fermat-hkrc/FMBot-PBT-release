@@ -10,6 +10,30 @@ maintained independently.
 Entries before v0.1.7 predate this file and remain available in the Release
 history. / v0.1.7 之前的版本早于本文件，仍可在 Release 历史中查看。
 
+## 0.6.0 - 2026-11-28
+
+### English
+
+Stable release. Changes since 0.5.1:
+
+- **Interactive model setup and self-describing CLI help:** `fmbot-pbt setup` (and `/setup` in the TUI via bundled `pi-setup`) guides custom and built-in provider configuration interactively, and interactive startup prompts for setup when no model is configured (#1042). `fmbot-pbt --help`, `<subcommand> --help`, and `fmbot-pbt help <subcommand>` document every subcommand, flag, and exit code without writing config or cache files (#1007, #1079).
+- **Three usage modes and ACP auto-detection:** The usage guides now cover full-repository campaigns alongside development-time `/skill:pbt-build-run` and `hook-run` merge-request gates (#1031, #1045, #1093). `--engine acp` auto-detects `codeagent` installations in addition to Claude Code (#1047).
+- **PandaCheck 0.1.4 and expanded ArkTS support:** Ships verified PandaCheck 0.1.4, lowering the HAR `compatibleSdkVersion` floor to API 20 and removing the HAR API override (#939, #1003, #1006, #1014, #1016). Adds ArkTS support for default class and singleton receivers (#994), representative bounded inputs for bare `Object` parameters (#1078), direct method dispatch through base-class parameters using concrete source-owned subclasses (#1083), namespace-owned object properties (#975), and V1 `@Observed` / headless V2 `@ObservedV2` model validation (#971, #972).
+- **ArkTS signing, build recovery, and device verdicts:** `--sign-profile` is now the single signing policy flag while preserving inherited project signing profiles (#974, #1022, #1027). Hardens warm `ohosTest` packaging, Hvigor wrapper recovery, isolate bytecode checks, const-named Hypium case receipts, unnamed-failure rejection, and repeated-stall pause/diagnostics (#949–#965, #1000–#1004, #1012, #1052, #1053, #1060, #1068–#1070).
+- **Campaign resilience, scan, and diff coverage:** Preserves record corrections across compaction, queued turns, and provider context overflows, and writes a Markdown handoff when blocked corrections are parked (#947, #968, #1011, #1015, #1020, #1025, #1054, #1059). Rejects truncated Gradle XML (#1065), dangling-symlink or reused-PID campaign locks (#1063), empty `--func` (#970), and unsupported `scan --module` (#1033). Fixes `watch --fetch` origin tracking and prompt argument order (#995, #1036), Git-quoted paths, and `coverage --diff` matching (#982–#996, #1039, #1041, #1048).
+- **Dependencies and runtime:** Embedded `pi` is 1.7.0 (`pi-btw` 0.8.1, `pi-setup` 0.2.1, `pi-subagents` 0.90.0); shipped ripgrep is 16.0.0 and fast-check is 4.11.0 (#1013, #1037, #1077, #1094).
+
+### 中文
+
+正式版。自 0.5.1 以来的变化：
+
+- **交互式模型配置与自描述命令行帮助：**新增 `fmbot-pbt setup` 子命令（以及交互界面内随包集成的 `pi-setup` `/setup` 命令），支持交互式配置自定义或内置模型服务商，首次启动未配置模型时自动引导设置（#1042）。`fmbot-pbt --help`、`<子命令> --help` 与 `fmbot-pbt help <子命令>` 覆盖全部子命令、参数和退出码说明，且不会写入任何配置或缓存文件（#1007、#1079）。
+- **三种使用模式与 ACP 自动探测：**使用指南完整涵盖边开发边测（`/skill:pbt-build-run`）、MR 门禁（`hook-run`）与整仓自然语言性质测试三种模式（#1031、#1045、#1093）。`--engine acp` 在 Claude Code 之外支持自动探测 `codeagent`（#1047）。
+- **PandaCheck 0.1.4 与 ArkTS 特性扩展：**随包升级经校验的 PandaCheck 0.1.4，将 HAR 的 `compatibleSdkVersion` 下限降至 API 20 并移除旧的 HAR API 覆盖参数（#939、#1003、#1006、#1014、#1016）。新增默认类与单例接收者支持（#994）、裸 `Object` 参数的有界代表性输入生成（#1078）、通过源码具体子类构造并经基类参数直接分发的重写方法验证（#1083）、命名空间下对象性质记录（#975），以及 V1 `@Observed` 与无界面 V2 `@ObservedV2` 模型验证（#971、#972）。
+- **ArkTS 签名、构建恢复与设备判定：**签名策略参数统一收敛为 `--sign-profile`，同时保留项目继承的签名配置（#974、#1022、#1027）。加固增量 `ohosTest` 打包、Hvigor 包装脚本恢复、隔离包字节码核验、常量命名的 Hypium 用例回执、未具名失败拦截，以及目标设备连续卡住时的暂停与诊断（#949–#965、#1000–#1004、#1012、#1052、#1053、#1060、#1068–#1070）。
+- **测试任务稳健性、扫描与增量覆盖率：**在上下文压缩、排队轮次与服务商上下文溢出恢复期间保留记录修正状态，并在搁置受阻修正项时写出 Markdown 交接说明（#947、#968、#1011、#1015、#1020、#1025、#1054、#1059）。拦截截断的 Gradle XML 结果（#1065）、悬空符号链接或复用 PID 的工作区锁（#1063）、空 `--func` 参数（#970）以及独立 `scan` 不支持的 `--module` 参数（#1033）。修复 `watch --fetch` 远端跟踪与提示词参数顺序（#995、#1036）、Git 转义路径解析及 `coverage --diff` 匹配（#982–#996、#1039、#1041、#1048）。
+- **依赖与运行时：**内置 `pi` 更新至 1.7.0（`pi-btw` 0.8.1、`pi-setup` 0.2.1、`pi-subagents` 0.90.0）；随包工具升级至 ripgrep 16.0.0 与 fast-check 4.11.0（#1013、#1037、#1077、#1094）。
+
 ## 0.5.1 - 2026-11-21
 
 ### English

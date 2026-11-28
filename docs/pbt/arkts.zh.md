@@ -3,6 +3,7 @@
 [English version](arkts.md)
 
 [首次测试任务前的检查清单](#首次测试任务前的检查清单) ·
+[运行整仓测试任务](#运行整仓测试任务) ·
 [安装指南](../installation.zh.md) · [子命令](../subcommands.zh.md)
 
 fmbot-pbt 支持的 ArkTS 路径是 **HarmonyOS HAP ohosTest**。性质测试是 Hypium +
@@ -47,6 +48,16 @@ PandaCheck 在每次谓词调用之前保存组件 `show`，包括通过的抽�
 `build-run` 默认在原工程中运行测试，使用你提供的 `--build-cmd`。
 `--isolate`（配合 `--target file.ets --func Name`，也接受 `src/main/ets/` 下的 `.ts` 工具文件）生成**迷你 HAP**，把真实 `--target` 文件及其相对 import 复制到 main 与 ohosTest 共用的 `entry/src/common/`。副本是独立普通文件，不是硬链接或符号链接。只有生成器可移除未使用的本地具名导入；函数体及仓库保持不变。构建前记录每份副本和原始依赖的哈希基线；任一侧被修改、删除或重定向时，拒绝 passing/failing 收尾。用来测大应用里的函数（如 Photos），无须编整个应用。import 图必须是公开 kit；系统 API 或整仓 HAR **STOP**。测试任务工作目录是 `<out>/isolate-hap`。从提示指定的 `entry/src/common` 副本导入，例如 `../../../common/default/model/common/DurationFormatter`；不得修改、替换该图，也不得另抄到 main/ets 或 ohosTest，原始依赖图同样只读。`--build-cmd` 换成该 HAP 里 `ohpm install` 之后的 `assembleHap … entry@ohosTest`。隔离 STOP 和 `ohpm install` 失败的退出码是 3。
 
+若生成的测试 HAP 明确需要 API 26 作为最低版本，可在单函数 `build-run` 中指定
+`--isolate --isolate-test-sdk 26.0.0`。如果源产品指定了 `compileSdkVersion`，SDK 仍须匹配该版本。仅生成的测试产品使用新的最低版本，
+其 `targetSdkVersion` 仅在低于测试最低版本时调高。不改发布配置。PandaCheck 0.1.4 可在 API 20 下链接，满足最低版本要求的产品不需要额外选项。
+预检核对 Hvigor 的 ohosTest 实际编译目标和 PandaCheck 字节码，安装本次构建、签名的应用及测试 HAP，
+要求所选设备上的 `ActsAbilityTest#assertContain` 具名通过。`<out>/arkts-preflight.json` 的
+`testLink` 记录声明及实际 API、HAR SHA-256 和用例结果；链接、签名、安装或执行失败即停止。
+引导用例不计为性质覆盖。不传该选项仍执行默认兼容性检查。
+
+[整仓测试任务](#运行整仓测试任务)直接对原工程运行 `build-run`，不使用 `--isolate`。若声明的最低版本低于 PandaCheck 0.1.4 的 API 20 要求，预检会在构建前停止；API 26 的 SDK 或设备不能绕过该限制。若提供联合构建命令（如 `entry@default@ohosTest`），预检会暂存旧的应用及测试 HAP，使两者重新打包。若直接提供仅构建应用的 Hvigor 命令，即使已启用规范化 OHM URL，预检也不会将 PandaCheck 加入发布构建。它只在临时副本中构建 `ohosTest`，并验证链接的依赖与具名预检用例。不提高原产品的最低版本。
+
 资源：字面量 `app.string.*` 引用的字符串条目从源码所属模块复制，保留限定词目录和字符串别名；复制源码中 ArkUI 构建器方法体内的资源调用会保留，但不生成 ArkUI 测试。资源缺失、动态引用、类型不支持或有歧义时停止准备，不补造占位值。完整性检查覆盖原所属模块及隔离 HAP 的 `AppScope`、main、ohosTest 资源命名空间：增删资源文件或限定词目录、注入覆盖定义都会被阻止，即使源码哈希未变，报告也不能通过校验。较大的依赖图把哈希校验的基线存在 `isolate-hap/.pbt-isolate-baseline.tsv`，不要修改或删除。首次构建前，引擎安装固定版本的 PandaCheck 字节码 HAR，并解析模块依赖（日志 `isolate-setup/build.log`），这一步在所有平台都用 Bash（Windows 需 Git Bash），构建命令仍用原平台 shell。引导测试导入真实源码依赖图和框架，只编译空测试架无法通过构建门禁；引导检查不算性质结论。HAR 安装过程会校验 OHPM 实际安装的文件，并拒绝陈旧的运行库。
 
 CLI 与 `/skill:pbt-build-run` 共用隔离准备流程。需要 `PATH` 中或 DevEco 内已安装的
@@ -69,7 +80,7 @@ CLI 与 `/skill:pbt-build-run` 共用隔离准备流程。需要 `PATH` 中或 D
 
 `let`、`const`、类型推断、`void`、运算符、`if` / `switch` / 循环和 `this` 是语法，不计入。性质不抽取它们。
 
-这份 34 行清单里，**27 项已支持，1 项部分支持，6 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
+这份 34 行清单里，**28 项已支持，2 项部分支持，4 项不支持**。已支持表示 `passing` / `failing` 能使用该形态，且收尾门禁会要求它。部分支持表示该教程标题下只有一部分形态能抽取或必须捕获。不支持表示抽不了，或诚实收尾是 `retired`。
 
 | 教程特性 | fmbot-pbt | 含义 |
 | --- | --- | --- |
@@ -77,7 +88,7 @@ CLI 与 `/skill:pbt-build-run` 共用隔离准备流程。需要 `PATH` 中或 D
 | `bigint` | 已支持 | `bigint()`。`integer()` 不是 `bigint`。 |
 | `boolean` | 已支持 | `boolean()`。 |
 | `string` | 已支持 | `string()`。 |
-| `Object` | 不支持 | 裸 `Object`、它的别名以及直接写出的 Object/nullish 类型仍 retired。只有下方有界的 nullable-Object 别名配方接受真实构造器代表，不代表通用 SDK/对象构造。 |
+| `Object` | 部分支持 | 裸 `Object` 必选参数及其别名可以抽取教程中的三类值：`string`、有限 `number` 和 `string[]`。每类使用独立的 `unionCase`，收缩时不会改变类型。这不代表能构造所有对象或 SDK 类。 |
 | `number` / `string` / `boolean` 的数组 | 已支持 | `array(integer())`、`array(string())` 或 `array(boolean())`。只抽元素会被拒绝。原语字段袋的非空数组，包括 SDK `FingerInfo[]`，用 `array(recordOf(fn, show, shrinkName), { minLength: 1 })`。品牌 `ImageItem[]` / `Length[]` 仍只能传 `[]`。 |
 | `enum` | 已支持 | 同文件，或相对导入一跳，用每个成员的 `constantFrom`。第二跳看不见。 |
 | 联合 | 已支持 | 固定教程的 class/原语/nullish 联合用带类型的 `unionOf` / `unionCase`，保留真实构造实例、`instanceof`、方法、分臂收缩与全臂门禁。既有原语/字面量/interface 字段袋联合仅在没有 `unionOf` 的测试文件中保留；也支持可解析的 Date 及标量/原语数组组合。这是联合组合能力，不是凭空构造不透明 SDK/native 叶子；不可用的底层类型仍 retired。 |
@@ -90,7 +101,7 @@ CLI 与 `/skill:pbt-build-run` 共用隔离准备流程。需要 `PATH` 中或 D
 | 带字段的 class 或 `struct` | 已支持 | 每个实例字段须来自构造参数抽取值或完整的 public 字段赋值，含带方法的类；构造配方也须完整显示/收缩。public 数据类可用上下文字面量/类型化 `recordOf`；`record` 只支持数字 XY/WH/LTRB。构造默认值不算开放字段抽取。 |
 | `static` 字段或方法 | 已支持 | 参数为 `number`、`string` 或 `boolean` 的 public static 方法必须写成 `Class.method(drawn)`。这些类型的 public static 字段，包括未标注的 `= 0`、`= 'albumType'`、`= true`，要在同一 property 回调里 `Class.field = drawn` 再读取 `Class.field`。readonly 字段只读取。private、protected、非精确类型和 `Date` 字段不在此门禁内。 |
 | getter / setter | 已支持 | 教程的 `Person4.age`、只有 getter/只有 setter 的形态，以及 Date 和已支持底层域。校验真实 public 实例/static 归属、新 receiver、带类型的构造/赋值抽取值、同一实例的可观察读取、有界返回类型推断及逐操作异常捕获。private 状态、替身和不可用底层域不算覆盖。 |
-| 继承、`super`、抽象类 | 不支持 | 不构造。 |
+| 继承、`super`、抽象类 | 部分支持 | 支持通过基类参数直接调用重写方法；具体子类须在源码中定义，构造函数接受一个标量参数。 |
 | `private` / `protected` 字段 | 不支持 | 套件不得改 `--target` 来暴露它。 |
 | 对象字面量 | 已支持 | 教程的上下文初始化、赋值、实参、带类型返回、数组元素与嵌套字段，使用源码解析出的真实 interface/public 数据类。直接/简写字面量保留带类型抽取值；组合 `recordOf(generate, show, shrink)` 支持可用的嵌套字段、Date/bigint/矩阵、字面量/enum、固定元组字段、可选值及真实构造器叶子。检查全部字段的生成/显示及逐组件收缩；不替代构造器、不合成 private/ArkUI/Sendable/native 值、不改写源码。 |
 | `Record<K, V>` | 已支持 | 字符串键用 `dictionary(string(), values)`，数字键用 `numericDictionary(integer(), values)`。完整类型化值包括教程 `PersonInfo` 字段袋、原语、Date/bigint、数组及嵌套映射。别名和受支持包装保留原样类型化 SUT 实参、完整组件显示/收缩、键上限与冲突安全。精确边界及真实 HAR/HAP/设备和 `build-run` 交付证据见下方。 |
@@ -102,13 +113,21 @@ CLI 与 `/skill:pbt-build-run` 共用隔离准备流程。需要 `PATH` 中或 D
 | nullish，`T` 或 `null` / `undefined` | 已支持 | 完整 `unionOf` / `unionCase`；既有 `arkNullish` 仅用于没有 `unionOf` 的测试文件。调用不得用 `!` 或 `??` 丢掉该臂。 |
 | `--func` 的具名导入 | 已支持 | `passing` / `failing` 必须导入该文件并调用该符号。 |
 | 导入别名或命名空间 | 已支持 | `id as ident` 和 `ids.id(...)` 算。调用兄弟符号不算。 |
-| 默认导出 | 部分支持 | 默认导出的函数已支持：必须按默认导入并调用。教程的 class/值默认导出形态（如 `export default new Demo()`）不抽取。 |
+| 默认导出 | 已支持 | 函数按默认导入并调用。对于 `export default class Demo`，在每次试验内构造导入的类；对于 `export default new Demo()`，直接在导入的实例上调用指定的无状态方法。见[默认导出的接收者](#默认导出的接收者)。 |
 | 动态 `import()` | 不支持 | 结果是 `ESObject`。 |
 | `throw` / `try` | 已支持 | `--func`、同文件被调、直接导入，以及最多四跳的 throw 必须捕获。第五跳看不见。 |
 | `@interface` 注解 | 不支持 | 不是值。 |
 | ArkUI | 不支持 | 声明式 UI 不是这条 runner。 |
 
 `@Sendable` 在 kit 概览里，不在这份教程里。Sendable 参数应 `retired`。不要把它算进这个计数。
+
+### 默认导出的接收者
+
+默认导入允许改名，但调用方式取决于原声明。类导出应在每次谓词调用内 `new Calculator()`，再调用 `calc.add(a, b)`；单例导出则直接调用 `service.checkStrIsEmpty(s)`，即使类本身没有导出。每个参数使用独立、类型匹配且未经修改的抽样值，并断言调用结果。不得另造实例、修改单例或用其他方法代替目标方法。
+
+此协议适用于具有显式标量参数和返回类型的同步公开方法。单例仅支持无字段、空构造的本地类，方法直接返回由参数计算的无状态表达式（可用字符串 `trim()` 和 `.length`）。不涵盖共享可变状态、生命周期或不透明工厂。既有默认函数和其他专用接收者协议不变。
+
+在 OpenHarmony 应用样例 `a136cc211f1ea19d5aa2f539fc6cd32bed08ab91` 上，两个 `build-run` 任务分别测试了原始 `CheckEmptyUtil` 单例和每轮新建的 `EidcCalculator`。API-26 模拟器上每组均有三个具名 Hypium 用例通过，报告均接受三个性质。已执行套件、设备输出和已签名 HAP/源码哈希保存在源码仓库 `test/fixtures/arkts/default-exports/`。
 
 ### 显式 IEEE-754 数字域
 
@@ -152,7 +171,7 @@ pin 显式声明 `adapterDifferences: []`：无运行库补丁，更严格的活
 获取精确提交的允许列表文件并计算哈希。离线 CI 无需兄弟检出或跨仓 token；在线
 读取权限缺失会报错，不算核验成功。
 
-下方 #710 仍是历史证据，并未使用 `ieeeDouble`。清单仍为 **27/1/6**：
+下方 #710 仍是历史证据，并未使用 `ieeeDouble`。
 本次扩展数字采样，不增加语言特性行。
 
 2026-11-11，新重建的 fmbot-pbt binary 对未修改的
@@ -238,7 +257,7 @@ string/number/boolean 覆盖及独立读取交错。加上七条给定用例和�
 源码 SHA-256 保持
 `a4e315f1a2df6ae0d5a75f122023b46e60cf041960873de9d2587322d246e0ca`，给定套件逐字节
 不变，报告及 required 独立 review 校验通过。这是原工程中的可调用夹具，已预先准备好，不是新的 CLI 隔离 E2E、生产应用/native 生命周期或实测代码覆盖率证明。
-本次仅升级泛型默认值行：**27/1/6**，仍是 34 行。
+该次任务仅升级泛型默认值行，与默认导出无关。
 
 ### 覆盖固定教程的泛型约束
 
@@ -527,7 +546,7 @@ public 纯数据类可用字面量；需要构造行为、方法或 private 状�
 可选/字面量字段及工厂默认值，不声称生产 Date/bigint/矩阵覆盖。最终编译后 JS
 只读重验接纳性质清单，拒绝十七种内存变异及错误源码 SHA；重验不是新设备执行。
 
-对象字面量能力保持不变；加上上方接口、约束及默认值完成，当前为 **27 已支持 / 1 部分支持 / 6 不支持**，仍是 34 行。
+接口及泛型默认值任务未改变对象字面量能力。
 
 ### 覆盖固定教程的类型别名
 
@@ -549,8 +568,14 @@ type NullableObject = Object | null;
 
 只有 SUT 参数本身引用精确解析为 `Object | null` 或 `Object | null | undefined`
 的别名，才能用完整 `unionOf` 覆盖 nullish 臂及每次新建的可访问真实构造器代表。
-裸 `Object`、它的别名、直接写出的 Object/nullish 类型以及 Object 数组/其它联合
-仍 retired，不能用普通对象伪造 SUT 的 nominal 类。
+裸 `Object` 必选参数或其别名使用 `unionOf<Object>`，三个有类型的分支分别用
+`string()`、`integer()`（或 `double()`）和 `array(string())`。用 `typeof` 区分标量，
+用 `Array.isArray` 区分数组。先将抽取值原样传给 SUT，再按类型检查结果。
+直接写出的 Object/nullish 类型及 Object 数组/其它联合仍 retired。
+
+API 26 上的 `build-run` 将三类值均传入了 OpenHarmony 设置中未改动的 `values(obj: Object)`，
+验证了返回数组的长度、顺序和独立性。另一个故意失败的数组性质用种子 `76219` 收缩并复现；
+这不是设置应用的缺陷，也不证明覆盖了应用特有的元数据对象。
 
 解析覆盖词法作用域/命名空间、泛型代入和依赖默认值、相对导入/重导出，以及本地
 OHPM `file:` 包的源码入口；限同一源码工作区内 40 个源码文件。遗漏/私有导出、歧义
@@ -631,8 +656,7 @@ scoped 工厂返回闭包时，每条性质必须调用其真实结果；仅创�
 生成的函数模型通过真实存储的回调及 public 生命周期驱动捕获效果；未改 SUT、SDK 或
 产品清单。这证明生产交付链路，不声称全部内建/导入/返回形态均已在应用中执行。
 
-函数能力不升级其它底层域；加上接口、约束及默认值能力后，当前清单是
-**27 已支持 / 1 部分支持 / 6 不支持**。无具体签名的 `Function`、
+函数能力不升级其它底层域。无具体签名的 `Function`、
 `ESObject`、动态导入、未知 native 生命周期、Sendable、不可访问/继承构造器仍有各自
 限制。可选/默认/组合回调**参数**、任意泛型/异步组合和不透明递归函数生成仍需自身
 底层协议。组合回调域无论直接标注还是经别名引用都同样 retired；一个函数臂不等于
@@ -685,7 +709,7 @@ PBT 加 Ability）。生产源码/调用者 SHA 及原始/isolate 源码 inode �
 收尾流程生成套件，监督会话未手改；未改 SUT、SDK 或产品清单。应用证据针对
 boolean 存取，不代表 Date 应用场景或异步定时器语义。编译后 JS 只读重验接纳该
 性质清单，并拒绝十八种内存中的 accessor 变异及错误源码 SHA；重验不是新设备执行。
-getter/setter 阶段达到 **23/5/6**；上方特性完成使当前清单达到 **27/1/6**，仍是 34 行。
+getter/setter 阶段达到 **23/5/6**；当前计数见特性清单。
 
 ### 覆盖固定教程的重载
 
@@ -762,7 +786,7 @@ const values = unionOf<Value>(
 native 生命周期、不透明递归/native 域及其它不支持的叶子类型，仍有各自限制。
 本次“已支持”指**固定教程的联合形态**，不是其它部分支持/不支持行的所有笛卡尔组合。
 
-`PandaCheckUnion.test.ets` 是独立库一致性设备夹具，覆盖七臂、真实方法/原型、
+上游 `tests/hap_union_test.ets` 是独立库一致性设备夹具，覆盖七臂、真实方法/原型、
 新实例、seed 重放和 class 阈值收缩；不把它称作生产 SUT 测试任务。
 生产关联另由 `fmbot-pbt build-run` 在未改动的应用源码上验证。
 
@@ -794,8 +818,7 @@ arbitrary 的 `show`，Date 反例仍为 `Date(ms)`，不依赖本地时区。
 nullish Date 联合。Date 对象字段及其数组组件使用独立对象字面量协议；根 Date
 数组/默认实参、普通 static Date 字段和不透明构造仍保留限制。Date getter/setter 使用上方 accessor 协议；真实 SUT 的
 backing field 不等于任意字段袋构造。导入/链式 Date 别名与泛型 Date 默认值是可见
-元数据，适用对应 Date 覆盖或不支持底层域门禁。这些残余限制不升级其它行；
-默认值完成后的当前清单是 **27/1/6**。
+元数据，适用对应 Date 覆盖或不支持底层域门禁。这些残余限制不升级其它行。
 
 ### interface 字段袋中的字符串字面量字段
 
@@ -815,8 +838,7 @@ backing field 不等于任意字段袋构造。导入/链式 Date 别名与泛�
 和覆盖输入字段都会被拒绝。
 
 上方对象字面量协议也支持兼容字面量的数据类、嵌套/数组字段袋及转义字面量。
-不透明递归形态和不可用联合臂仍 retired。当前清单为 **27 已支持 / 1 部分支持 /
-6 不支持**。
+不透明递归形态和不可用联合臂仍 retired。
 
 ## 什么时候算 HAP
 
@@ -902,9 +924,48 @@ ArkTS 但缺清单、又要用自由入口 `fmbot-pbt` / `-p` 时，只在**这�
 
 ## 怎么跑
 
-`--target` 是被测的 `.ets` / `.ts` 文件（或装着它们的目录）；它所在的 git
-仓库存放生成的测试和默认的 `pbt-out/`。`--build-dir` 是 `--build-cmd` 的执行
-目录，通常是 HAP 或 HAR 工程。两者必须在**同一份 git 检出**里。
+`--target` 选择被测源码范围：仓库、目录或 `.ets` / `.ts` 文件。它所在的 git 仓库
+存放生成的测试和默认的 `pbt-out/`。`--build-dir` 是 `--build-cmd` 的执行目录，
+通常是 HAP 或 HAR 工程。两者必须在**同一份 git 检出**里。
+
+### 运行整仓测试任务
+
+先完成[准备检查](#首次测试任务前的检查清单)。将 `--target` 指向仓库根目录，
+不传 `--func`、`--diff`、`--commit` 或 `--isolate`。也不传 `--whole`，它只用于 `hook-run`。
+
+```bash
+fmbot-pbt build-run \
+  --target /path/to/app --build-dir /path/to/app \
+  --sdk /path/to/matching-sdk \
+  --device-target 127.0.0.1:10001 --test-module entry_test \
+  --effort standard --out /path/to/new-pbt-out \
+  --build-cmd 'hvigorw assembleHap --mode module -p product=default -p module=entry@default@ohosTest --no-incremental --no-daemon'
+```
+
+使用已验证可构建的 Hvigor 产品和模块、匹配 `compileSdkVersion` 的 SDK，以及
+`hdc list targets` 列出的设备。`entry_test` 仅是示例，请填写所选
+`src/ohosTest/module.json5` 的 `module.name`。`--test-module` 选择设备测试套件所在的
+模块，不改变源码扫描范围。加 `--tui` 可交互查看运行过程。
+
+示例同时构建应用和测试 HAP。请为所选产品设置
+`buildOption.strictMode.useNormalizedOHMUrl: true`。若产品未设置此项，请在每个选中的构建模式中显式启用它；
+构建模式不能覆盖产品显式设置的 `false`。若直接传入 `module=entry@default`
+之类仅构建应用的命令，预检会另行准备私有 `ohosTest` 构建。若该构建报缺少
+`default@SyscapTransform` 等应用构建任务，请改用上面已验证可用的联合构建形式，
+同时保留 `default` 和 `ohosTest`。
+
+整仓扫描不等于测试每个函数。若生成了 `SCAN_COVERAGE.md`，可查看已读文件及测试
+候选项。通过[设备回执](../arkts-device.zh.md#设备结果)查看实际执行的具名用例，通过
+`report.json` 查看判定。无界面的源码测试任务可能在完成前就写出报告：退出 `0` 表示
+交付已验证，不代表所有性质都通过；退出 `2` 表示交付未完成。若后续修改
+`List.test.ets` 使早先回执失效，应在[恢复或离线收尾](../subcommands.zh.md#恢复与离线收尾)
+前使用最终的签名包验证受影响的套件，并保留先前结果。
+
+超过[实现文件清单的 400 文件上限](../subcommands.zh.md#测试深度)时，即使运行了部分性质，
+结果也仍不完整。请在同一修订版本分别运行，以模块目录（或更小的子目录）为 `--target`，
+并为每次运行使用独立的 `--out`。
+
+### 运行单个函数
 
 SUT 在 HAP 工程内时：
 

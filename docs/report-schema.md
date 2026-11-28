@@ -363,6 +363,24 @@ and the ordered `{ tool, instruction }` entries in `details.correction.steps`
 change `report.json` or the correction limits. Once that correction is parked
 or the campaign is stopped, no retry plan is returned.
 
+For a passing property that originally filed a device bug, keep the bug and its
+failing observation. Use `record_property` with the same ID, `status: "passing"`
+and `reverified: { "fromDeviceReceipts": true }`. The tool reads the original
+observation and a later passing receipt from the same campaign, device and case.
+The replay must identify the actual input; a green suite, a seed or the case
+name alone is not enough. The bundled ArkTS sign-and-run card explains how the
+deterministic case captures `FMBOT_REPLAY_V2` from the actual typed input on both runs. Copy the failing observation's `typedWitness.counterexample` verbatim into the failing property; the primary bug inherits it. Displays and legacy V1 markers cannot certify an exact replay. All captured files, including expected-value fixtures, must stay unchanged.
+The `reverified` history entry stores `bugId`, `observationIds`, `runId`, the
+exact `counterexample`, command and output. This historical backlink permits the
+bug to stay in the report without claiming the passing property still fails. A secondary property linked to that bug keeps its own witness: on the transition from failing, a `device-link` history entry preserves its `bugId`, `formal` and `observationIds`. It cannot borrow the primary property's replay.
+
+When several entries need correction, `details.correction.pendingReplays`
+lists their IDs even when no design note needs editing. Work through them before spending another summary attempt:
+record each replay, then correct its note with `record_design`. A newly proved
+ID refreshes the five-minute deadline for the rest; a retry does not. Re-run
+close-out review on the finished records. Leave an unmatched witness or changed
+assertion unresolved rather than editing the note away.
+
 If a stored Design Caveat blocks `record_summary`, correct that record first.
 For failure prose or a cited limitation, the original claim or note must name
 one recorded witness: the exact function call, or an explicit reference such

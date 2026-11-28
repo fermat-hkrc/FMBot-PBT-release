@@ -2,13 +2,13 @@
 
 [中文](usage.zh.md)
 
-fmbot-pbt has two modes:
+fmbot-pbt has three modes:
 
-| | Mode 1: while you develop | Mode 2: merge-request gate |
-|---|---|---|
-| Used by | a developer explicitly starting tests in fmbot-pbt or a coding agent | the CI pipeline |
-| Tests | the current change, uncommitted changes included | every change in the merge request |
-| Result | a report and generated code in the project's test tree | the exit code passes or fails the pipeline; the report is a pipeline artifact |
+| | Mode 1: while you develop | Mode 2: merge-request gate | Mode 3: full-repo campaign |
+|---|---|---|---|
+| Used by | a developer explicitly starting tests in fmbot-pbt or a coding agent | the CI pipeline | a developer auditing the whole repository |
+| Tests | the current change, uncommitted changes included | every change in the merge request | the whole repository, not only a change |
+| Result | a report and generated code in the project's test tree | the exit code passes or fails the pipeline; the report is a pipeline artifact | a report and generated code in the project's test tree |
 
 First install fmbot-pbt and configure a model: [installation guide](installation.md).
 
@@ -53,19 +53,9 @@ fmbot-pbt build-run --build-dir /path/to/project \
   --build-cmd "cmake -S . -B build && cmake --build build --target parser_test"
 ```
 
-Repeat `--spec` for several documents; omit it when none exists. Testing uses the current checkout: do not edit that
-copy until it finishes; keep developing in another checkout. Read `pbt-out/REPORT.md`, review the generated tests in
-the project's test tree, then commit them with the code. MCP delegation parameters: [reference](subcommands.md#mcp).
-
-## Campaign scope and completeness
-
-A `--target` at the repository root selects the whole repository, not a coverage certificate. Above 400 implementation files, the bounded inventory
-cannot certify completeness: manual findings remain partial/inconclusive (exit 2), even with workers disabled. Prefer bounded
-per-module campaigns at the same revision with separate `--out` directories.
-
-The CLI and in-session skill share this gate; `campaign_result` and `finalize` recheck saved scope context too. Nested `pbt-out/`
-reports inherit their parent checkpoint; hook/session fallback layouts retain the original output context. Malformed scope/exemption
-fields or an unavailable recorded source root remain inconclusive (exit 2). Keep the checkpoint with the campaign outputs; never edit it to clear a gate.
+Repeat `--spec` for several documents; omit it when none exists. For large repositories, test one module directory at a
+time with separate `--out` directories. Do not edit the active checkout until the run finishes. Read `pbt-out/REPORT.md`,
+review the generated tests in the project's test tree, then commit them with the code. MCP delegation: [reference](subcommands.md#mcp).
 
 ## Mode 2: merge-request gate
 
@@ -82,6 +72,20 @@ fields or an unavailable recorded source root remain inconclusive (exit 2). Keep
 5. Upload `REPORT.md`, `report.json` and `bug_reports/` from `/tmp/pbt-out` as pipeline artifacts.
 
 Complete GitHub Actions and GitLab CI configurations: [CI examples](ci-examples.md).
+
+## Mode 3: full-repo campaign
+
+Test the whole current repository instead of one change: fmbot-pbt finds the targets most worth testing, writes the
+properties and runs them, and reports the bugs it finds. Start `fmbot-pbt` in the repository and ask in plain language
+(or `/skill:pbt-workflow`), or run the same request unattended:
+
+```bash
+fmbot-pbt -p "Run property-based testing (PBT) on this repository: find the targets most worth testing, write the properties and run them, and produce bug reports."
+```
+
+State the depth in the request (e.g. `effort set to thorough`) or via `PBT_EFFORT`; on a large repository, name
+one module per request. Artifacts land in `pbt-out/`, generated tests in the project's test tree, as in mode 1. The
+exit code of a `-p` run is not a verdict: read `pbt-out/REPORT.md`.
 
 ## Results
 

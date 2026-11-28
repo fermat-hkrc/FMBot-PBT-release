@@ -71,8 +71,8 @@ fmbot-pbt coverage --diff <sha> --project-dir .
 `--json` 互斥。
 
 `--diff` 先解析 `<sha>^..<sha>` patch 中的新增行，尝试识别 C/C++、Python、Rust、Go
-函数定义。识别到函数时按函数名筛选索引；识别不到时退化为“改动文件中的所有索引
-函数”。当前文件匹配只保留 basename（文件名最后一段）并做后缀匹配，同名文件可能混淆。
+函数定义。对每个改动文件分别确定范围：若有可计入的函数定义，则按路径和函数名筛选；
+否则纳入该文件中的所有索引函数。例如，一处新增定义不会遮住另一文件中只修改函数体的候选。
 所以 diff 段是启发式的登记表视图，不能笼统称为“实际被修改函数”的精确集合，也不是
 行覆盖率或分支覆盖率。
 
@@ -116,7 +116,9 @@ fmbot-pbt coverage --diff <sha> --project-dir .
 ```
 
 解析器会去掉常见 Markdown 强调和反引号，但函数名、路径等字段最好保持纯文本，避免
-竖线等表格分隔符破坏列解析。`Source File` 是相对扫描根的路径。
+竖线等表格分隔符破坏列解析。自动生成的索引用 `Source path base` 记录扫描根，`Source File` 是相对该目录的路径。所以 `--dir src` 的 `lib/index.ts` 只代表 `src/lib/index.ts`。移动源码树后，应重新生成索引。
+
+手写索引没有 `Source path base` 时，整范围完整性检查按仓库相对路径匹配。`PLAN.md` 的 `Skipped modules` 同样可用仓库相对路径。只有文件名或去掉扩展名的名称在整个范围内唯一时，才能简写；有重名时写 `packages/a/index.ts`，根目录文件写 `./index.ts`。
 
 ### `pbt-out/COVERAGE.md`
 
@@ -252,12 +254,10 @@ agent 也可能写它。`fmbot-pbt coverage` 在找不到 `COVERAGE.md` 时会�
 | Test gaps                                | 0                |
 ```
 
-- 若新增行能匹配受支持的函数定义正则，函数名集合用于筛选索引；匹配只按函数名，重载或
-  不同文件同名函数可能产生歧义。
-- 若没有识别出函数定义，则回退为改动文件中索引到的全部函数；此时报告会明确写
-  `functions in changed files (function-level scope unavailable)`。
+- 同一提交可以同时包含按定义匹配的文件和按整个文件计入的文件。后者是估算范围，
+  也可能包含未修改的索引函数。
 - `PBT candidates (changed)` / `Tested` / `Test gaps` 同口径：存在函数索引时，分子分母都是
-  范围内**索引候选**（函数名 + 路径后缀连接台账登记，聚合单元格逐函数展开）；
+  范围内**索引候选**（函数名 + 对齐后的文件路径连接台账登记，聚合单元格逐函数展开）；
   diff 新增且索引未收编的函数经 extraEntries 进入同一分母。无索引时双取 registry 登记行。
   都不是运行时命中数。
 

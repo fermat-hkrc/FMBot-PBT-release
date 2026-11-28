@@ -25,11 +25,12 @@ The links above always fetch the latest stable release. Test builds (`v0.5.0-bet
 **Pre-release** on the [releases page](https://github.com/fermat-hkrc/FMBot-PBT-release/releases) and are never
 served as the latest.
 
-## Two modes
+## Three modes
 
 - **While you develop:** invoke `/skill:pbt-build-run` with documents, scope, build command and effort; see the [usage guide](docs/usage.md).
 - **Merge-request gate:** `fmbot-pbt hook-run <MR head commit> --base <base commit>` in the pipeline; the exit code
   passes or fails it. Configurations: [CI examples](docs/ci-examples.md).
+- **Full-repo campaign:** ask in plain language for property-based testing on the whole repository; see the [usage guide](docs/usage.md#mode-3-full-repo-campaign).
 
 Inputs (documents, optional; code; build command, optional) and outputs: [usage guide](docs/usage.md#inputs-and-outputs).
 Step by step: [usage guide](docs/usage.md). Every command and flag: [reference](docs/subcommands.md).
@@ -54,11 +55,12 @@ tar -xJf fmbot-pbt-linux-x64.tar.xz && cd fmbot-pbt-linux-x64 && ./install.sh
 上表链接始终下载最新的正式版。测试版（如 `v0.5.0-beta.1`）在[发布页](https://github.com/fermat-hkrc/FMBot-PBT-release/releases)标为
 **Pre-release**，不会作为最新版下发。
 
-两种用法：
+三种用法：
 
 - **边开发边用：**显式调用 `/skill:pbt-build-run`，给出文档、代码范围、构建命令和 effort，见[使用指南](docs/usage.zh.md)。
 - **MR 门禁：**在流水线里运行 `fmbot-pbt hook-run <MR 头提交> --base <基准提交>`，退出码决定流水线是否通过。
   配置见 [CI 配置示例](docs/ci-examples.zh.md)。
+- **全量模式：**用自然语言对整个仓库做性质测试，见[使用指南](docs/usage.zh.md#模式三全量模式)。
 
 输入（文档可选、代码、编译命令可选）与输出见[使用指南](docs/usage.zh.md#输入与输出)，分步说明见[使用指南](docs/usage.zh.md)，全部命令与参数见[参考手册](docs/subcommands.zh.md)。
 

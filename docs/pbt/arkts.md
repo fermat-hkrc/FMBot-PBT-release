@@ -3,6 +3,7 @@
 [中文版 / Chinese version](arkts.zh.md)
 
 [Before your first campaign](#before-your-first-campaign) ·
+[Run a whole repository](#run-a-whole-repository) ·
 [ArkUI support roadmap](#arkui-support-roadmap) ·
 [Installation](../installation.md) · [Subcommands](../subcommands.md)
 
@@ -20,6 +21,13 @@ This is not Kea. This is not OpenHarmony GN C++. Host `es2panda`/`ark`
 the **separate** `panda-build-run` cards for real host Panda test trees, not HAPs.
 Keep their toolchains, module sources and verdicts separate; a host result does
 not establish HAP device execution.
+
+For a declared `ohosTest` target without a harness, preflight puts `TestAbility.ets`
+under `ets/testability/` beside the page directory. Before running Hvigor, it
+checks that the selected test manifest's `srcEntry` paths and the generated paths
+in `arkts-preflight.json` name regular files with the exact on-disk casing. If
+this check stops the run, correct the named path and relaunch. Use a new `--out`
+if you intentionally moved files listed in the prior output's setup record.
 
 ## HAP seeds and replay
 
@@ -77,6 +85,18 @@ The original graph is also read-only. `--build-cmd` is
 replaced by `assembleHap … entry@ohosTest` after `ohpm install` in that HAP.
 Isolate STOP and a failed `ohpm install` exit 3, same as a failed build gate.
 
+Use `--isolate --isolate-test-sdk 26.0.0` when you explicitly need an API-26 minimum
+in the generated test HAP. The SDK must still match the source product's `compileSdkVersion` if pinned.
+The option sets the **generated test product's** minimum, raising its `targetSdkVersion` only if needed.
+It does not change the shipping profile. PandaCheck 0.1.4 already links at API 20; no override is needed for matching products.
+Preflight checks Hvigor's ohosTest compiler target and PandaCheck bytecode input, installs a freshly
+signed app/test pair and requires `ActsAbilityTest#assertContain` to pass on the selected device.
+`<out>/arkts-preflight.json` records the declared and observed APIs, HAR SHA-256 and named result
+under `testLink`. Link, signing, install or case errors stop the campaign; the readiness case is
+not property coverage. Without this option the usual compatibility check still applies.
+
+For a [whole-repository run](#run-a-whole-repository), use `build-run` against the original project without `--isolate`. A declared minimum below PandaCheck 0.1.4's API-20 floor stops before building; an API-26 SDK or device does not override that limit. For a supplied combined app/test command (for example `entry@default@ohosTest`), preflight sets aside cached companion and test HAPs so both can be packaged afresh. With a direct app-only Hvigor command, preflight keeps PandaCheck out of the shipping build, even if normalized URLs are already enabled. It builds `ohosTest` in a private copy and verifies the linked dependency and a named readiness case. It does not raise the original product's minimum.
+
 Resources: literal `app.string.*` entries are copied from the owning source module, with
 qualifiers and string aliases; calls inside copied ArkUI builder bodies are kept, but no
 ArkUI tests are generated. Missing, dynamic, unsupported or ambiguous resources stop
@@ -117,7 +137,7 @@ types, call shapes, and modules. It is not a percent of ArkTS.
 `let`, `const`, inference, `void`, operators, `if` / `switch` / loops, and
 `this` are syntax. They are not in the count. A property does not draw them.
 
-**27 supported, 1 partial, 6 not supported** on this 34-row checklist.
+**28 supported, 2 partial, 4 not supported** on this 34-row checklist.
 Supported means a passing or failing property can use that form, and a
 close-out gate requires it. Partial means only some forms of that tutorial
 heading are drawn or caught. Not supported means we do not draw it, or the
@@ -129,7 +149,7 @@ honest close is `retired`.
 | `bigint` | supported | `bigint()`. `integer()` is not `bigint`. |
 | `boolean` | supported | `boolean()`. |
 | `string` | supported | `string()`. |
-| `Object` | not supported | Bare `Object`, aliases of bare `Object` and direct Object/nullish annotations retire. Only the bounded nullable-Object alias recipe below accepts real-constructor representatives; it does not provide universal SDK/object construction. |
+| `Object` | partial | For a required bare `Object` or its alias, draw the tutorial’s three representatives: `string`, finite `number`, and `string[]`. Each has its own `unionCase` and shrinks within its shape. This is not a generator for all objects or SDK classes. |
 | array of `number` / `string` / `boolean` | supported | `array(integer())`, `array(string())`, or `array(boolean())`. A bare element is rejected. A non-empty array of a `number`/`string`/`boolean` bag, including SDK `FingerInfo[]`, is `array(recordOf(fn, show, shrinkName), { minLength: 1 })`. Empty `T[]` when `T` is SDK branded (`ImageItem[]`, `Length[]`) may only be `[]` / `constant([])`. |
 | `enum` | supported | `constantFrom` of every member in the same file, or one relative import. A second hop is invisible. |
 | union | supported | The pinned tutorial's class/primitive/nullish unions use typed `unionOf` / `unionCase`: real constructor instances retain `instanceof` and methods, with per-arm shrinking and complete-arm close-out checks. Primitive/literal and interface-bag legacy forms remain only in test files without `unionOf`. Resolved Date and scalar/primitive-array compositions are also supported. This is union composition, not automatic construction of opaque SDK/native leaves; unavailable underlying types still retire. |
@@ -142,7 +162,7 @@ honest close is `retired`.
 | class or `struct` with fields | supported | Every instance field needs a drawn constructor argument or a complete public field assignment, including method-bearing classes. Constructor recipes also need complete display/shrinking. Public data classes may use contextual literals/typed `recordOf`; `record` only has numeric XY/WH/LTRB shapes. Constructor defaults are not open-field draws. |
 | `static` field or method | supported | A public static method with a `number`, `string`, or `boolean` parameter must be called as `Class.method(drawn)`. A public static field of those types, including an unannotated `= 0`, `= 'albumType'`, or `= true`, is `Class.field = drawn` and a read of `Class.field` in that property callback. A readonly field is read. A private or protected field, a non-exact type, and a field of `Date` stay outside. |
 | getter / setter | supported | Tutorial `Person4.age`, getter-only and setter-only forms, plus Date and supported underlying domains. Actual public instance/static ownership, fresh receivers, typed constructor/setter draws, same-receiver observed reads, bounded getter inference and per-operation catches are checked. Private state, substitutes and unavailable underlying domains do not count. |
-| inheritance, `super`, abstract class | not supported | Not constructed. |
+| inheritance, `super`, abstract class | partial | Direct method dispatch through a base parameter with a concrete source subclass and one scalar constructor argument. |
 | `private` / `protected` field | not supported | The suite must not edit `--target` to expose it. |
 | object literal | supported | Tutorial contextual initialization, assignment, arguments, typed returns, array elements and nested fields use actual source-resolved interface/public data-class types. Direct/shorthand literals retain typed draws; composed `recordOf(generate, show, shrink)` recipes support available nested fields, Date/bigint/matrices, literals/enums, fixed tuple fields, optional values and real constructor leaves. Complete field generation/display and one-component shrinking are checked. No constructor substitution, private/ArkUI/Sendable/native synthesis or source rewriting. |
 | `Record<K, V>` | supported | String keys use `dictionary(string(), values)`; numeric keys use `numericDictionary(integer(), values)`. Complete typed values include tutorial `PersonInfo` bags, primitives, Date/bigint, arrays and nested maps. Aliases and supported wrappers retain unchanged typed SUT arguments, complete component display/shrinking, key caps and collision safety. See the exact boundaries and real HAR/HAP/device plus `build-run` delivery evidence below. |
@@ -154,7 +174,7 @@ honest close is `retired`.
 | nullish `T` or `null` / `undefined` | supported | Complete `unionOf` / `unionCase` cases; legacy `arkNullish` only in a test file without `unionOf`. The call must not use `!` or `??` to drop the arm. |
 | named import of `--func` | supported | A passing or failing property must import the file and call that symbol. |
 | import alias or namespace | supported | `id as ident` and `ids.id(...)` count. A sibling call does not. |
-| default export | partial | A default-exported function is supported: it must be imported as the default and called. The tutorial's class/value defaults (for example, `export default new Demo()`) are not drawn. |
+| default export | supported | Call the default-imported function. For `export default class Demo`, construct the imported class inside each trial. For `export default new Demo()`, call the scoped stateless method on the imported instance itself. See [default receivers](#default-receivers) for the supported method shapes. |
 | dynamic `import()` | not supported | The result is `ESObject`. |
 | `throw` / `try` | supported | A throw in `--func`, a same-file callee, a direct import, or up to four hops must be caught. A fifth hop is invisible. |
 | `@interface` annotation | not supported | Not a value. |
@@ -162,6 +182,14 @@ honest close is `retired`.
 
 `@Sendable` is in the kit overview, not in this tutorial. A Sendable parameter
 is `retired`. Do not add it to this count.
+
+### Default receivers
+
+A default import can have any local name; its declaration determines how to call it. For a class export, use `const calc = new Calculator()` **inside** the predicate, then `calc.add(a, b)`. For a singleton export, call `service.checkStrIsEmpty(s)` directly on the default import. The class need not be exported separately. Do not construct a substitute, alias or modify the singleton, or call a sibling method. Pass distinct, unchanged typed draws to the scoped method and check its result.
+
+This receiver recipe covers synchronous public methods with explicit scalar parameters and results. A singleton must be a fieldless local class with empty construction; the method must return a stateless expression of its arguments (including string `trim()` and `.length`). Shared mutable services, lifecycle hooks and opaque factories are not covered. Existing default-function and specialized receiver protocols are unchanged.
+
+Two scoped `build-run` campaigns against unchanged OpenHarmony app-sample sources at `a136cc211f1ea19d5aa2f539fc6cd32bed08ab91` verified the distinction. On the API-26 emulator, `CheckEmptySingletonPbt` passed three blank-string classification cases on the exported `CheckEmptyUtil` instance; `EidcAdditionPbt` passed three numeric addition cases on fresh `EidcCalculator` instances. Each report accepted all three properties. The source checkout retains the executed suites, named Hypium output and signed HAP/source fingerprints in `test/fixtures/arkts/default-exports/`.
 
 ### Explicit IEEE-754 numeric domains
 
@@ -217,7 +245,7 @@ the exact GitHub revision using authenticated `gh`. Offline CI needs no sibling
 checkout or cross-repo token; missing online read access is an error, not success.
 
 The older #710 evidence below remains historical; it did not use `ieeeDouble`.
-The inventory stays **27/1/6**: this extends number sampling, not a new language row.
+This extends number sampling, not a new language row.
 
 On 2026-11-11 a newly rebuilt fmbot-pbt binary drove `build-run` on unchanged
 `hap_defaults_types.ets#read`. It authored `DefaultBoxReadIeeePbt.test.ets` with
@@ -322,7 +350,7 @@ Scoped SHA-256 remained
 the supplied suite stayed byte-identical. Report and required independent-review
 validation passed. This preprovisioned callable fixture in the original project is not a new
 CLI-isolation E2E, production-app/native-lifecycle proof or measured code coverage.
-Only the generic-default row is newly promoted: **27/1/6**, still 34 rows.
+That campaign promoted only the generic-default row, independently of default exports.
 
 ### Tutorial-complete generic constraints
 
@@ -705,8 +733,7 @@ it does not claim production Date/bigint/matrix coverage. Final compiled-JS
 read-only replay accepted the ledger and rejected seventeen in-memory mutations
 plus a wrong source SHA; replay is not another device run.
 
-Object-literal support remains unchanged. With interface, constraint and default completion above,
-the current checklist is **27 supported / 1 partial / 6 not supported**, still 34 rows.
+Object-literal support remains unchanged by the interface and generic-default campaigns.
 
 ### Tutorial-complete type aliases
 
@@ -730,9 +757,16 @@ their own underlying protocol.
 
 Only a source parameter naming an alias of exactly `Object | null` or
 `Object | null | undefined` uses complete `unionOf` cases with fresh accessible
-real-constructor representatives. Bare `Object`, its aliases, direct Object/nullish
-annotations and Object arrays/other unions retire. Plain objects must not stand
-in for a nominal SUT class.
+real-constructor representatives. For a required bare `Object` or its alias, use
+`unionOf<Object>` with `string()`, `integer()` (or `double()`), and `array(string())`
+in three typed cases. Use `typeof` for the scalar cases and `Array.isArray` for the
+array. Pass the draw unchanged before branching on shape. Direct Object/nullish
+annotations and Object arrays/other unions still retire.
+
+An API-26 `build-run` on OpenHarmony Settings’ unchanged `values(obj: Object)`
+verified length, order, and fresh results. All three shapes reached the function.
+A separate intentional failing array property shrank and replayed on seed `76219`;
+this was not a Settings bug or evidence for application-specific metadata objects.
 
 Resolution follows lexical scopes/namespaces, generic substitutions/dependent
 defaults, relative imports/re-exports and local OHPM `file:` source entries.
@@ -837,8 +871,7 @@ function models drove captured effects through stored real callbacks and public
 lifecycle methods. No SUT, SDK or product manifests were rewritten. This is a
 production delivery anchor, not app proof of every intrinsic/import/return form.
 
-Function support does not promote unrelated domains. With interface, constraint and default completion above,
-the current checklist is **27 supported / 1 partial / 6 not supported**.
+Function support does not promote unrelated domains.
 Untyped `Function`, `ESObject`, dynamic imports, unknown native lifecycles,
 Sendable and inaccessible/inherited constructors retain their separate limits.
 Optional/defaulted/composed callback **parameters**, arbitrary generic/async
@@ -908,8 +941,7 @@ not edit it. No SUT, SDK or product-manifest rewrites. This application anchor
 covers boolean store/read, not Date usage or asynchronous timer semantics.
 Compiled-JS read-only replay accepted the ledger, rejected eighteen in-memory
 accessor mutations and rejected a wrong source SHA. Replay is not another device
-run. The getter/setter milestone reached **23/5/6**; the completed features above
-bring the current inventory to **27/1/6**, still 34 rows.
+run. The getter/setter milestone reached **23/5/6**; see the feature inventory for current totals.
 
 ### Tutorial-complete overloads
 
@@ -1012,7 +1044,7 @@ opaque recursive/native domains and unsupported leaf types keep their own
 limitations. This promotion covers the **pinned tutorial's union forms**, not all
 cross-products of the other partial/unsupported checklist rows.
 
-The portable `PandaCheckUnion.test.ets` library conformance fixture exercises all
+The portable upstream `tests/hap_union_test.ets` library conformance fixture exercises all
 seven arms, real prototypes/methods, freshness, seeded replay and class threshold
 shrinking on a device. That fixture is not a production SUT campaign; production
 linkage is separately checked through `fmbot-pbt build-run` on unchanged app source.
@@ -1054,8 +1086,7 @@ inputs, plain static Date fields and opaque construction retain their separate l
 above; a real SUT backing field is not arbitrary bag construction.
 Imported/chained Date aliases and generic Date defaults are visible metadata:
 the corresponding Date coverage or unsupported-underlying-domain gate applies.
-These remaining Date limitations do not promote additional rows; the current
-checklist after default completion is **27/1/6**.
+These remaining Date limitations do not promote additional rows.
 
 ### String-literal fields in interface bags
 
@@ -1079,8 +1110,7 @@ fields, unused generators, and overwritten inputs are rejected.
 
 The object-literal protocol above also covers literal-compatible data classes,
 nested/array literal bags and escaped literal syntax. Opaque recursive shapes
-and unavailable union arms still retire. The current checklist is **27 supported /
-1 partial / 6 not supported**.
+and unavailable union arms still retire.
 
 ## When a tree is a HAP
 
@@ -1174,10 +1204,56 @@ ArkTS but missing the manifests, set `PBT_HAP=1` **on that command only**.
 
 ## How to run it
 
-`--target` is the `.ets` / `.ts` file under test (or a directory of them);
-its git repository receives the tests and the default `pbt-out/`.
+`--target` sets the source scope: a repository, a directory, or an `.ets` / `.ts` file.
+Its git repository receives the tests and the default `pbt-out/`.
 `--build-dir` is where `--build-cmd` runs, usually the HAP or HAR project.
 Both must be in the **same git checkout**.
+
+### Run a whole repository
+
+Complete the [preflight checklist](#before-your-first-campaign) first. Set `--target`
+to the repository root, and omit `--func`, `--diff`, `--commit`, and `--isolate`.
+Do not add `--whole`; that flag belongs to `hook-run`.
+
+```bash
+fmbot-pbt build-run \
+  --target /path/to/app --build-dir /path/to/app \
+  --sdk /path/to/matching-sdk \
+  --device-target 127.0.0.1:10001 --test-module entry_test \
+  --effort standard --out /path/to/new-pbt-out \
+  --build-cmd 'hvigorw assembleHap --mode module -p product=default -p module=entry@default@ohosTest --no-incremental --no-daemon'
+```
+
+Use the product and module from your working Hvigor build, the SDK that matches
+its `compileSdkVersion`, and a device from `hdc list targets`. `entry_test` is an
+example: use the `module.name` from the selected `src/ohosTest/module.json5`.
+`--test-module` selects the device test harness, not the source scope. Add `--tui`
+to watch the run interactively.
+
+The example builds the app and test HAPs together. Set
+`buildOption.strictMode.useNormalizedOHMUrl: true` on the selected product. If the
+product leaves it unset, each selected build mode must explicitly enable it; a
+mode cannot override an explicit `false` on the product. For a direct
+app-only command such as `module=entry@default`, preflight instead prepares a
+private `ohosTest` build. If that build reports a missing companion task such as
+`default@SyscapTransform`, use a working combined selector as shown, keeping both
+`default` and `ohosTest`.
+
+A repo-wide scan does not run a test for every function. `SCAN_COVERAGE.md`, when
+present, lists what was read and which candidates were found. Check
+[device receipts](../arkts-device.md#device-results) for the named cases that ran
+and `report.json` for their verdicts. A headless source campaign can write a report
+before it completes: exit `0` means verified delivery, not that every property
+passed; exit `2` means delivery is incomplete. If a later edit to `List.test.ets`
+invalidates earlier receipts, verify the affected suites on the final signed pair
+and retain their earlier results before [resuming or finalizing](../subcommands.md#resume-and-offline-completion).
+
+A run above the [400 implementation-file inventory limit](../subcommands.md#depth)
+remains partial, even if some properties ran. Use separate runs at the same
+revision with module directories (or smaller subdirectories) as `--target` and
+a fresh `--out` for each.
+
+### Run one function
 
 When the SUT is inside the HAP project:
 
@@ -1425,7 +1501,7 @@ follow-ups; finding an export does not establish that it can run on a device.
 
 | Work item | What to validate |
 |---|---|
-| [#809: `@Observed` V1](https://github.com/fermat-hkrc/FMBot-PBT/issues/809) | [CommunicationSetting validation](#v1-model-validation-communicationsetting): blocked at SDK setup, before any property ran. |
+| [#809: `@Observed` V1](https://github.com/fermat-hkrc/FMBot-PBT/issues/809) | [Browser](#v1-model-validation-browser): three recorded properties passed on the emulator. The separate [CommunicationSetting attempt](#v1-model-validation-communicationsetting) remains blocked. |
 | [#811: Export discovery](https://github.com/fermat-hkrc/FMBot-PBT/issues/811) | Compare `fmbot-pbt scan` results for the same plain export with and without a component in its `.ets` file. Do not promote component methods to callable targets. |
 | [#812: `@ObservedV2` and `@Trace`](https://github.com/fermat-hkrc/FMBot-PBT/issues/812) | [HanZi validation](#v2-model-validation-hanzi): three accepted properties passed on the emulator for [#830](https://github.com/fermat-hkrc/FMBot-PBT/issues/830). The earlier [Photos attempt](#v2-model-validation-openharmony-photos) remains blocked and is not a prerequisite. |
 | [#813: Logic used by builders or watchers](https://github.com/fermat-hkrc/FMBot-PBT/issues/813) | [HanZi builder helper](#hanzi-builder-helper-validation): the original stroke-duration helper passed three properties on the emulator. The separate [Players watcher attempt](#players-watcher-helper-validation) remains blocked at build time. |
@@ -1712,8 +1788,18 @@ The API-26 x86_64 emulator completed **three passing cases** in `CatalogPinyinPb
 `28da31d7-8b81-4a12-b3cf-4ed74c0c7050` binds the model, generated suite,
 registration and runner to the installed signed test HAP (SHA-256
 `3cf15708b40578853739286f2a496216b78ae4eea3131f8224b26a7124f3ebb7`). All three
-properties were accepted; no bug was found. This validates that narrow V2
-receiver recipe, not observation dispatch, UI bindings or async properties.
+properties were accepted; no bug was found. The executed suite, headless runner
+changes, Hypium stdout and receipt excerpt are in the source checkout at
+`test/fixtures/arkts/hanzi-catalog-pinyin/`. This is the device evidence for
+[#812](https://github.com/fermat-hkrc/FMBot-PBT/issues/812), not the separate
+FilePicker Hypium smoke test. It does not cover async properties, UI bindings
+or observation dispatch.
+
+**Default preflight on retry (2026-11-22).** At `ac72259df` the standalone HanZi
+build passed. The default `build-run` preflight exited 3 because HanZi declares
+`6.1.0(23)`, below the API-26 link minimum of PandaCheck 0.1.3 used in that run.
+The test link was not attempted. No property ran; the three passes above are from
+November 19.
 
 #### V2 model validation: OpenHarmony Photos
 
@@ -1772,7 +1858,34 @@ out of scope.
 
 #### V1 model validation: Browser
 
-On an OpenHarmony API-26 emulator, Browser `889c7fb13` was tested with FMBot
+**Verified on 2026-11-22.** A source-scoped `build-run` tested Browser's exported
+[`BookmarksViewModel.toggleSelect(id)`](https://gitcode.com/thanhtoantnt/applications_browser/blob/889c7fb13f643ada462f8fc310b501f6515a7a9d/feature/bookmark/src/main/ets/BookmarksViewModel.ets#L19-L52).
+The `entry` HAP imported the original `@Observed` class from `bookmark`. Each
+trial constructed a fresh model, toggled drawn string IDs and inspected
+`selectedIds` and `selectionRevision` directly. All three properties passed:
+first insertion, double toggle, and preservation of an independently selected ID
+(100 trials each). The runner did not start a UI ability or mount `BookmarksPanel`.
+
+FMBot-PBT `9bd9b944f` used OpenHarmony SDK `26.0.0.105`. Browser's default
+product builds, but its API-23 compatibility target is below PandaCheck 0.1.3's
+API-26 minimum. The run used a separate API-26 test product with the same
+Browser modules; the default product and model were unchanged.
+
+Preflight installed Browser's project-signed pair. A later debug-signed test HAP
+could not update that installation (`9568332`). On the disposable emulator, the
+existing Browser installation was removed before the debug-signed app/test pair
+was installed. `build-run` recorded three passes but exited 2: the failed install
+had not been superseded. An explicit rerun of the same named suite superseded it
+without discarding the receipt. For a new campaign, keep the installed signing
+identity or stop; do not uninstall Browser to reproduce that transition. Receipt `acd42dde-42fa-4dda-9871-82e02fd995e6` binds all three completed
+cases to the installed `entry_test` HAP (SHA-256
+`d17fecb4916615a6f0bab6f7c4123836b139650323c624344345657f7e9ef93f`) and the
+source and test inputs. `fmbot-pbt finalize` verified the receipts and marked the
+campaign complete. The source checkout contains the commands, executed suite and
+Hypium output in `test/fixtures/arkts/browser-toggle-select/`. This verifies the
+method's public state, not notification delivery, rendering, or V2.
+
+**Earlier run, not a completed campaign.** On an OpenHarmony API-26 emulator, Browser `889c7fb13` was tested with FMBot
 `d41a6ee19` plus the consumer-harness patch (binary SHA-256
 `ea3c930c24e1c169078fac38f35f36213468a14251aa12b856a852f9626d478b`). The unchanged
 `entry@default@ohosTest` build produced the project-signed `entry_test` HAP,

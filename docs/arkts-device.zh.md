@@ -6,7 +6,7 @@
 
 ```bash
 fmbot-pbt build-run --build-cmd "<构建命令>" --target <源码文件> --func <函数> \
-  --sign-apl system_basic --sign-feature hos_system_app --result-source auto
+  --sign-profile system --result-source auto
 ```
 
 `build-run` 与 `/skill:pbt-build-run` 共用以下参数、校验和执行：
@@ -14,9 +14,7 @@ fmbot-pbt build-run --build-cmd "<构建命令>" --target <源码文件> --func 
 | 参数 | 说明 |
 |---|---|
 | `--result-source auto\|stdout\|hilog` | 默认 `auto`，接受完整 stdout 或关联本次运行的设备结果 |
-| `--sign-apl normal\|system_basic` | SDK 调试 profile 的 APL，默认 `normal` |
-| `--sign-feature hos_normal_app\|hos_system_app` | 匹配的应用特性，省略时由 APL 决定 |
-| `--sign-profile normal\|system` | 对应 APL/feature 组合的简写，冲突组合会被拒绝 |
+| `--sign-profile normal\|system` | SDK 调试签名策略：`normal` 对应 `normal` / `hos_normal_app`，`system` 对应 `system_basic` / `hos_system_app`；默认 `normal` |
 | `--device-target <hdc>` | 选择设备 |
 | `--test-bundle`、`--test-module`、`--test-class` | 显式选择包、模块和 `Suite#case` |
 | `--ability-grace-ms`、`--test-ability` | 启动恢复等待时间（20000，0 禁用）与 Ability 名（`TestAbility`） |
@@ -25,13 +23,17 @@ fmbot-pbt build-run --build-cmd "<构建命令>" --target <源码文件> --func 
 
 引擎通过 `PBT_ARKTS_DEVICE_OPTIONS`（JSON）把配置传给工具，优先使用 CLI 参数，不要手工设置该变量。
 `HDC`、`JAVA` 可选择已准备好的可执行文件。
-源码测试任务按 `build-profile.json5` 确认源码所属模块。如果给定的 `ohosTest` 构建命令选择了依赖该库的 HAP，就在该 HAP 中注册测试并导入库的原始导出，保留命令中完整的模块与目标列表。重新构建、签名最新源码与测试后，用 `fmbot-pbt arkts-test --class <PbtSuite> --test-hap <current-signed-ohosTest.hap>`（或选择 `Suite#case`）验证，不得默认执行全部单元测试。包参数用于此验证命令，不用于初始 `build-run`，后者会因此选择已有产物模式。运行器安装并记录指定测试 HAP 的指纹；HAP 早于当前源码、测试输入时，结果为不确定。保留该文件和源码树以供离线收尾。通过核实的包导出或源码路径导入真实被测声明，禁止复制实现。
+源码测试任务按 `build-profile.json5` 确认源码所属模块。如果给定的 `ohosTest` 构建命令选择了依赖该库的 HAP，就在该 HAP 中注册测试并导入库的原始导出，保留命令中完整的模块与目标列表。重新构建最新源码与测试后，将项目为该设备签名的新应用包和测试包原样传给 `fmbot-pbt arkts-test --class <PbtSuite> --hap <signed-app.hap> --test-hap <signed-ohosTest.hap>`（或选择 `Suite#case`），不得默认执行全部单元测试。仅当测试包可独立安装，或已核实设备上装有匹配的应用时，才省略 `--hap`。若已安装应用的签名不匹配，应停止；不要卸载应用或更换签名来强行更新。包参数用于此验证命令，不用于初始 `build-run`，后者会因此选择已有产物模式。运行器安装并记录指定测试 HAP 的指纹；HAP 早于当前源码、测试输入时，结果为不确定。保留该文件和源码树以供离线收尾。通过核实的包导出或源码路径导入真实被测声明，禁止复制实现。
 CLI 和会话内准备流程通过 `~/tmp/fmbot-pbt-campaign-locks/` 持有工作区及输出目录；重叠任务在构建或清理前退出 2 并给出持有者信息，独立工作区可并行。只自动回收已确认退出的宿主进程，不抢占存活、无权查询或其他主机的持有者。
+
+若生成的 ohosTest 目标需要规范化 OHM URL，请提供可用的产品构建命令，而非固定的测试构建命令。产品与配套应用仍按原配置构建；只有生成测试的那次调用使用带该设置和 PandaCheck 依赖的临时工程。`arkts-preflight.json` 中的 `testOhmUrls` 记录声明值、编译器实测值及设备具名用例，只证明测试环境就绪，不计入性质覆盖率。在原工作区修改测试后，使用预检给出的测试构建命令；它会重新复制当前输入并打印新 HAP 所在目录。如需签名，用 `fmbot-pbt arkts-sign` 签这个包，将结果放在任务输出目录内。重建和设备验证均按内容核对复制时的输入，不能靠更新时间戳让旧测试通过。直接构建命令在强制打包时保留原参数；脚本或复合命令须自行产出本次配套应用 HAP。SDK 不兼容、加载错误或缺少具名完成记录时停止，不会标记就绪。已启用该设置的构建仍使用原流程。
+
+使用 `--isolate --isolate-test-sdk` 时，`arkts-preflight.json` 中的 `testLink.compiler` 指向配套应用构建**之前**保存的 ohosTest 工程配置和加载器配置。安装任一 HAP 前，签名测试包中的 `ets/modules.abc` 必须与 `linkedAbcSha256` 匹配；即使旧包能通过同名用例，字节码不匹配也会停止预检。本地签名失败归为 `environment/signing`，设备拒绝安装归为 `environment/device`，两者都不会启动测试任务。
 
 ## 失败记录与收尾
 
 调用方引用支持 Windows 路径、空格和限定方法名。UI 回调（`onPaste`、`onClick`、TextInput 的 `onChange`/`onSubmit`）及 `@Entry`/`@Component` 的 build 方法可作为应用入口，但引用代码必须实际调用目标。只有排除实际反例的转换才能证明不可达；去除逗号不会排除 `'1E'`。
-先记录失败性质，再按随包示例调用 `record_bug`。同一问题累计拒绝 3 次、全部未解决问题累计拒绝 12 次，或仍有待修正项且 5 分钟内未解决任何一项时，以不确定结果退出 2。计时从首次拒绝开始，仅在一项修正通过且仍有其他待修正项时重新计时；无关记录通过或重复提交已通过的修正不会延长时限。`rejected-records.jsonl` 保留请求、拒绝原因和原证据；`recording-stop.json` 与 `interruption.json` 说明停止原因。不得仅为通过门禁而撤回真实失败或退役性质。
+先记录失败性质，再按随包示例调用 `record_bug`。同一问题最多累计拒绝 3 次，全部未解决问题最多累计拒绝 12 次。`record_bug` 仅因中文标点或空格被拒时，单独按 3 次和 12 次计数；若还有其他问题，则计入常规预算。两类拒绝共用 5 分钟无进展时限。达到上限后，除非能按下文暂停该问题的修正，否则以不确定结果退出 2。计时从首次拒绝开始，仅在一项修正通过且仍有其他待修正项时重新计时；无关记录通过或重复提交已通过的修正不会延长时限。`rejected-records.jsonl` 保留请求、拒绝原因和原证据；`recording-stop.json` 与 `interruption.json` 说明停止原因。不得仅为通过门禁而撤回真实失败或退役性质。
 无界面 Pi `build-run` 测试整个仓库且未指定改动范围时，如果各次拒绝均指向同一条已保存的问题，第 3 次拒绝可暂停该问题的修正，继续无关测试。适用情形包括已记录反例的失败性质，或摘要仅因一条通过性质的备注描述了由失败改为通过而被拒绝。性质、备注和证据原样保留。检查点中的未解决条目阻止交付，`finalize` 也无法通过；任务保留部分结果并退出 2。如需验证受影响的工作，请使用独立输出目录启动新任务。
 关联本次运行的设备失败自动保留在 `report.json.deviceFailures` 与 `findings-unrecorded.json`，即使性质或缺陷记录被拒也不会丢失。即使后续已验证的重跑解决了原调用的不确定状态，超时前记录的失败仍须处置。这些是观测，并不自动认定为产品缺陷；用 `deviceObservationIds` 关联已校验的性质。修正测试须保留失败历史并重新验证，不得静默退役；相对性质路径按已记录的仓库根目录解析。
 `reference` 判定须在设计获批前给出独立的约定证据（规范、注释或调用方断言），不能把实现自身的键表或正则当成参考答案。
@@ -43,10 +45,11 @@ CLI 和会话内准备流程通过 `~/tmp/fmbot-pbt-campaign-locks/` 持有工�
 
 ```bash
 fmbot-pbt arkts-sign app-unsigned.hap app-signed.hap --bundle com.example.app --udid DEVICE_UDID \
-  --sign-apl system_basic --sign-feature hos_system_app
+  --sign-profile system
 ```
 
-默认是 `normal`/`hos_normal_app`，`--sign-profile system` 选择系统组合。
+默认是 `normal`/`hos_normal_app`，`--sign-profile system` 选择 `system_basic`/`hos_system_app`。
+旧参数 `--sign-apl` 和 `--sign-feature` 会在构建或签名前以退出码 `2` 停止。请用 `--sign-profile normal` 或 `--sign-profile system` 选择相同的签名策略。
 本地 SDK 调试 profile 保留 UDID，并合并请求权限、已有 ACL 与可重复的 `--acl` 值。
 不改变输入 HAP 或 SUT 签名脚本，不请求 CPKI，也不会失败后换用其他签名策略。
 
@@ -79,8 +82,12 @@ fmbot-pbt arkts-test --target DEVICE --bundle com.example.app --module entry_tes
 | `1` | 完整摘要中有真实失败或错误 |
 | `2` | 无完整结果、结果冲突/无关联/无效、传输失败或停止推进 |
 
+本次运行的 stdout 或与其关联的 hilog 中若有 Hypium 失败，即使只保留了自定义断言消息（`stream=message: …, Error in …`），也与全通过摘要矛盾（退出 `2`）。未具名的失败保留待查，不归到所选用例或已通过的用例。如果 stdout 已证实失败，hilog 仅重复相同的摘要时，无需等待 PID 确认，仍退出 `1`。
+
 `--class Suite#case` 选择用例；嵌套套件使用 Hypium 完整路径，例如 `Outer.Inner#case`。`--timeout-ms` 为单用例上限（默认 120000），`--run-timeout-ms` 为测试等待上限（1800000）。带 Hypium 可选超时、标签参数的用例，以及直接定义在 `List.test.ets` 中的用例，同样需要执行回执。仅用于注册其他套件的索引本身不能作为性质的测试文件。
 测试任务内（`PBT_OUT_DIR` 已设置），所有入口均把 `stdout.log`、新的相关 `hilog.log`、`diagnostic.log` 和 `result.json` 写到 `<out>/device-run/<run-id>/`，不采用辅助命令的 `--out`。结果含 Hypium 套件、用例的完成状态，源码、测试、注册文件及 HAP 的 SHA-256 指纹，ISO `startedAt`/`endedAt` 和失败观测。报告中每个测试文件的所有用例均须有匹配的新回执；仅当输入未变时，分次选择用例的结果才能累计。`List.test.ets` 导出的同步 `testsuite()` 须沿可达路径调用默认套件。死分支注册、类选择参数或无关冒烟摘要不能清除待执行的性质；缺少用例或产物证据时，交付仍退出 2。启动前将调用登记到 `device-run/runs.jsonl`。任务外的独立调用仍写入 `--out`，否则用新的 `~/tmp/pbt-aa-*` 目录。
+
+Hypium 名称请使用字符串字面量或同一文件内的字符串 `const`。在 `List.test.ets` 调用的所有文件中，每个 `Suite#case` 只注册一次。名称无法解析、在 `forEach` 等回调中注册，或循环可能多次注册同一用例时，冒烟用例的通过回执均不能验证该套件。
 
 ### 不依赖 hilog 的具名结果
 
@@ -96,9 +103,21 @@ fmbot-pbt arkts-test --target DEVICE --bundle com.example.app --module entry_tes
 
 如需自动补齐，请在启动无界面 Pi ArkTS 源码 `build-run` 时显式指定 `--recover-missing-cases`。[从终端启动](subcommands.zh.md#build-run)无需重定向标准输入，但构建命令不得等待终端输入。任务会提示在首次运行性质套件的 `arkts-test` 命令中同时传入两个签名包（`--hap` 和 `--test-hap`），不要将包参数传给 `build-run`，并保持两个包不变直至收尾。通过的类回执须能唯一确认这两个包及设备。缺任一包时仅提示手动处理。
 
-模型结束后，worker 可依次执行符合条件的缺失用例。`--recover-max-cases N` 限制符合条件的尝试次数（正整数，默认 `3`，须搭配 `--recover-missing-cases`）。路径缺失、有歧义或无法重现执行快照的用例不占预算，也不阻止其他符合条件的用例运行。时间限制不变：单次测试等待上限两分钟，含准备的总预算五分钟。到达截止时间后可单独进行一次有超时上限的设备状态检查，确认应用已退出才释放锁。
+模型结束后，已启用补齐的 worker 会在原任务租约下先检查缺少 `result.json` 的尝试。与 `finalize` 一样，只有登记无歧义、已满 30 分钟、宿主进程确认退出（或旧登记未记录所有者）、设备无锁且保留文件中没有测试活动、结果或失败证据时，才记为**中止**而非通过。不改动原索引和日志，不消耗设备尝试次数，也不填补具名回执缺口。过新的登记、设备锁、冲突或其他不确定证据仍阻止交付。
+
+之后，worker 可依次执行符合条件的缺失用例。`--recover-max-cases N` 限制符合条件的尝试次数（正整数，默认 `3`，须搭配 `--recover-missing-cases`）。路径缺失、有歧义或无法重现执行快照的用例不占预算，也不阻止其他符合条件的用例运行。时间限制不变：单次测试等待上限两分钟，含准备的总预算五分钟。到达截止时间后可单独进行一次有超时上限的设备状态检查，确认应用已退出才释放锁。
 
 worker 保持任务租约，逐次申请正常设备锁但不回收旧锁，并重新核对输入、具名执行回执及全部交付门禁。未指定恢复配方时只使用当前的部分类回执，不重建或签名。有其他交付阻塞时不启动补齐；执行路径或输入变化、结果失败或不确定、验证无进展时停止。不会再调用模型，也不会重试不确定或失败的测试。若仍有回执缺口，交付未完成（退出 `2`），回执和手动命令会保留。自动补齐默认关闭，不适用于 `--no-auto-resume`、TUI、会话内 skill、ACP、隔离或预签名执行。
+
+在 `--recover-missing-cases` 之外加上 `--recover-stalled-run`，可授权 worker 收尾时为最近的 `stalled` 登记重跑一次。原回执必须能唯一关联本任务，原宿主运行器已退出，回执和可读的 stdout/hilog 均无失败。worker 必须取得新的普通设备锁（不回收旧锁），确认设备上既无 `aa` 客户端也无目标包进程，安装原签名应用包和测试包，并在启动前复核设备和输入快照。选择器保持原 `Suite` 或 `Suite#case`；此次尝试从相同的次数和五分钟预算中扣除。再次停滞、状态未知或证据不符即停止。保留两份回执及日志，新的 `supersedesRun` 回执只有核实具名结果后才能补上原缺口。独立运行 `arkts-test` 不会自动重试。
+
+若同一设备连续三次启动均未观察到关联测试活动并停滞，该设备的自动恢复会暂停。安装失败不打断连续计数。未指定设备时自动恢复会等待，不会猜测目标；自动恢复的 worker 在安装或启动前还会检查 `arkts-test` 实际选择的设备。请检查列出的运行 ID 和 `hdc list targets`；如需重启模拟器，先确认其空闲，再手动执行 `fmbot-pbt resume --out <out>`。不会自动重启，也不会更改原回执的不确定判定。
+
+要解除原停滞，无论重跑通过还是失败，结束时都须核实套件名、用例名和输入快照。如果后续恢复构建向重跑模块新增了输入，收尾会在使用新包前停止。
+
+要解除 `--class` 运行的停滞，重跑回执须为每个指定的套件或用例提供具名完成记录，且每项摘要计数都有对应记录。即使重跑缺少摘要，范围外的完成记录也会阻止恢复。报告生成后，若范围仍不一致，无界面任务停止收尾，`resume` 以退出码 2 返回。请按原范围再次运行测试，并保留两份回执；`finalize` 不会豁免停滞。
+
+任务报告生成后，即使未尝试替代运行，`resume` 也只列出缺少具名回执的用例和未解决的停滞，不再启动模型或设备。补充匹配的回执后，执行 `fmbot-pbt finalize --out <out>` 离线复核。每份回执只消除其能证明的缺口；只要还有缺口，退出码仍为 2。
 
 ### 测试编辑后的恢复
 
@@ -129,7 +148,7 @@ worker 先补齐有当前有效路径且符合条件的用例。若尝试次数�
 
 明确请求普通重跑时，可自动关联唯一的 `empty-selection`。运行器同时检查任务输出目录和其 `pbt-out` 子目录中的登记。即使用例未完成，只要已经开始执行就不能认定为空选择。两次登记须属于同一个运行中任务的检查点，目标、包、模块和单一 `Suite` 或 `Suite#case` 选择器均相同。原调用已结束，当时设备包进程已退出，本机持有者也已退出；保留的 stdout、hilog 须均可读且无失败证据。再次执行时须安装指纹相同的测试 HAP，所有输入未变，且每个终态计数都对应所选范围内已通过的用例。仅退出 0 而无用例记录不能恢复。只在**新回执**中写入 `supersedesRun`；这不证明尚未执行的性质，也不会自动发起测试。
 
-证明不足或有多个匹配登记时，先检查原始证据，切勿编辑回执。修正不确定的调用后，必要时用 `--supersedes-run <旧运行 ID>` 再次执行。只有目标、包、模块及已记录的类选择均相同的非空、已验证运行才能解决该次调用；原结果保留，真实失败不能被覆盖。新索引记录 `testClass`；登记后可捕获的准备失败会在输出可写时原子写入不确定回执。新索引同时记录宿主持有者。进程被强杀仍可能没有回执；离线 `finalize` 在独占所有权、已记录持有者确认退出、不存在设备锁且保留日志没有失败证据时，可将超过 30 分钟的缺失调用记为中止（旧索引可能没有持有者）。不裁剪索引，也不伪造已验证结果。目标缺失或已解决的 supersede 链接只保留警告；身份不匹配与真实失败目标仍为错误。不会自动重试。
+证明不足或有多个匹配登记时，先检查原始证据，切勿编辑回执。修正不确定的调用后，必要时用 `--supersedes-run <旧运行 ID>` 再次执行。只有目标、包、模块及已记录的类选择均相同的非空、已验证运行才能解决该次调用；原结果保留，真实失败不能被覆盖。新索引记录 `testClass`；登记后可捕获的准备失败会在输出可写时原子写入不确定回执。新索引同时记录宿主持有者。进程被强杀仍可能没有回执；离线 `finalize` 在独占所有权、已记录持有者确认退出、不存在设备锁且保留日志没有失败证据时，可将超过 30 分钟的缺失调用记为中止（旧索引可能没有持有者）。不裁剪索引，也不伪造已验证结果。目标缺失或已解决的 supersede 链接只保留警告；身份不匹配与真实失败目标仍为错误。独立执行时不会自动重试。
 若 Hypium 失败用例没有匹配的 PandaCheck 明细，`failures` 会记录实际观测到的 `Suite#case`，并引用回执旁 `stdout.log` 或 `hilog.log` 中的状态。无法归属的剩余数量合并为一条 `testCase: null` 的观测；请求的 `--class` 不算证据。未输出的 seed 和反例保持 `null`。同一次用例执行产生多条反例时，失败用例数只计一次；已通过用例中的反例会保留，但不计入失败用例数。每条观测仍须处置。仅有 `PANDACHECK_RESULT` 不是套件判定。
 
 等待 `--ability-grace-ms` 后，仅当 `aa test` 尚未结束、无本次测试活动，且成功且可识别的 Ability dump 证明目标未启动时，最多执行一次外部 `aa start -a <ability> -b <bundle> -m <module>`。已有活动或 dump 状态未知时不恢复，仍受原截止时间约束；绝不启动第二次 `aa test`。
